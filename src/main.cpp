@@ -237,6 +237,17 @@ static auto make_swapchain(
     };
 }
 
+static auto find_memory_type(VkPhysicalDevice physical_device, iris::uint32 type, VkMemoryPropertyFlags properties) noexcept -> iris::uint32 {
+    auto memory_properties = VkPhysicalDeviceMemoryProperties();
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+    for (auto i = 0_u32; i < memory_properties.memoryTypeCount; ++i) {
+        if ((type & (1 << i)) && (memory_properties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+    return -1_u32;
+}
+
 int main() {
     if (!glfwInit()) {
         IRIS_LOG_ERROR("failed to initialize glfw");
@@ -517,15 +528,35 @@ int main() {
         fragment_stage_info.pName = "main";
         fragment_stage_info.pSpecializationInfo = nullptr;
 
+        auto vertex_inpit_binding = VkVertexInputBindingDescription();
+        vertex_inpit_binding.binding = 0;
+        vertex_inpit_binding.stride = sizeof(glm::vec3[2]);
+        vertex_inpit_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+        auto vertex_attributes = std::to_array({
+            VkVertexInputAttributeDescription {
+                .location = 0,
+                .binding = 0,
+                .format = VK_FORMAT_R32G32B32_SFLOAT,
+                .offset = 0
+            },
+            VkVertexInputAttributeDescription {
+                .location = 1,
+                .binding = 0,
+                .format = VK_FORMAT_R32G32B32_SFLOAT,
+                .offset = sizeof(glm::vec3)
+            },
+        });
+
         // specifies the vertex format (similar to glVertexArrayAttribFormat)
         auto vertex_input_state_info = VkPipelineVertexInputStateCreateInfo();
         vertex_input_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vertex_input_state_info.pNext = nullptr;
         vertex_input_state_info.flags = {};
-        vertex_input_state_info.vertexBindingDescriptionCount = 0;
-        vertex_input_state_info.pVertexBindingDescriptions = nullptr;
-        vertex_input_state_info.vertexAttributeDescriptionCount = 0;
-        vertex_input_state_info.pVertexAttributeDescriptions = nullptr;
+        vertex_input_state_info.vertexBindingDescriptionCount = 1;
+        vertex_input_state_info.pVertexBindingDescriptions = &vertex_inpit_binding;
+        vertex_input_state_info.vertexAttributeDescriptionCount = vertex_attributes.size();
+        vertex_input_state_info.pVertexAttributeDescriptions = vertex_attributes.data();
 
         auto input_assembly_state_info = VkPipelineInputAssemblyStateCreateInfo();
         input_assembly_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -730,6 +761,49 @@ int main() {
         }
     }
 
+    auto vertices = std::to_array({
+         0.0f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+        -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
+         0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+    });
+
+    auto vertex_buffer = VkBuffer();
+    {
+        auto buffer_info = VkBufferCreateInfo();
+        buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        buffer_info.pNext = nullptr;
+        buffer_info.flags = {};
+        buffer_info.size = iris::size_bytes(vertices);
+        buffer_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+        buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        buffer_info.queueFamilyIndexCount = 0;
+        buffer_info.pQueueFamilyIndices = nullptr;
+
+        IRIS_VULKAN_ASSERT(vkCreateBuffer(device, &buffer_info, nullptr, &vertex_buffer));
+
+        auto memory_requirements = VkMemoryRequirements();
+        vkGetBufferMemoryRequirements(device, vertex_buffer, &memory_requirements);
+
+        auto memory_type_index = find_memory_type(
+            physical_device,
+            memory_requirements.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        auto memory_allocate_info = VkMemoryAllocateInfo();
+        memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        memory_allocate_info.pNext = nullptr;
+        memory_allocate_info.allocationSize = memory_requirements.size;
+        memory_allocate_info.memoryTypeIndex = memory_type_index;
+        auto memory = VkDeviceMemory();
+        IRIS_VULKAN_ASSERT(vkAllocateMemory(device, &memory_allocate_info, nullptr, &memory));
+        IRIS_VULKAN_ASSERT(vkBindBufferMemory(device, vertex_buffer, memory, 0));
+
+        void* data = nullptr;
+        IRIS_VULKAN_ASSERT(vkMapMemory(device, memory, 0, memory_requirements.size, 0, &data));
+        std::memcpy(data, vertices.data(), iris::size_bytes(vertices));
+        vkUnmapMemory(device, memory);
+    }
+
     const auto on_resize = [&]() {
         IRIS_LOG_INFO("swapchain out of date or suboptimal, recreating...");
         vkDeviceWaitIdle(device);
@@ -812,6 +886,7 @@ int main() {
         vkCmdBindPipeline(command_buffers[frame_index], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         vkCmdSetViewport(command_buffers[frame_index], 0, 1, &viewport);
         vkCmdSetScissor(command_buffers[frame_index], 0, 1, &scissor);
+        vkCmdBindVertexBuffers(command_buffers[frame_index], 0, 1, &vertex_buffer, iris::as_const_ptr(0_u64));
         vkCmdDraw(command_buffers[frame_index], 3, 1, 0, 0);
         vkCmdEndRenderPass(command_buffers[frame_index]);
         IRIS_VULKAN_ASSERT(vkEndCommandBuffer(command_buffers[frame_index]));
