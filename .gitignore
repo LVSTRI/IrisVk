@@ -1,0 +1,10 @@
+.idea
+.idea/*
+
+.vs
+.vs/*
+
+cmake-build-*
+cmake-build-*/*
+
+shaders/**/*.spv
