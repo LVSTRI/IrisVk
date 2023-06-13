@@ -25,27 +25,27 @@
     auto operator =(T&&) noexcept -> T& = delete
 
 #define IR_QUALIFIED_DECLARE_COPY(T, ...)   \
-    __VA_ARGS__ T(const T&) noexcept;                   \
+    __VA_ARGS__ T(const T&) noexcept;       \
     __VA_ARGS__ auto operator =(const T&) noexcept -> T&
 
-#define IR_QUALIFIED_DEFAULT_COPY(T, ...)   \
-    __VA_ARGS__ T(const T&) noexcept = default;         \
+#define IR_QUALIFIED_DEFAULT_COPY(T, ...)       \
+    __VA_ARGS__ T(const T&) noexcept = default; \
     __VA_ARGS__ auto operator =(const T&) noexcept -> T& = default
 
-#define IR_QUALIFIED_DELETE_COPY(T, ...)    \
-    __VA_ARGS__ T(const T&) noexcept = delete;          \
+#define IR_QUALIFIED_DELETE_COPY(T, ...)        \
+    __VA_ARGS__ T(const T&) noexcept = delete;  \
     __VA_ARGS__ auto operator =(const T&) noexcept -> T& = delete
 
 #define IR_QUALIFIED_DECLARE_MOVE(T, ...)   \
-    __VA_ARGS__ T(T&&) noexcept;                        \
+    __VA_ARGS__ T(T&&) noexcept;            \
     __VA_ARGS__ auto operator =(T&&) noexcept -> T&
 
 #define IR_QUALIFIED_DEFAULT_MOVE(T, ...)   \
-    __VA_ARGS__ T(T&&) noexcept = default;              \
+    __VA_ARGS__ T(T&&) noexcept = default;  \
     __VA_ARGS__ auto operator =(T&&) noexcept -> T& = default
 
 #define IR_QUALIFIED_DELETE_MOVE(T, ...)    \
-    __VA_ARGS__ T(T&&) noexcept = delete;               \
+    __VA_ARGS__ T(T&&) noexcept = delete;   \
     __VA_ARGS__ auto operator =(T&&) noexcept -> T& = delete
 
 #define IR_NODISCARD [[nodiscard]]

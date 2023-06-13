@@ -17,6 +17,9 @@ namespace ir {
     using float32 = float;
     using float64 = double;
 
+    using platform_window_handle = void*;
+    using gfx_api_object_handle = void*;
+
     inline namespace literals {
         constexpr auto operator ""_i8(unsigned long long int value) noexcept -> int8 {
             return static_cast<int8>(value);

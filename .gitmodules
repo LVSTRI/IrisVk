@@ -16,3 +16,9 @@
 [submodule "deps/tracy"]
 	path = deps/tracy
 	url = https://github.com/wolfpld/tracy
+[submodule "deps/volk"]
+	path = deps/volk
+	url = https://github.com/zeux/volk
+[submodule "deps/Vulkan-Headers"]
+	path = deps/Vulkan-Headers
+	url = https://github.com/KhronosGroup/Vulkan-Headers
