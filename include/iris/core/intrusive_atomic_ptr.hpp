@@ -27,10 +27,6 @@ namespace ir {
 
     template <typename T>
     class intrusive_atomic_ptr_t {
-        static_assert(
-            std::is_base_of_v<enable_intrusive_refcount_t, T>,
-            "intrusive_atomic_ptr_t: T must be derived from enable_intrusive_refcount_t");
-
     public:
         using self = intrusive_atomic_ptr_t;
         intrusive_atomic_ptr_t() noexcept;
@@ -82,7 +78,9 @@ namespace ir {
     template <typename T>
     intrusive_atomic_ptr_t<T>::intrusive_atomic_ptr_t(T* ptr) noexcept : _ptr(ptr) {
         IR_PROFILE_SCOPED();
-        ptr->grab();
+        if (ptr) {
+            ptr->grab();
+        }
     }
 
     template <typename T>
@@ -95,9 +93,6 @@ namespace ir {
     intrusive_atomic_ptr_t<T>::intrusive_atomic_ptr_t(const self& other) noexcept
         : self(other._ptr) {
         IR_PROFILE_SCOPED();
-        if (_ptr) {
-            _ptr->grab();
-        }
     }
 
     template <typename T>

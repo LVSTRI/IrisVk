@@ -1,9 +1,9 @@
-#include <iris/wsi/wsi_platform.hpp>
+#include "iris/wsi/wsi_platform.hpp"
 
 #define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+#include "GLFW/glfw3.h"
 
-#include <spdlog/sinks/stdout_color_sinks.h>
+#include "spdlog/sinks/stdout_color_sinks.h"
 
 namespace ir {
     struct __glfw_manager_t {

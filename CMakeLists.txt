@@ -1,11 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 project(IrisVk)
 
-if (WIN32)
-    set(VOLK_STATIC_DEFINES VK_USE_PLATFORM_WIN32_KHR)
-    # TODO: Defines for Linux and MacOS
-endif()
-
 # Vulkan setup
 set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory(deps/Vulkan-Headers)
@@ -28,21 +23,23 @@ add_subdirectory(deps/glm)
 target_compile_definitions(glm INTERFACE
     GLM_FORCE_AVX2
     GLM_FORCE_RADIANS
-    GLM_FORCE_DEPTH_ZERO_TO_ONE)
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+)
 
 # cgltf setup
 add_library(cgltf STATIC
     deps/cgltf/cgltf.h
 
-    src/deps/cgltf.c)
+    src/iris/deps/cgltf.c
+)
 target_include_directories(cgltf PUBLIC deps/cgltf)
 
 # VMA setup
 set(VMA_STATIC_VULKAN_FUNCTIONS OFF CACHE BOOL "" FORCE)
-set(VMA_DYNAMIC_VULKAN_FUNCTIONS OFF CACHE BOOL "" FORCE)
+set(VMA_DYNAMIC_VULKAN_FUNCTIONS ON CACHE BOOL "" FORCE)
 add_subdirectory(deps/VulkanMemoryAllocator)
 
-add_library(vma STATIC src/deps/vma.cpp)
+add_library(vma STATIC src/iris/deps/vma.cpp)
 target_include_directories(vma PUBLIC deps/VulkanMemoryAllocator/include)
 target_link_libraries(vma PUBLIC volk)
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -65,26 +62,34 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 
 set(IRIS_MAIN_HEADERS
+    include/iris/core/forwards.hpp
     include/iris/core/intrusive_atomic_ptr.hpp
     include/iris/core/macros.hpp
     include/iris/core/types.hpp
+    include/iris/core/utilities.hpp
 
+    include/iris/gfx/device.hpp
     include/iris/gfx/instance.hpp
+    include/iris/gfx/queue.hpp
+    include/iris/gfx/swapchain.hpp
 
-    include/iris/wsi/wsi_platform.hpp include/iris/core/utilities.hpp)
+    include/iris/wsi/wsi_platform.hpp
+)
 
 set(IRIS_MAIN_SOURCES
-    src/core/intrusive_atomic_ptr.cpp
+    src/iris/core/intrusive_atomic_ptr.cpp
 
-    src/gfx/instance.cpp
+    src/iris/gfx/device.cpp
+    src/iris/gfx/instance.cpp
+    src/iris/gfx/queue.cpp
 
-    src/wsi/wsi_platform.cpp)
+    src/iris/wsi/wsi_platform.cpp
+)
 
-add_executable(IrisVk
+add_library(IrisVk
     ${IRIS_MAIN_HEADERS}
     ${IRIS_MAIN_SOURCES}
-
-    src/main.cpp)
+)
 
 target_compile_definitions(IrisVk PUBLIC
     $<$<CONFIG:Debug>:IRIS_DEBUG>
@@ -104,7 +109,8 @@ target_compile_definitions(IrisVk PUBLIC
     $<$<BOOL:${WIN32}>:IRIS_PLATFORM_WIN32>
     $<$<BOOL:${LINUX}>:IRIS_PLATFORM_LINUX>
 
-    TRACY_ENABLE)
+    TRACY_ENABLE
+)
 
 target_link_libraries(IrisVk PUBLIC
     glm
@@ -114,10 +120,29 @@ target_link_libraries(IrisVk PUBLIC
     cgltf
     spdlog
     TracyClient
-    Vulkan::Headers)
+    Vulkan::Headers
+)
 
 target_include_directories(IrisVk PUBLIC include)
 
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(IrisVk PRIVATE -march=native -mavx2 -Wall -Wextra)
 endif()
+
+set(IRIS_RENDERER_HEADERS
+    include/renderer/core/application.hpp
+)
+
+set(IRIS_RENDERER_SOURCES
+    src/renderer/core/application.cpp
+
+    src/main.cpp
+)
+
+add_executable(
+    IrisVkRenderer
+    ${IRIS_RENDERER_HEADERS}
+    ${IRIS_RENDERER_SOURCES}
+)
+
+target_link_libraries(IrisVkRenderer PRIVATE IrisVk)

@@ -1,8 +1,8 @@
-#include <iris/core/utilities.hpp>
+#include "iris/core/utilities.hpp"
 
-#include <iris/gfx/instance.hpp>
+#include "iris/gfx/instance.hpp"
 
-#include <spdlog/sinks/stdout_color_sinks.h>
+#include "spdlog/sinks/stdout_color_sinks.h"
 
 #include <array>
 
@@ -11,6 +11,9 @@ namespace ir {
 
     instance_t::~instance_t() noexcept {
         IR_PROFILE_SCOPED();
+        if (_debug_messenger) {
+            vkDestroyDebugUtilsMessengerEXT(_handle, _debug_messenger, nullptr);
+        }
         vkDestroyInstance(_handle, nullptr);
         IR_LOG_INFO(_logger, "instance destroyed");
     }
@@ -54,7 +57,6 @@ namespace ir {
         instance_info.enabledLayerCount = 1;
         instance_info.ppEnabledLayerNames = &validation_layer_extension;
 
-        IR_LOG_INFO(logger, "validation layers enabled");
         constexpr auto validation_extensions = std::to_array({
             VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
             VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
@@ -74,10 +76,11 @@ namespace ir {
         instance_info.enabledExtensionCount = extensions.size();
         instance_info.ppEnabledExtensionNames = extensions.data();
         IR_VULKAN_CHECK(logger, vkCreateInstance(&instance_info, nullptr, &instance->_handle));
-        volkLoadInstance(instance->_handle);
+        IR_VULKAN_CHECK(logger, volkLoadInstanceOnly(instance->_handle));
 
-        IR_LOG_INFO(logger, "instance created");
+        IR_LOG_INFO(logger, "instance initialized");
 
+#if defined(IRIS_DEBUG)
         {
             auto validation_info = VkDebugUtilsMessengerCreateInfoEXT();
             validation_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -92,10 +95,11 @@ namespace ir {
                 VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
             validation_info.pfnUserCallback = [](
-                    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-                    VkDebugUtilsMessageTypeFlagsEXT type,
-                    const VkDebugUtilsMessengerCallbackDataEXT* data,
-                    void* user_data) -> VkBool32 {
+                VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                VkDebugUtilsMessageTypeFlagsEXT type,
+                const VkDebugUtilsMessengerCallbackDataEXT* data,
+                void* user_data
+            ) -> VkBool32 {
                 auto& logger = *static_cast<spdlog::logger*>(user_data);
 
                 auto level = spdlog::level::level_enum();
@@ -129,6 +133,12 @@ namespace ir {
                     default: IR_UNREACHABLE();
                 }
 
+                if (severity == VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT &&
+                    type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+                ) {
+                    return false;
+                }
+
                 logger.log(level, "[{}] {}", type_str, data->pMessage);
                 logger.flush();
 
@@ -139,8 +149,41 @@ namespace ir {
             };
             validation_info.pUserData = logger.get();
             IR_VULKAN_CHECK(logger, vkCreateDebugUtilsMessengerEXT(instance->_handle, &validation_info, nullptr, &instance->_debug_messenger));
+            IR_LOG_INFO(logger, "validation layers initialized");
         }
+#endif
+        instance->_api_version = api_version;
+        instance->_info = info;
         instance->_logger = std::move(logger);
         return instance;
+    }
+
+    auto instance_t::handle() const noexcept -> VkInstance {
+        IR_PROFILE_SCOPED();
+        return _handle;
+    }
+
+    auto instance_t::api_version() const noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
+        return _api_version;
+    }
+
+    auto instance_t::info() const noexcept -> const instance_create_info_t& {
+        IR_PROFILE_SCOPED();
+        return _info;
+    }
+
+    auto instance_t::logger() const noexcept -> const spdlog::logger& {
+        IR_PROFILE_SCOPED();
+        return *_logger;
+    }
+
+    auto instance_t::enumerate_physical_devices() const noexcept -> std::vector<VkPhysicalDevice> {
+        IR_PROFILE_SCOPED();
+        auto count = uint32();
+        IR_VULKAN_CHECK(_logger, vkEnumeratePhysicalDevices(_handle, &count, nullptr));
+        auto devs = std::vector<VkPhysicalDevice>(count);
+        IR_VULKAN_CHECK(_logger, vkEnumeratePhysicalDevices(_handle, &count, devs.data()));
+        return devs;
     }
 }
