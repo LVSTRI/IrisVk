@@ -47,6 +47,7 @@ namespace ir {
         IR_NODISCARD auto logger() const noexcept -> const spdlog::logger&;
 
         IR_NODISCARD auto fetch_queue(const queue_family_t& family) const noexcept -> VkQueue;
+        IR_NODISCARD auto allocate_image(const VkImageCreateInfo& info) const noexcept -> VkImage;
 
     private:
         VkDevice _handle = {};

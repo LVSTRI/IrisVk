@@ -38,4 +38,45 @@ namespace ir {
     template <typename T>
         requires std::is_enum_v<T>
     IR_NODISCARD constexpr auto as_string(T e) noexcept -> std::string_view;
+
+    template <typename T>
+        requires std::is_enum_v<T>
+    IR_NODISCARD constexpr auto as_underlying(T e) noexcept -> std::underlying_type_t<T> {
+        return static_cast<std::underlying_type_t<T>>(e);
+    }
+
+    template <typename T, typename U = std::underlying_type_t<T>, typename = std::enable_if_t<std::is_enum_v<T>>>
+    IR_NODISCARD constexpr auto operator ~(const T& value) noexcept -> T {
+        return static_cast<T>(~static_cast<U>(value));
+    }
+
+    template <typename T, typename U = std::underlying_type_t<T>, typename = std::enable_if_t<std::is_enum_v<T>>>
+    IR_NODISCARD constexpr auto operator |(const T& left, const T& right) noexcept -> T {
+        return static_cast<T>(static_cast<U>(left) | static_cast<U>(right));
+    }
+
+    template <typename T, typename U = std::underlying_type_t<T>, typename = std::enable_if_t<std::is_enum_v<T>>>
+    IR_NODISCARD constexpr auto operator &(const T& left, const T& right) noexcept -> T {
+        return static_cast<T>(static_cast<U>(left) & static_cast<U>(right));
+    }
+
+    template <typename T, typename U = std::underlying_type_t<T>, typename = std::enable_if_t<std::is_enum_v<T>>>
+    IR_NODISCARD constexpr auto operator ^(const T& left, const T& right) noexcept -> T {
+        return static_cast<T>(static_cast<U>(left) ^ static_cast<U>(right));
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_enum_v<T>>>
+    constexpr auto operator |=(T& left, const T& right) noexcept -> T& {
+        return left = static_cast<T>(left | right);
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_enum_v<T>>>
+    constexpr auto operator &=(T& left, const T& right) noexcept -> T& {
+        return left = static_cast<T>(left & right);
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_enum_v<T>>>
+    constexpr auto operator ^=(T& left, const T& right) noexcept -> T& {
+        return left = static_cast<T>(left ^ right);
+    }
 }

@@ -1,8 +1,8 @@
-#include "iris/core/utilities.hpp"
+#include <iris/core/utilities.hpp>
 
-#include "iris/gfx/instance.hpp"
+#include <iris/gfx/instance.hpp>
 
-#include "spdlog/sinks/stdout_color_sinks.h"
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 #include <array>
 
@@ -76,7 +76,7 @@ namespace ir {
         instance_info.enabledExtensionCount = extensions.size();
         instance_info.ppEnabledExtensionNames = extensions.data();
         IR_VULKAN_CHECK(logger, vkCreateInstance(&instance_info, nullptr, &instance->_handle));
-        IR_VULKAN_CHECK(logger, volkLoadInstanceOnly(instance->_handle));
+        volkLoadInstanceOnly(instance->_handle);
 
         IR_LOG_INFO(logger, "instance initialized");
 

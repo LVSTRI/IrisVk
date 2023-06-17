@@ -1,17 +1,17 @@
-#include "iris/core/utilities.hpp"
+#include <iris/core/utilities.hpp>
 
-#include "iris/gfx/device.hpp"
-#include "iris/gfx/queue.hpp"
+#include <iris/gfx/device.hpp>
+#include <iris/gfx/queue.hpp>
 
-#include "spdlog/sinks/stdout_color_sinks.h"
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace ir {
     template <>
     constexpr auto as_string(queue_type_t type) noexcept -> std::string_view {
         switch (type) {
-            case queue_type_t::graphics: return "graphics";
-            case queue_type_t::compute: return "compute";
-            case queue_type_t::transfer: return "transfer";
+            case queue_type_t::e_graphics: return "graphics";
+            case queue_type_t::e_compute: return "compute";
+            case queue_type_t::e_transfer: return "transfer";
         }
         return "";
     }

@@ -1,8 +1,8 @@
-#include "iris/gfx/instance.hpp"
-#include "iris/gfx/device.hpp"
-#include "iris/gfx/queue.hpp"
+#include <iris/gfx/instance.hpp>
+#include <iris/gfx/device.hpp>
+#include <iris/gfx/queue.hpp>
 
-#include "spdlog/sinks/stdout_color_sinks.h"
+#include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace ir {
     device_t::device_t() noexcept = default;
@@ -10,10 +10,10 @@ namespace ir {
     device_t::~device_t() noexcept {
         IR_PROFILE_SCOPED();
         IR_VULKAN_CHECK(_logger, vkDeviceWaitIdle(_handle));
-        vkDestroyDevice(_handle, nullptr);
-        IR_LOG_INFO(_logger, "device destroyed");
         vmaDestroyAllocator(_allocator);
         IR_LOG_INFO(_logger, "allocator destroyed");
+        vkDestroyDevice(_handle, nullptr);
+        IR_LOG_INFO(_logger, "device destroyed");
     }
 
     auto device_t::make(
@@ -240,14 +240,14 @@ namespace ir {
             volkLoadDevice(device->_handle);
             IR_LOG_INFO(logger, "device function table initialized");
 
-            device->_graphics = queue_t::make(device.as_const_ref(), { *graphics_family, queue_type_t::graphics });
+            device->_graphics = queue_t::make(device.as_const_ref(), { *graphics_family, queue_type_t::e_graphics });
             device->_compute = device->_graphics;
             device->_transfer = device->_graphics;
             if (graphics_family != compute_family) {
-                device->_compute = queue_t::make(device.as_const_ref(), { *compute_family, queue_type_t::compute });
+                device->_compute = queue_t::make(device.as_const_ref(), { *compute_family, queue_type_t::e_compute });
             }
             if (transfer_family != graphics_family && transfer_family != compute_family) {
-                device->_transfer = queue_t::make(device.as_const_ref(), { *transfer_family, queue_type_t::transfer });
+                device->_transfer = queue_t::make(device.as_const_ref(), { *transfer_family, queue_type_t::e_transfer });
             }
 
             device->_properties = properties2;

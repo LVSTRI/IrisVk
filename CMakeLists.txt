@@ -2,12 +2,11 @@ cmake_minimum_required(VERSION 3.25)
 project(IrisVk)
 
 # Vulkan setup
-set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-add_subdirectory(deps/Vulkan-Headers)
+find_package(Vulkan REQUIRED)
 
 # volk setup
 add_subdirectory(deps/volk)
-target_link_libraries(volk PUBLIC Vulkan::Headers)
+target_include_directories(volk PUBLIC ${Vulkan_INCLUDE_DIRS})
 
 # GLFW setup
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -33,6 +32,12 @@ add_library(cgltf STATIC
     src/iris/deps/cgltf.c
 )
 target_include_directories(cgltf PUBLIC deps/cgltf)
+target_compile_definitions(cgltf PUBLIC
+    $<$<BOOL:${WIN32}>:
+        _CRT_SECURE_NO_WARNINGS
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX>
+)
 
 # VMA setup
 set(VMA_STATIC_VULKAN_FUNCTIONS OFF CACHE BOOL "" FORCE)
@@ -62,6 +67,7 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 
 set(IRIS_MAIN_HEADERS
+    include/iris/core/enums.hpp
     include/iris/core/forwards.hpp
     include/iris/core/intrusive_atomic_ptr.hpp
     include/iris/core/macros.hpp
@@ -70,6 +76,7 @@ set(IRIS_MAIN_HEADERS
 
     include/iris/gfx/device.hpp
     include/iris/gfx/instance.hpp
+    include/iris/gfx/image.hpp
     include/iris/gfx/queue.hpp
     include/iris/gfx/swapchain.hpp
 
@@ -80,6 +87,7 @@ set(IRIS_MAIN_SOURCES
     src/iris/core/intrusive_atomic_ptr.cpp
 
     src/iris/gfx/device.cpp
+    src/iris/gfx/image.cpp
     src/iris/gfx/instance.cpp
     src/iris/gfx/queue.cpp
 
@@ -120,10 +128,9 @@ target_link_libraries(IrisVk PUBLIC
     cgltf
     spdlog
     TracyClient
-    Vulkan::Headers
 )
 
-target_include_directories(IrisVk PUBLIC include)
+target_include_directories(IrisVk PUBLIC include ${Vulkan_INCLUDE_DIRS})
 
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(IrisVk PRIVATE -march=native -mavx2 -Wall -Wextra)

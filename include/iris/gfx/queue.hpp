@@ -26,9 +26,9 @@ namespace ir {
     };
 
     enum class queue_type_t {
-        graphics,
-        compute,
-        transfer,
+        e_graphics,
+        e_compute,
+        e_transfer,
     };
 
     struct queue_create_info_t {

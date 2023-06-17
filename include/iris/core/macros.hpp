@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #define IR_DECLARE_COPY(T)  \
     T(const T&) noexcept;   \
     auto operator =(const T&) noexcept -> T&
@@ -67,8 +69,15 @@
     #error "unsupported"
 #endif
 
-#if defined(IR_DEBUG)
+#define IR_CONCAT_EXPAND(x, y) x##y
+#define IR_CONCAT(x, y) IR_CONCAT_EXPAND(x, y)
+
+#if defined(IRIS_DEBUG)
     #include <cassert>
+    #if defined(VK_ENABLE_BETA_EXTENSIONS)
+        #include <vulkan/vulkan.h>
+    #endif
+    #include <vulkan/vk_enum_string_helper.h>
     #define IR_ASSERT(expr, msg) assert((expr) && (msg))
     #define IR_VULKAN_CHECK(logger, expr)                                        \
         do {                                                                     \
@@ -86,12 +95,38 @@
     } while (false)
 #endif
 
+namespace ir::det {
+    template <typename T>
+    concept is_dereferenceable = requires (T x) {
+        { *x };
+    };
+
+    template <typename T>
+    struct __maybe_dereference_t;
+
+    template <typename T>
+        requires (is_dereferenceable<T>)
+    struct __maybe_dereference_t<T> {
+        constexpr static auto __invoke(T x) noexcept -> decltype(*x) {
+            return *x;
+        }
+    };
+
+    template <typename T>
+        requires (!is_dereferenceable<T>)
+    struct __maybe_dereference_t<T> {
+        constexpr static auto __invoke(T x) noexcept -> decltype((x)) {
+            return x;
+        }
+    };
+}
+
 #if defined(IRIS_DEBUG_LOGGER)
-    #define IR_LOG_DEBUG(logger, ...) (logger)->debug(__VA_ARGS__)
-    #define IR_LOG_INFO(logger, ...) (logger)->info(__VA_ARGS__)
-    #define IR_LOG_WARN(logger, ...) (logger)->warn(__VA_ARGS__)
-    #define IR_LOG_ERROR(logger, ...) (logger)->error(__VA_ARGS__)
-    #define IR_LOG_CRITICAL(logger, ...) (logger)->critical(__VA_ARGS__)
+    #define IR_LOG_DEBUG(logger, ...) ::ir::det::__maybe_dereference_t<decltype(logger)>::__invoke(logger).debug(__VA_ARGS__)
+    #define IR_LOG_INFO(logger, ...) ::ir::det::__maybe_dereference_t<decltype(logger)>::__invoke(logger).info(__VA_ARGS__)
+    #define IR_LOG_WARN(logger, ...) ::ir::det::__maybe_dereference_t<decltype(logger)>::__invoke(logger).warn(__VA_ARGS__)
+    #define IR_LOG_ERROR(logger, ...) ::ir::det::__maybe_dereference_t<decltype(logger)>::__invoke(logger).error(__VA_ARGS__)
+    #define IR_LOG_CRITICAL(logger, ...) ::ir::det::__maybe_dereference_t<decltype(logger)>::__invoke(logger).critical(__VA_ARGS__)
 #else
     #define IR_LOG_DEBUG(logger, ...) (void)(logger)
     #define IR_LOG_INFO(logger, ...) (void)(logger)
