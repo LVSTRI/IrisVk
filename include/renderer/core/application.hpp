@@ -24,6 +24,7 @@ namespace app {
 
         ir::wsi_platform_t _platform;
         ir::intrusive_atomic_ptr_t<ir::instance_t> _instance;
-        ir::intrusive_atomic_ptr_t<const ir::device_t> _device;
+        ir::intrusive_atomic_ptr_t<ir::device_t> _device;
+        ir::intrusive_atomic_ptr_t<ir::swapchain_t> _swapchain;
     };
 }

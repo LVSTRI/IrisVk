@@ -37,7 +37,7 @@ namespace ir {
 
     template <typename T>
         requires std::is_enum_v<T>
-    IR_NODISCARD constexpr auto as_string(T e) noexcept -> std::string_view;
+    IR_NODISCARD constexpr auto internal_enum_as_string(T e) noexcept -> std::string_view;
 
     template <typename T>
         requires std::is_enum_v<T>

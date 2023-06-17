@@ -2,10 +2,12 @@
 
 #include <iris/core/types.hpp>
 #include <iris/core/macros.hpp>
+#include <iris/core/forwards.hpp>
 
 #include <atomic>
 
 namespace ir {
+    template <typename T>
     class enable_intrusive_refcount_t {
     public:
         using self = enable_intrusive_refcount_t;
@@ -20,6 +22,8 @@ namespace ir {
         auto count() const noexcept -> uint64;
         auto grab() const noexcept -> uint64;
         auto drop() const noexcept -> uint64;
+        auto as_intrusive_ptr() noexcept -> intrusive_atomic_ptr_t<T>;
+        auto as_intrusive_ptr() const noexcept -> intrusive_atomic_ptr_t<const T>;
 
     private:
         mutable std::atomic<uint64> _count = 0;
@@ -256,7 +260,7 @@ namespace ir {
         IR_NODISCARD operator bool() const noexcept;
 
         template <typename U>
-        friend auto swap(intrusive_atomic_ptr_t<U>& lhs, intrusive_atomic_ptr_t<U>& rhs) noexcept -> void;
+        friend auto swap(intrusive_atomic_ptr_t<const U>& lhs, intrusive_atomic_ptr_t<const U>& rhs) noexcept -> void;
 
         template <typename U>
         friend class intrusive_atomic_ptr_t;
@@ -434,5 +438,41 @@ namespace ir {
         IR_PROFILE_SCOPED();
         using std::swap;
         swap(lhs._ptr, rhs._ptr);
+    }
+
+    template <typename T>
+    enable_intrusive_refcount_t<T>::enable_intrusive_refcount_t() noexcept = default;
+
+    template <typename T>
+    enable_intrusive_refcount_t<T>::~enable_intrusive_refcount_t() noexcept = default;
+
+    template <typename T>
+    auto enable_intrusive_refcount_t<T>::count() const noexcept -> uint64 {
+        IR_PROFILE_SCOPED();
+        return _count.load();
+    }
+
+    template <typename T>
+    auto enable_intrusive_refcount_t<T>::grab() const noexcept -> uint64 {
+        IR_PROFILE_SCOPED();
+        return ++_count;
+    }
+
+    template <typename T>
+    auto enable_intrusive_refcount_t<T>::drop() const noexcept -> uint64 {
+        IR_PROFILE_SCOPED();
+        return --_count;
+    }
+
+    template <typename T>
+    auto enable_intrusive_refcount_t<T>::as_intrusive_ptr() noexcept -> intrusive_atomic_ptr_t<T> {
+        IR_PROFILE_SCOPED();
+        return intrusive_atomic_ptr_t<T>(static_cast<T*>(this));
+    }
+
+    template <typename T>
+    auto enable_intrusive_refcount_t<T>::as_intrusive_ptr() const noexcept -> intrusive_atomic_ptr_t<const T> {
+        IR_PROFILE_SCOPED();
+        return intrusive_atomic_ptr_t<const T>(static_cast<const T*>(this));
     }
 }

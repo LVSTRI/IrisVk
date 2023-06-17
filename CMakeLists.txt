@@ -90,6 +90,7 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/image.cpp
     src/iris/gfx/instance.cpp
     src/iris/gfx/queue.cpp
+    src/iris/gfx/swapchain.cpp
 
     src/iris/wsi/wsi_platform.cpp
 )

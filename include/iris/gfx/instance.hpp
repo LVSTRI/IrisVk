@@ -23,7 +23,7 @@ namespace ir {
         std::vector<const char*> wsi_extensions;
     };
 
-    class instance_t : public enable_intrusive_refcount_t {
+    class instance_t : public enable_intrusive_refcount_t<instance_t> {
     public:
         using self = instance_t;
 

@@ -1,5 +1,6 @@
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/instance.hpp>
+#include <iris/gfx/swapchain.hpp>
 
 #include <renderer/core/application.hpp>
 
@@ -12,11 +13,12 @@ namespace app {
             },
             .wsi_extensions = ir::wsi_platform_t::context_extensions()
         });
-        _device = ir::device_t::make(_instance, {
+        _device = ir::device_t::make(*_instance, {
             .features = {
                 .swapchain = true
             }
         });
+        _swapchain = ir::swapchain_t::make(*_device, _platform, {});
     }
 
     application_t::~application_t() noexcept = default;

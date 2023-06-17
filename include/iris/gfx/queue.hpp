@@ -36,7 +36,7 @@ namespace ir {
         queue_type_t type = {};
     };
 
-    class queue_t : public enable_intrusive_refcount_t {
+    class queue_t : public enable_intrusive_refcount_t<queue_t> {
     public:
         using self = queue_t;
 
@@ -59,7 +59,7 @@ namespace ir {
         std::mutex _lock;
 
         queue_create_info_t _info = {};
-        std::reference_wrapper<const device_t> _device;
         std::shared_ptr<spdlog::logger> _logger;
+        std::reference_wrapper<const device_t> _device;
     };
 }

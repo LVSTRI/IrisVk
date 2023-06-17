@@ -7,7 +7,7 @@
 
 namespace ir {
     template <>
-    constexpr auto as_string(queue_type_t type) noexcept -> std::string_view {
+    constexpr auto internal_enum_as_string(queue_type_t type) noexcept -> std::string_view {
         switch (type) {
             case queue_type_t::e_graphics: return "graphics";
             case queue_type_t::e_compute: return "compute";
@@ -16,8 +16,9 @@ namespace ir {
         return "";
     }
 
-    queue_t::queue_t(const device_t& device) noexcept
-        : _device(std::cref(device)) {}
+    queue_t::queue_t(const device_t& device) noexcept : _device(std::cref(device)) {
+        IR_PROFILE_SCOPED();
+    }
 
     queue_t::~queue_t() noexcept {
         IR_PROFILE_SCOPED();
@@ -27,7 +28,7 @@ namespace ir {
     auto queue_t::make(const device_t& device, const queue_create_info_t& info) noexcept -> intrusive_atomic_ptr_t<self> {
         IR_PROFILE_SCOPED();
         auto queue = intrusive_atomic_ptr_t(new self(device));
-        auto logger = spdlog::stdout_color_mt(as_string(info.type).data());
+        auto logger = spdlog::stdout_color_mt(internal_enum_as_string(info.type).data());
         IR_LOG_INFO(logger, "queue initialized (family: {}, index: {})", info.family.family, info.family.index);
         queue->_handle = device.fetch_queue(info.family);
         queue->_info = info;
@@ -56,6 +57,7 @@ namespace ir {
     }
 
     auto queue_t::info() const noexcept -> const queue_create_info_t& {
+        IR_PROFILE_SCOPED();
         return _info;
     }
 

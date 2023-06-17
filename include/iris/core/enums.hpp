@@ -33,7 +33,7 @@ namespace ir {
         }                                                        \
     }
 
-        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(image_sample_count_t, VkSampleCountFlagBits);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sample_count_t, VkSampleCountFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(image_usage_t, VkImageUsageFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(resource_format_t, VkFormat);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(image_aspect_t, VkImageAspectFlagBits);
@@ -44,6 +44,7 @@ namespace ir {
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(cull_mode_t, VkCullModeFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(buffer_usage_t, VkBufferUsageFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(memory_property_t, VkMemoryPropertyFlagBits);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(component_swizzle_t, VkComponentSwizzle);
 
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSampleCountFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageUsageFlagBits);
@@ -56,6 +57,8 @@ namespace ir {
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCullModeFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkBufferUsageFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkMemoryPropertyFlagBits);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkColorSpaceKHR);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkComponentSwizzle);
 
         template <typename E>
         using native_enum_counterpart_type = typename native_enum_counterpart_type_t<E>::type;
@@ -83,8 +86,8 @@ namespace ir {
         return det::native_enum_string_func_t<E>()(e);
     }
 
-    // VkSampleCountFlags
-    enum class image_sample_count_t : std::underlying_type_t<VkSampleCountFlagBits> {
+    // VkSampleCountFlagBits
+    enum class sample_count_t : std::underlying_type_t<VkSampleCountFlagBits> {
         e_1 = VK_SAMPLE_COUNT_1_BIT,
         e_2 = VK_SAMPLE_COUNT_2_BIT,
         e_4 = VK_SAMPLE_COUNT_4_BIT,
@@ -424,7 +427,7 @@ namespace ir {
         e_shading_rate_optimal_nv = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV,
     };
     
-    // VkPipelineStageFlagBits ()
+    // VkPipelineStageFlagBits2
     enum class pipeline_stage_t : VkPipelineStageFlagBits2 {
         e_none = VK_PIPELINE_STAGE_2_NONE,
         e_top_of_pipe = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
@@ -478,7 +481,7 @@ namespace ir {
         e_optical_flow_nv = VK_PIPELINE_STAGE_2_OPTICAL_FLOW_BIT_NV,
     };
     
-    // VkAccessFlagBits
+    // VkAccessFlagBits2
     enum class resource_access_t : VkAccessFlagBits2 {
         e_none = VK_ACCESS_2_NONE,
         e_indirect_command_read = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT,
@@ -710,4 +713,29 @@ namespace ir {
         e_device_uncached_bit_amd = VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD,
         e_rdma_capable_bit_nv = VK_MEMORY_PROPERTY_RDMA_CAPABLE_BIT_NV,
     };
+
+    // VkComponentSwizzle
+    enum class component_swizzle_t : std::underlying_type_t<VkComponentSwizzle> {
+        e_identity = VK_COMPONENT_SWIZZLE_IDENTITY,
+        e_zero = VK_COMPONENT_SWIZZLE_ZERO,
+        e_one = VK_COMPONENT_SWIZZLE_ONE,
+        e_r = VK_COMPONENT_SWIZZLE_R,
+        e_g = VK_COMPONENT_SWIZZLE_G,
+        e_b = VK_COMPONENT_SWIZZLE_B,
+        e_a = VK_COMPONENT_SWIZZLE_A,
+    };
+
+
+    // constants
+    constexpr auto external_subpass = VK_SUBPASS_EXTERNAL;
+    constexpr auto lod_clamp_none = VK_LOD_CLAMP_NONE;
+    constexpr auto remaining_mip_levels = VK_REMAINING_MIP_LEVELS;
+    constexpr auto remaining_array_layers = VK_REMAINING_ARRAY_LAYERS;
+    constexpr auto whole_size = VK_WHOLE_SIZE;
+    constexpr auto attachment_unused = VK_ATTACHMENT_UNUSED;
+    constexpr auto queue_family_ignored = VK_QUEUE_FAMILY_IGNORED;
+    constexpr auto level_ignored = -1_u32;
+    constexpr auto remaining_levels = VK_REMAINING_MIP_LEVELS;
+    constexpr auto layer_ignored = -1_u32;
+    constexpr auto remaining_layers = VK_REMAINING_ARRAY_LAYERS;
 }

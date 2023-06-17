@@ -23,7 +23,7 @@ namespace ir {
         device_features_t features = {};
     };
 
-    class device_t : public enable_intrusive_refcount_t {
+    class device_t : public enable_intrusive_refcount_t<device_t> {
     public:
         using self = device_t;
 
@@ -31,7 +31,7 @@ namespace ir {
         ~device_t() noexcept;
 
         IR_NODISCARD static auto make(
-            intrusive_atomic_ptr_t<instance_t> instance,
+            const instance_t& instance,
             const device_create_info_t& info = {}) noexcept -> intrusive_atomic_ptr_t<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkDevice;
@@ -44,10 +44,9 @@ namespace ir {
 
         IR_NODISCARD auto info() const noexcept -> const device_create_info_t&;
         IR_NODISCARD auto instance() const noexcept -> const instance_t&;
-        IR_NODISCARD auto logger() const noexcept -> const spdlog::logger&;
+        IR_NODISCARD auto logger() const noexcept -> spdlog::logger&;
 
         IR_NODISCARD auto fetch_queue(const queue_family_t& family) const noexcept -> VkQueue;
-        IR_NODISCARD auto allocate_image(const VkImageCreateInfo& info) const noexcept -> VkImage;
 
     private:
         VkDevice _handle = {};
@@ -66,7 +65,7 @@ namespace ir {
         intrusive_atomic_ptr_t<queue_t> _transfer;
 
         device_create_info_t _info = {};
-        intrusive_atomic_ptr_t<instance_t> _instance;
+        intrusive_atomic_ptr_t<const instance_t> _instance;
         std::shared_ptr<spdlog::logger> _logger;
     };
 }

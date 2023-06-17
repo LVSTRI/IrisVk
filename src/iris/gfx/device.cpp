@@ -10,6 +10,9 @@ namespace ir {
     device_t::~device_t() noexcept {
         IR_PROFILE_SCOPED();
         IR_VULKAN_CHECK(_logger, vkDeviceWaitIdle(_handle));
+        _graphics.reset();
+        _compute.reset();
+        _transfer.reset();
         vmaDestroyAllocator(_allocator);
         IR_LOG_INFO(_logger, "allocator destroyed");
         vkDestroyDevice(_handle, nullptr);
@@ -17,7 +20,7 @@ namespace ir {
     }
 
     auto device_t::make(
-        intrusive_atomic_ptr_t<instance_t> instance,
+        const instance_t& instance,
         const device_create_info_t& info
     ) noexcept -> intrusive_atomic_ptr_t<self> {
         IR_PROFILE_SCOPED();
@@ -32,7 +35,7 @@ namespace ir {
         memory_properties.pNext = nullptr;
 
         // choose GPU
-        for (auto gpu : instance.as_const_ref().enumerate_physical_devices()) {
+        for (auto gpu : instance.enumerate_physical_devices()) {
             vkGetPhysicalDeviceProperties2(gpu, &properties2);
             vkGetPhysicalDeviceMemoryProperties2(gpu, &memory_properties);
             IR_LOG_INFO(logger, "found GPU: {}", properties2.properties.deviceName);
@@ -276,7 +279,7 @@ namespace ir {
             vma_info.pDeviceMemoryCallbacks = nullptr;
             vma_info.pHeapSizeLimit = nullptr;
             vma_info.pVulkanFunctions = &vma_function_table;
-            vma_info.instance = instance.as_const_ref().handle();
+            vma_info.instance = instance.handle();
             vma_info.vulkanApiVersion = VK_API_VERSION_1_3;
             vma_info.pTypeExternalMemoryHandleTypes = nullptr;
             IR_VULKAN_CHECK(logger, vmaCreateAllocator(&vma_info, &device->_allocator));
@@ -284,7 +287,7 @@ namespace ir {
         }
 
         device->_info = info;
-        device->_instance = std::move(instance);
+        device->_instance = instance.as_intrusive_ptr();
         device->_logger = std::move(logger);
         return device;
     }
@@ -329,7 +332,7 @@ namespace ir {
         return *_instance;
     }
 
-    auto device_t::logger() const noexcept -> const spdlog::logger& {
+    auto device_t::logger() const noexcept -> spdlog::logger& {
         IR_PROFILE_SCOPED();
         return *_logger;
     }
@@ -337,7 +340,7 @@ namespace ir {
     auto device_t::fetch_queue(const queue_family_t& family) const noexcept -> VkQueue {
         IR_PROFILE_SCOPED();
         auto queue = VkQueue();
-        IR_VULKAN_CHECK(_logger, vkGetDeviceQueue(_handle, family.family, family.index, &queue));
+        vkGetDeviceQueue(_handle, family.family, family.index, &queue);
         return queue;
     }
 }

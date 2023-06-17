@@ -2,6 +2,33 @@
 
 #include <memory>
 
+namespace ir::det {
+    template <typename T>
+    concept is_dereferenceable = requires (T x) {
+        { *x };
+    };
+
+    template <typename T>
+    struct __maybe_dereference_t;
+
+    template <typename T>
+        requires (is_dereferenceable<T>)
+    struct __maybe_dereference_t<T> {
+        constexpr static auto __invoke(T x) noexcept -> decltype(*x) {
+            return *x;
+        }
+    };
+
+    template <typename T>
+        requires (!is_dereferenceable<T>)
+    struct __maybe_dereference_t<T> {
+        constexpr static auto __invoke(T x) noexcept -> decltype((x)) {
+            return x;
+        }
+    };
+}
+
+
 #define IR_DECLARE_COPY(T)  \
     T(const T&) noexcept;   \
     auto operator =(const T&) noexcept -> T&
@@ -74,17 +101,16 @@
 
 #if defined(IRIS_DEBUG)
     #include <cassert>
-    #if defined(VK_ENABLE_BETA_EXTENSIONS)
-        #include <vulkan/vulkan.h>
-    #endif
+    #include <vulkan/vulkan.h>
     #include <vulkan/vk_enum_string_helper.h>
     #define IR_ASSERT(expr, msg) assert((expr) && (msg))
-    #define IR_VULKAN_CHECK(logger, expr)                                        \
-        do {                                                                     \
-            const auto __result = (expr);                                        \
-            if (__result != VK_SUCCESS) {                                        \
-                logger->critical("vulkan error: {}", string_VkResult(__result)); \
-            }                                                                    \
+    #define IR_VULKAN_CHECK(logger, expr)                                                     \
+        do {                                                                                  \
+            const auto __result = (expr);                                                     \
+            if (__result != VK_SUCCESS) {                                                     \
+                ::ir::det::__maybe_dereference_t<decltype(logger)>::                          \
+                    __invoke(logger).critical("vulkan error: {}", string_VkResult(__result)); \
+            }                                                                                 \
         } while (false)
 #else
     #define IR_ASSERT(expr, msg) (void)(expr)
@@ -94,32 +120,6 @@
         (void)(expr);                     \
     } while (false)
 #endif
-
-namespace ir::det {
-    template <typename T>
-    concept is_dereferenceable = requires (T x) {
-        { *x };
-    };
-
-    template <typename T>
-    struct __maybe_dereference_t;
-
-    template <typename T>
-        requires (is_dereferenceable<T>)
-    struct __maybe_dereference_t<T> {
-        constexpr static auto __invoke(T x) noexcept -> decltype(*x) {
-            return *x;
-        }
-    };
-
-    template <typename T>
-        requires (!is_dereferenceable<T>)
-    struct __maybe_dereference_t<T> {
-        constexpr static auto __invoke(T x) noexcept -> decltype((x)) {
-            return x;
-        }
-    };
-}
 
 #if defined(IRIS_DEBUG_LOGGER)
     #define IR_LOG_DEBUG(logger, ...) ::ir::det::__maybe_dereference_t<decltype(logger)>::__invoke(logger).debug(__VA_ARGS__)
