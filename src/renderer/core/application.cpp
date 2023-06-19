@@ -5,6 +5,7 @@
 #include <iris/gfx/command_buffer.hpp>
 #include <iris/gfx/framebuffer.hpp>
 #include <iris/gfx/fence.hpp>
+#include <iris/gfx/clear_value.hpp>
 #include <iris/gfx/semaphore.hpp>
 #include <iris/gfx/queue.hpp>
 #include <iris/gfx/swapchain.hpp>
@@ -95,10 +96,14 @@ namespace app {
         _main_pass.framebuffer = ir::framebuffer_t::make(*_main_pass.description, {
             .attachments = { _main_pass.color, _main_pass.depth },
         });
+        _main_pass.clear_values = {
+            ir::make_clear_color({ 0.597f, 0.808f, 1.0f, 1.0f }),
+            ir::make_clear_depth(0.0f, 0)
+        };
 
         _command_pools = ir::command_pool_t::make(*_device, frames_in_flight, {
             .queue = ir::queue_type_t::e_graphics,
-            .flags = ir::command_pool_flags_t::e_transient
+            .flags = {}
         });
         for (auto& pool : _command_pools) {
             _command_buffers.emplace_back(ir::command_buffer_t::make(*pool, {}));
@@ -109,7 +114,7 @@ namespace app {
     }
 
     application_t::~application_t() noexcept {
-        _device->wait_idle();
+        _device.as_const_ref().wait_idle();
     }
 
     auto application_t::run() noexcept -> void {
@@ -137,7 +142,7 @@ namespace app {
         const auto& fence = *_frame_fence[_frame_index];
         const auto& image_semaphore = *_image_available[_frame_index];
         const auto& render_semaphore = *_render_done[_frame_index];
-        const auto& command_buffer = *_command_buffers[_frame_index];
+        auto& command_buffer = *_command_buffers[_frame_index];
 
         fence.wait();
         fence.reset();
@@ -145,18 +150,24 @@ namespace app {
         const auto image_index = _swapchain.as_const_ref().acquire_next_image(image_semaphore);
 
         command_buffer.begin();
+        command_buffer.begin_render_pass(*_main_pass.framebuffer, _main_pass.clear_values);
+        command_buffer.end_render_pass();
         command_buffer.image_barrier({
             .image = std::cref(_swapchain.as_const_ref().image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
-            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_copy,
             .source_access = ir::resource_access_t::e_none,
             .dest_access = ir::resource_access_t::e_transfer_write,
             .old_layout = ir::image_layout_t::e_undefined,
             .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
         });
+        command_buffer.copy_image({
+            .source = std::cref(_main_pass.color.as_const_ref()),
+            .dest = std::cref(_swapchain.as_const_ref().image(image_index)),
+        });
         command_buffer.image_barrier({
             .image = std::cref(_swapchain.as_const_ref().image(image_index)),
-            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .source_stage = ir::pipeline_stage_t::e_copy,
             .dest_stage = ir::pipeline_stage_t::e_bottom_of_pipe,
             .source_access = ir::resource_access_t::e_transfer_write,
             .dest_access = ir::resource_access_t::e_none,
@@ -168,10 +179,10 @@ namespace app {
         _device.as_const_ref().graphics_queue().submit({
             .command_buffers = { std::cref(command_buffer) },
             .wait_semaphores = {
-                { std::cref(image_semaphore), ir::pipeline_stage_t::e_transfer }
+                { std::cref(image_semaphore), ir::pipeline_stage_t::e_copy }
             },
             .signal_semaphores = {
-                { std::cref(render_semaphore), ir::pipeline_stage_t::e_transfer }
+                { std::cref(render_semaphore), ir::pipeline_stage_t::e_copy }
             },
         }, &fence);
 

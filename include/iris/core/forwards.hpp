@@ -51,6 +51,10 @@ namespace ir {
     struct buffer_memory_barrier_t;
     struct memory_barrier_t;
 
+    enum class clear_value_type_t;
+    union clear_color_t;
+    struct clear_depth_t;
+
     class wsi_platform_t;
     class instance_t;
     class device_t;
@@ -64,4 +68,5 @@ namespace ir {
     class framebuffer_t;
     class fence_t;
     class semaphore_t;
+    class clear_value_t;
 }

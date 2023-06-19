@@ -74,6 +74,7 @@ set(IRIS_MAIN_HEADERS
     include/iris/core/types.hpp
     include/iris/core/utilities.hpp
 
+    include/iris/gfx/clear_value.hpp
     include/iris/gfx/command_buffer.hpp
     include/iris/gfx/command_pool.hpp
     include/iris/gfx/device.hpp
@@ -104,8 +105,7 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/semaphore.cpp
     src/iris/gfx/swapchain.cpp
 
-    src/iris/wsi/wsi_platform.cpp
-)
+    src/iris/wsi/wsi_platform.cpp)
 
 add_library(IrisVk
     ${IRIS_MAIN_HEADERS}

@@ -33,12 +33,16 @@ namespace ir {
 
         IR_NODISCARD auto handle() const noexcept -> VkFramebuffer;
         IR_NODISCARD auto attachments() const noexcept -> std::span<const arc_ptr<const image_t>>;
+        IR_NODISCARD auto attachment(uint32 index) const noexcept -> const image_t&;
         IR_NODISCARD auto info() const noexcept -> const framebuffer_create_info_t&;
         IR_NODISCARD auto render_pass() const noexcept -> const render_pass_t&;
 
+        IR_NODISCARD auto width() const noexcept -> uint32;
+        IR_NODISCARD auto height() const noexcept -> uint32;
+        IR_NODISCARD auto layers() const noexcept -> uint32;
+
     private:
         VkFramebuffer _handle = {};
-        std::vector<arc_ptr<const image_t>> _attachments = {};
 
         framebuffer_create_info_t _info = {};
         arc_ptr<const render_pass_t> _render_pass;

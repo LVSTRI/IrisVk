@@ -13,6 +13,7 @@ namespace app {
         ir::arc_ptr<ir::image_t> color;
         ir::arc_ptr<ir::image_t> depth;
         ir::arc_ptr<ir::framebuffer_t> framebuffer;
+        std::vector<ir::clear_value_t> clear_values;
     };
 
     class application_t {

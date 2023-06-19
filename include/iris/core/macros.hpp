@@ -83,6 +83,7 @@ namespace ir::det {
 #define IR_MAYBE_UNUSED [[maybe_unused]]
 #define IR_LIKELY [[likely]]
 #define IR_UNLIKELY [[unlikely]]
+#define IR_CONSTEXPR constexpr
 
 #if defined(__clang__) || defined(__GNUC__)
     #define IR_CPP_VERSION __cplusplus

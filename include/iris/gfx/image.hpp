@@ -19,6 +19,55 @@
 #include <memory>
 
 namespace ir {
+    struct offset_2d_t {
+        int32 x = 0;
+        int32 y = 0;
+
+        constexpr auto operator ==(const offset_2d_t& other) const noexcept -> bool {
+            return x == other.x && y == other.y;
+        }
+    };
+    constexpr static auto ignored_offset_2d = offset_2d_t { -1_i32, -1_i32 };
+
+    struct offset_3d_t {
+        int32 x = 0;
+        int32 y = 0;
+        int32 z = 0;
+
+        constexpr auto operator ==(const offset_3d_t& other) const noexcept -> bool {
+            return x == other.x && y == other.y && z == other.z;
+        }
+    };
+    constexpr static auto ignored_offset_3d = offset_3d_t { -1_i32, -1_i32, -1_i32 };
+
+    struct extent_2d_t {
+        uint32 width = 0;
+        uint32 height = 0;
+
+        constexpr auto operator ==(const extent_2d_t& other) const noexcept -> bool {
+            return width == other.width && height == other.height;
+        }
+    };
+    constexpr static auto ignored_extent_2d = extent_2d_t { -1_u32, -1_u32 };
+
+    struct extent_3d_t {
+        uint32 width = 0;
+        uint32 height = 0;
+        uint32 depth = 0;
+
+        constexpr auto operator ==(const extent_3d_t& other) const noexcept -> bool {
+            return width == other.width && height == other.height && depth == other.depth;
+        }
+    };
+    constexpr static auto ignored_extent_3d = extent_3d_t { -1_u32, -1_u32, -1_u32 };
+
+    struct image_subresource_t {
+        uint32 level = level_ignored;
+        uint32 level_count = remaining_levels;
+        uint32 layer = layer_ignored;
+        uint32 layer_count = remaining_layers;
+    };
+
     struct image_view_create_info_t {
         resource_format_t format = resource_format_t::e_undefined;
         struct {
@@ -27,10 +76,7 @@ namespace ir {
             component_swizzle_t b = component_swizzle_t::e_identity;
             component_swizzle_t a = component_swizzle_t::e_identity;
         } swizzle = {};
-        uint32 level = level_ignored;
-        uint32 level_count = remaining_levels;
-        uint32 layer = layer_ignored;
-        uint32 layer_count = remaining_layers;
+        image_subresource_t subresource = {};
     };
 
     constexpr static auto default_image_view_info = image_view_create_info_t();

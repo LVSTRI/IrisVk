@@ -1,6 +1,9 @@
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/command_pool.hpp>
 #include <iris/gfx/command_buffer.hpp>
+#include <iris/gfx/clear_value.hpp>
+#include <iris/gfx/render_pass.hpp>
+#include <iris/gfx/framebuffer.hpp>
 #include <iris/gfx/image.hpp>
 
 namespace ir {
@@ -85,6 +88,118 @@ namespace ir {
         IR_VULKAN_CHECK(_pool.as_const_ref().device().logger(), vkBeginCommandBuffer(_handle, &command_buffer_begin_info));
     }
 
+    auto command_buffer_t::begin_render_pass(const framebuffer_t& framebuffer, const std::vector<clear_value_t>& clears) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        _state.framebuffer = &framebuffer;
+
+        auto clear_values = std::vector<VkClearValue>(clears.size());
+        for (auto i = 0_u32; i < clears.size(); ++i) {
+            switch (clears[i].type()) {
+                case clear_value_type_t::e_color:
+                    std::memcpy(&clear_values[i].color, as_const_ptr(clears[i].color()), sizeof(clear_values[i].color));
+                    break;
+
+                case clear_value_type_t::e_depth:
+                    std::memcpy(&clear_values[i].depthStencil, as_const_ptr(clears[i].depth()), sizeof(clear_values[i].depthStencil));
+                    break;
+
+                default: break;
+            }
+        }
+
+        auto render_pass_begin_info = VkRenderPassBeginInfo();
+        render_pass_begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        render_pass_begin_info.pNext = nullptr;
+        render_pass_begin_info.renderPass = framebuffer.render_pass().handle();
+        render_pass_begin_info.framebuffer = framebuffer.handle();
+        render_pass_begin_info.renderArea.offset = { 0, 0 };
+        render_pass_begin_info.renderArea.extent = {
+            framebuffer.width(),
+            framebuffer.height()
+        };
+        render_pass_begin_info.clearValueCount = clear_values.size();
+        render_pass_begin_info.pClearValues = clear_values.data();
+        vkCmdBeginRenderPass(_handle, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+    }
+
+    auto command_buffer_t::end_render_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        _state.framebuffer = nullptr;
+        vkCmdEndRenderPass(_handle);
+    }
+
+    auto command_buffer_t::copy_image(const image_copy_t& copy) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& source = copy.source.get();
+        const auto& dest = copy.dest.get();
+        auto copy_region = VkImageCopy();
+        copy_region.srcSubresource.aspectMask = as_enum_counterpart(source.view().aspect());
+        if (copy.source_subresource.level != level_ignored) {
+            copy_region.srcSubresource.mipLevel = copy.source_subresource.level;
+        }
+        if (copy.source_subresource.layer != layer_ignored) {
+            copy_region.srcSubresource.baseArrayLayer = copy.source_subresource.layer;
+            copy_region.srcSubresource.layerCount = copy.source_subresource.layer_count;
+        } else {
+            copy_region.srcSubresource.baseArrayLayer = 0;
+            copy_region.srcSubresource.layerCount = source.layers();
+        }
+        copy_region.dstSubresource.aspectMask = as_enum_counterpart(dest.view().aspect());
+        if (copy.dest_subresource.level != level_ignored) {
+            copy_region.dstSubresource.mipLevel = copy.dest_subresource.level;
+        }
+        if (copy.dest_subresource.layer != layer_ignored) {
+            copy_region.dstSubresource.baseArrayLayer = copy.dest_subresource.layer;
+            copy_region.dstSubresource.layerCount = copy.dest_subresource.layer_count;
+        } else {
+            copy_region.dstSubresource.baseArrayLayer = 0;
+            copy_region.dstSubresource.layerCount = dest.layers();
+        }
+
+        if (copy.source_offset == ignored_offset_3d) {
+            copy_region.srcOffset = { 0, 0, 0 };
+        } else {
+            copy_region.srcOffset = {
+                copy.source_offset.x,
+                copy.source_offset.y,
+                copy.source_offset.z
+            };
+        }
+        if (copy.dest_offset == ignored_offset_3d) {
+            copy_region.dstOffset = { 0, 0, 0 };
+        } else {
+            copy_region.dstOffset = {
+                copy.dest_offset.x,
+                copy.dest_offset.y,
+                copy.dest_offset.z
+            };
+        }
+        if (copy.extent == ignored_extent_3d) {
+            copy_region.extent = {
+                source.width(),
+                source.height(),
+                // TODO
+                1
+            };
+        } else {
+            copy_region.extent = {
+                copy.extent.width,
+                copy.extent.height,
+                copy.extent.depth
+            };
+        }
+
+        vkCmdCopyImage(
+            _handle,
+            source.handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            dest.handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &copy_region
+        );
+    }
+
     auto command_buffer_t::memory_barrier(const memory_barrier_t& barrier) const noexcept -> void {
         IR_PROFILE_SCOPED();
         auto memory_barrier = VkMemoryBarrier2();
@@ -120,16 +235,16 @@ namespace ir {
         image_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         image_barrier.image = image.handle();
         image_barrier.subresourceRange.aspectMask = as_enum_counterpart(image.view().aspect());
-        if (barrier.level != level_ignored) {
-            image_barrier.subresourceRange.baseMipLevel = barrier.level;
-            image_barrier.subresourceRange.levelCount = barrier.level_count;
+        if (barrier.subresource.level != level_ignored) {
+            image_barrier.subresourceRange.baseMipLevel = barrier.subresource.level;
+            image_barrier.subresourceRange.levelCount = barrier.subresource.level_count;
         } else {
             image_barrier.subresourceRange.baseMipLevel = 0;
             image_barrier.subresourceRange.levelCount = image.levels();
         }
-        if (barrier.layer != layer_ignored) {
-            image_barrier.subresourceRange.baseArrayLayer = barrier.layer;
-            image_barrier.subresourceRange.layerCount = barrier.layer_count;
+        if (barrier.subresource.layer != layer_ignored) {
+            image_barrier.subresourceRange.baseArrayLayer = barrier.subresource.layer;
+            image_barrier.subresourceRange.layerCount = barrier.subresource.layer_count;
         } else {
             image_barrier.subresourceRange.baseArrayLayer = 0;
             image_barrier.subresourceRange.layerCount = image.layers();

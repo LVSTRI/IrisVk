@@ -56,19 +56,19 @@ namespace ir {
         image_view_info.components.b = as_enum_counterpart(info.swizzle.b);
         image_view_info.components.a = as_enum_counterpart(info.swizzle.a);
         image_view_info.subresourceRange.aspectMask = as_enum_counterpart(aspect);
-         if (info.level == level_ignored) {
+         if (info.subresource.level == level_ignored) {
             image_view_info.subresourceRange.baseMipLevel = 0;
             image_view_info.subresourceRange.levelCount = image.levels();
         } else {
-            image_view_info.subresourceRange.baseMipLevel = info.level;
-            image_view_info.subresourceRange.levelCount = info.level_count;
+            image_view_info.subresourceRange.baseMipLevel = info.subresource.level;
+            image_view_info.subresourceRange.levelCount = info.subresource.level_count;
         }
-        if (info.layer == layer_ignored) {
+        if (info.subresource.layer == layer_ignored) {
             image_view_info.subresourceRange.baseArrayLayer = 0;
             image_view_info.subresourceRange.layerCount = image.layers();
         } else {
-            image_view_info.subresourceRange.baseArrayLayer = info.layer;
-            image_view_info.subresourceRange.layerCount = info.layer_count;
+            image_view_info.subresourceRange.baseArrayLayer = info.subresource.layer;
+            image_view_info.subresourceRange.layerCount = info.subresource.layer_count;
         }
         IR_VULKAN_CHECK(device.logger(), vkCreateImageView(device.handle(), &image_view_info, nullptr, &image_view->_handle));
         IR_LOG_INFO(device.logger(), "image view {} for image {} created", fmt::ptr(image_view->_handle), fmt::ptr(image.handle()));
@@ -227,6 +227,7 @@ namespace ir {
         const attachment_info_t& attachment,
         const image_create_info_t& info
     ) noexcept -> arc_ptr<self> {
+        IR_PROFILE_SCOPED();
         return image_t::make(device, {
             .width = info.width,
             .height = info.height,
