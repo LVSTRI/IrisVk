@@ -1,6 +1,7 @@
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/image.hpp>
 #include <iris/gfx/swapchain.hpp>
+#include <iris/gfx/render_pass.hpp>
 
 namespace ir {
     IR_NODISCARD constexpr auto deduce_image_aspect(const image_create_info_t& info) noexcept -> image_aspect_t {
@@ -27,17 +28,18 @@ namespace ir {
 
     image_view_t::~image_view_t() noexcept {
         IR_PROFILE_SCOPED();
-        IR_LOG_INFO(_device->logger(), "image view {} destroyed", fmt::ptr(_handle));
-        vkDestroyImageView(_device->handle(), _handle, nullptr);
+        IR_LOG_INFO(_device.as_const_ref().logger(), "image view {} destroyed", fmt::ptr(_handle));
+        vkDestroyImageView(_device.as_const_ref().handle(), _handle, nullptr);
     }
 
     auto image_view_t::make(
         const device_t& device,
         const image_t& image,
         const image_view_create_info_t& info
-    ) noexcept -> intrusive_atomic_ptr_t<self> {
+    ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto image_view = intrusive_atomic_ptr_t(new self(image));
+        auto image_view = arc_ptr<self>(new self(image));
+        const auto aspect = deduce_image_aspect(image.info());
         auto image_view_info = VkImageViewCreateInfo();
         image_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         image_view_info.pNext = nullptr;
@@ -53,7 +55,7 @@ namespace ir {
         image_view_info.components.g = as_enum_counterpart(info.swizzle.g);
         image_view_info.components.b = as_enum_counterpart(info.swizzle.b);
         image_view_info.components.a = as_enum_counterpart(info.swizzle.a);
-        image_view_info.subresourceRange.aspectMask = as_enum_counterpart(deduce_image_aspect(image.info()));
+        image_view_info.subresourceRange.aspectMask = as_enum_counterpart(aspect);
          if (info.level == level_ignored) {
             image_view_info.subresourceRange.baseMipLevel = 0;
             image_view_info.subresourceRange.levelCount = image.levels();
@@ -71,6 +73,7 @@ namespace ir {
         IR_VULKAN_CHECK(device.logger(), vkCreateImageView(device.handle(), &image_view_info, nullptr, &image_view->_handle));
         IR_LOG_INFO(device.logger(), "image view {} for image {} created", fmt::ptr(image_view->_handle), fmt::ptr(image.handle()));
 
+        image_view->_aspect = aspect;
         image_view->_info = info;
         image_view->_device = device.as_intrusive_ptr();
         return image_view;
@@ -79,6 +82,11 @@ namespace ir {
     auto image_view_t::handle() const noexcept -> VkImageView {
         IR_PROFILE_SCOPED();
         return _handle;
+    }
+
+    auto image_view_t::aspect() const noexcept -> image_aspect_t {
+        IR_PROFILE_SCOPED();
+        return _aspect;
     }
 
     auto image_view_t::info() const noexcept -> const image_view_create_info_t& {
@@ -104,16 +112,17 @@ namespace ir {
             _view.reset();
         }
         if (_allocation) {
-            vmaDestroyImage(_device->allocator(), _handle, _allocation);
+            vmaDestroyImage(_device.as_const_ref().allocator(), _handle, _allocation);
         }
+        IR_LOG_INFO(_device.as_const_ref().logger(), "image {} destroyed", fmt::ptr(_handle));
     }
 
     auto image_t::make(
         const device_t& device,
         const image_create_info_t& info
-    ) noexcept -> intrusive_atomic_ptr_t<self> {
+    ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto image = intrusive_atomic_ptr_t(new self());
+        auto image = arc_ptr<self>(new self());
         const auto family = [&]() {
             switch (info.queue) {
                 case queue_type_t::e_graphics: return device.graphics_queue().family();
@@ -176,7 +185,7 @@ namespace ir {
         const device_t& device,
         const swapchain_t& swapchain,
         const image_create_info_t& info
-    ) noexcept -> std::vector<intrusive_atomic_ptr_t<self>> {
+    ) noexcept -> std::vector<arc_ptr<self>> {
         IR_PROFILE_SCOPED();
         auto count = 0_u32;
         IR_VULKAN_CHECK(
@@ -195,9 +204,9 @@ namespace ir {
                 &count,
                 swapchain_images.data()));
         IR_LOG_INFO(device.logger(), "swapchain images initialized");
-        auto images = std::vector<intrusive_atomic_ptr_t<self>>();
+        auto images = std::vector<arc_ptr<self>>();
         for (auto i = 0_u32; i < count; ++i) {
-            auto image = intrusive_atomic_ptr_t(new self());
+            auto image = arc_ptr<self>(new self());
             image->_handle = swapchain_images[i];
             image->_allocation = VmaAllocation();
             image->_info = info;
@@ -211,6 +220,25 @@ namespace ir {
             images.emplace_back(std::move(image));
         }
         return images;
+    }
+
+    auto image_t::make_from_attachment(
+        const device_t& device,
+        const attachment_info_t& attachment,
+        const image_create_info_t& info
+    ) noexcept -> arc_ptr<self> {
+        return image_t::make(device, {
+            .width = info.width,
+            .height = info.height,
+            .levels = info.levels,
+            .layers = info.layers,
+            .queue = info.queue,
+            .samples = attachment.samples,
+            .usage = info.usage,
+            .format = attachment.format,
+            .layout = info.layout,
+            .view = info.view
+        });
     }
 
     auto image_t::handle() const noexcept -> VkImage {

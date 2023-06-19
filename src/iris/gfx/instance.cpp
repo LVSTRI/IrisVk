@@ -18,9 +18,9 @@ namespace ir {
         IR_LOG_INFO(_logger, "instance destroyed");
     }
 
-    auto instance_t::make(const instance_create_info_t& info) noexcept -> intrusive_atomic_ptr_t<self> {
+    auto instance_t::make(const instance_create_info_t& info) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto instance = intrusive_atomic_ptr_t(new self());
+        auto instance = arc_ptr<self>(new self());
         auto logger = spdlog::stdout_color_mt("instance");
 
         volkInitialize();

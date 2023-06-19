@@ -3,6 +3,7 @@
 #include <iris/gfx/queue.hpp>
 #include <iris/gfx/image.hpp>
 #include <iris/gfx/swapchain.hpp>
+#include <iris/gfx/semaphore.hpp>
 
 #include <iris/wsi/wsi_platform.hpp>
 
@@ -23,9 +24,9 @@ namespace ir {
         const device_t& device,
         const wsi_platform_t& wsi,
         const swapchain_create_info_t& info
-    ) noexcept -> intrusive_atomic_ptr_t<self> {
+    ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto swapchain = intrusive_atomic_ptr_t(new self(wsi));
+        auto swapchain = arc_ptr<self>(new self(wsi));
 
         auto surface = reinterpret_cast<VkSurfaceKHR>(
             wsi.make_surface(reinterpret_cast<VkInstance>(device.instance().handle())));
@@ -150,15 +151,9 @@ namespace ir {
             .queue = queue_type_t::e_graphics,
             .usage = info.usage,
             .format = format,
-            .view = { {
-                .swizzle = {
-                    .r = component_swizzle_t::e_identity,
-                    .g = component_swizzle_t::e_identity,
-                    .b = component_swizzle_t::e_identity,
-                    .a = component_swizzle_t::e_identity
-                }
-            } }
+            .view = default_image_view_info
         });
+        swapchain->_format = format;
         swapchain->_images = std::move(images);
         swapchain->_info = info;
         swapchain->_device = device.as_intrusive_ptr();
@@ -190,7 +185,7 @@ namespace ir {
         return _height;
     }
 
-    auto swapchain_t::images() const noexcept -> const std::vector<intrusive_atomic_ptr_t<image_t>>& {
+    auto swapchain_t::images() const noexcept -> std::span<const arc_ptr<image_t>> {
         IR_PROFILE_SCOPED();
         return _images;
     }
@@ -213,5 +208,20 @@ namespace ir {
     auto swapchain_t::wsi() const noexcept -> const wsi_platform_t& {
         IR_PROFILE_SCOPED();
         return _wsi.get();
+    }
+
+    auto swapchain_t::acquire_next_image(const semaphore_t& semaphore) const noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
+        auto index = uint32();
+        IR_VULKAN_CHECK(
+            _device.as_const_ref().logger(),
+            vkAcquireNextImageKHR(
+                _device.as_const_ref().handle(),
+                _handle,
+                -1_u64,
+                semaphore.handle(),
+                nullptr,
+                &index));
+        return index;
     }
 }

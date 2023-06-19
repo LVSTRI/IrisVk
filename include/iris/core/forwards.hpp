@@ -5,6 +5,9 @@
 namespace ir {
     template <typename T>
     class intrusive_atomic_ptr_t;
+    // shorthand
+    template <typename T>
+    using arc_ptr = intrusive_atomic_ptr_t<T>;
 
     struct instance_create_info_t;
     struct device_create_info_t;
@@ -12,6 +15,10 @@ namespace ir {
     struct swapchain_create_info_t;
     struct image_create_info_t;
     struct image_view_create_info_t;
+    struct render_pass_create_info_t;
+    struct command_pool_create_info_t;
+    struct command_buffer_create_info_t;
+    struct framebuffer_create_info_t;
 
     enum class sample_count_t;
     enum class image_usage_t;
@@ -27,9 +34,22 @@ namespace ir {
     enum class buffer_usage_t;
     enum class memory_property_t;
     enum class component_swizzle_t;
+    enum class attachment_load_op_t;
+    enum class attachment_store_op_t;
+    enum class pipeline_bind_point_t;
+    enum class command_pool_flags_t;
 
     enum class queue_type_t;
     struct queue_family_t;
+
+    struct attachment_layout_t;
+    struct attachment_info_t;
+    struct subpass_info_t;
+    struct subpass_dependency_info_t;
+
+    struct image_memory_barrier_t;
+    struct buffer_memory_barrier_t;
+    struct memory_barrier_t;
 
     class wsi_platform_t;
     class instance_t;
@@ -38,4 +58,10 @@ namespace ir {
     class image_t;
     class image_view_t;
     class swapchain_t;
+    class render_pass_t;
+    class command_pool_t;
+    class command_buffer_t;
+    class framebuffer_t;
+    class fence_t;
+    class semaphore_t;
 }

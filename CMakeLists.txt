@@ -74,10 +74,16 @@ set(IRIS_MAIN_HEADERS
     include/iris/core/types.hpp
     include/iris/core/utilities.hpp
 
+    include/iris/gfx/command_buffer.hpp
+    include/iris/gfx/command_pool.hpp
     include/iris/gfx/device.hpp
+    include/iris/gfx/fence.hpp
+    include/iris/gfx/framebuffer.hpp
     include/iris/gfx/instance.hpp
     include/iris/gfx/image.hpp
     include/iris/gfx/queue.hpp
+    include/iris/gfx/render_pass.hpp
+    include/iris/gfx/semaphore.hpp
     include/iris/gfx/swapchain.hpp
 
     include/iris/wsi/wsi_platform.hpp
@@ -86,10 +92,16 @@ set(IRIS_MAIN_HEADERS
 set(IRIS_MAIN_SOURCES
     src/iris/core/intrusive_atomic_ptr.cpp
 
+    src/iris/gfx/command_buffer.cpp
+    src/iris/gfx/command_pool.cpp
     src/iris/gfx/device.cpp
+    src/iris/gfx/fence.cpp
+    src/iris/gfx/framebuffer.cpp
     src/iris/gfx/image.cpp
     src/iris/gfx/instance.cpp
     src/iris/gfx/queue.cpp
+    src/iris/gfx/render_pass.cpp
+    src/iris/gfx/semaphore.cpp
     src/iris/gfx/swapchain.cpp
 
     src/iris/wsi/wsi_platform.cpp

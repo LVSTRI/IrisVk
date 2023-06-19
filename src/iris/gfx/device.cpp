@@ -22,9 +22,9 @@ namespace ir {
     auto device_t::make(
         const instance_t& instance,
         const device_create_info_t& info
-    ) noexcept -> intrusive_atomic_ptr_t<self> {
+    ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto device = intrusive_atomic_ptr_t(new self());
+        auto device = arc_ptr<self>(new self());
         auto logger = spdlog::stdout_color_mt("device");
 
         auto properties2 = VkPhysicalDeviceProperties2();
@@ -342,5 +342,10 @@ namespace ir {
         auto queue = VkQueue();
         vkGetDeviceQueue(_handle, family.family, family.index, &queue);
         return queue;
+    }
+
+    auto device_t::wait_idle() const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        IR_VULKAN_CHECK(_logger, vkDeviceWaitIdle(_handle));
     }
 }

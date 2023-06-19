@@ -2,6 +2,7 @@
 
 #include <iris/core/forwards.hpp>
 #include <iris/core/intrusive_atomic_ptr.hpp>
+#include <iris/core/enums.hpp>
 #include <iris/core/macros.hpp>
 #include <iris/core/types.hpp>
 
@@ -36,6 +37,23 @@ namespace ir {
         queue_type_t type = {};
     };
 
+    struct queue_semaphore_stage_t {
+        std::reference_wrapper<const semaphore_t> semaphore;
+        pipeline_stage_t stage = pipeline_stage_t::e_none;
+    };
+
+    struct queue_submit_info_t {
+        std::vector<std::reference_wrapper<const command_buffer_t>> command_buffers;
+        std::vector<queue_semaphore_stage_t> wait_semaphores;
+        std::vector<queue_semaphore_stage_t> signal_semaphores;
+    };
+
+    struct queue_present_info_t {
+        std::reference_wrapper<const swapchain_t> swapchain;
+        std::vector<std::reference_wrapper<const semaphore_t>> wait_semaphores;
+        uint32 image = 0;
+    };
+
     class queue_t : public enable_intrusive_refcount_t<queue_t> {
     public:
         using self = queue_t;
@@ -43,7 +61,7 @@ namespace ir {
         queue_t(const device_t& device) noexcept;
         ~queue_t() noexcept;
 
-        IR_NODISCARD static auto make(const device_t& device, const queue_create_info_t& info) noexcept -> intrusive_atomic_ptr_t<self>;
+        IR_NODISCARD static auto make(const device_t& device, const queue_create_info_t& info) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkQueue;
         IR_NODISCARD auto family() const noexcept -> uint32;
@@ -53,6 +71,9 @@ namespace ir {
         IR_NODISCARD auto info() const noexcept -> const queue_create_info_t&;
         IR_NODISCARD auto device() const noexcept -> const device_t&;
         IR_NODISCARD auto logger() const noexcept -> const spdlog::logger&;
+
+        auto submit(const queue_submit_info_t& info, const fence_t* fence = nullptr) const noexcept -> void;
+        auto present(const queue_present_info_t& info) const noexcept -> void;
 
     private:
         VkQueue _handle = {};

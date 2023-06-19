@@ -12,8 +12,10 @@
 
 namespace ir {
     namespace det {
-        template <typename>
-        struct native_enum_counterpart_type_t;
+        template <typename T>
+        struct native_enum_counterpart_type_t {
+            using type = T;
+        };
 
 #define IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(E, T)                   \
     template <> struct native_enum_counterpart_type_t<E> { using type = T; }; \
@@ -45,6 +47,10 @@ namespace ir {
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(buffer_usage_t, VkBufferUsageFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(memory_property_t, VkMemoryPropertyFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(component_swizzle_t, VkComponentSwizzle);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(attachment_load_op_t, VkAttachmentLoadOp);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(attachment_store_op_t, VkAttachmentStoreOp);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(pipeline_bind_point_t, VkPipelineBindPoint);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(command_pool_flags_t, VkCommandPoolCreateFlagBits);
 
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSampleCountFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageUsageFlagBits);
@@ -59,6 +65,14 @@ namespace ir {
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkMemoryPropertyFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkColorSpaceKHR);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkComponentSwizzle);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkAttachmentLoadOp);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkAttachmentStoreOp);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkPipelineBindPoint);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCommandPoolCreateFlagBits);
+
+
+#undef IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION
+#undef IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION
 
         template <typename E>
         using native_enum_counterpart_type = typename native_enum_counterpart_type_t<E>::type;
@@ -67,6 +81,14 @@ namespace ir {
     template <typename E>
     constexpr auto as_enum_counterpart(E e) noexcept -> det::native_enum_counterpart_type<E> {
         return static_cast<det::native_enum_counterpart_type<E>>(e);
+    }
+
+    constexpr auto as_enum_counterpart(resource_access_t e) noexcept -> VkAccessFlags2 {
+        return static_cast<VkAccessFlags2>(e);
+    }
+
+    constexpr auto as_enum_counterpart(pipeline_stage_t e) noexcept -> VkPipelineStageFlags2 {
+        return static_cast<VkPipelineStageFlags2>(e);
     }
 
     template <typename E>
@@ -84,6 +106,16 @@ namespace ir {
         requires (is_native_enum<E>)
     constexpr auto as_string(E e) noexcept -> auto {
         return det::native_enum_string_func_t<E>()(e);
+    }
+
+    template <>
+    constexpr auto as_string(resource_access_t e) noexcept -> auto {
+        return string_VkAccessFlagBits2(as_enum_counterpart(e));
+    }
+
+    template <>
+    constexpr auto as_string(pipeline_stage_t e) noexcept -> auto {
+        return string_VkPipelineStageFlagBits2(as_enum_counterpart(e));
     }
 
     // VkSampleCountFlagBits
@@ -725,17 +757,47 @@ namespace ir {
         e_a = VK_COMPONENT_SWIZZLE_A,
     };
 
+    // VkAttachmentLoadOp
+    enum class attachment_load_op_t : std::underlying_type_t<VkAttachmentLoadOp> {
+        e_load = VK_ATTACHMENT_LOAD_OP_LOAD,
+        e_clear = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        e_dont_care = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        e_none = VK_ATTACHMENT_LOAD_OP_NONE_EXT,
+    };
+
+    // VkAttachmentStoreOp
+    enum class attachment_store_op_t : std::underlying_type_t<VkAttachmentStoreOp> {
+        e_store = VK_ATTACHMENT_STORE_OP_STORE,
+        e_dont_care = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        e_none = VK_ATTACHMENT_STORE_OP_NONE,
+    };
+
+    // VkPipelineBindPoint
+    enum class pipeline_bind_point_t : std::underlying_type_t<VkPipelineBindPoint> {
+        e_graphics = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        e_compute = VK_PIPELINE_BIND_POINT_COMPUTE,
+        e_ray_tracing = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+        e_subpass_shading_huawei = VK_PIPELINE_BIND_POINT_SUBPASS_SHADING_HUAWEI,
+        e_ray_tracing_nv = VK_PIPELINE_BIND_POINT_RAY_TRACING_NV,
+    };
+
+    // VkCommandPoolCreateFlagBits
+    enum class command_pool_flags_t : std::underlying_type_t<VkCommandPoolCreateFlagBits> {
+        e_transient = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        e_reset_command_buffer = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        e_protected = VK_COMMAND_POOL_CREATE_PROTECTED_BIT,
+    };
 
     // constants
-    constexpr auto external_subpass = VK_SUBPASS_EXTERNAL;
-    constexpr auto lod_clamp_none = VK_LOD_CLAMP_NONE;
-    constexpr auto remaining_mip_levels = VK_REMAINING_MIP_LEVELS;
-    constexpr auto remaining_array_layers = VK_REMAINING_ARRAY_LAYERS;
-    constexpr auto whole_size = VK_WHOLE_SIZE;
-    constexpr auto attachment_unused = VK_ATTACHMENT_UNUSED;
-    constexpr auto queue_family_ignored = VK_QUEUE_FAMILY_IGNORED;
-    constexpr auto level_ignored = -1_u32;
-    constexpr auto remaining_levels = VK_REMAINING_MIP_LEVELS;
-    constexpr auto layer_ignored = -1_u32;
-    constexpr auto remaining_layers = VK_REMAINING_ARRAY_LAYERS;
+    constexpr static auto external_subpass = VK_SUBPASS_EXTERNAL;
+    constexpr static auto lod_clamp_none = VK_LOD_CLAMP_NONE;
+    constexpr static auto remaining_mip_levels = VK_REMAINING_MIP_LEVELS;
+    constexpr static auto remaining_array_layers = VK_REMAINING_ARRAY_LAYERS;
+    constexpr static auto whole_size = VK_WHOLE_SIZE;
+    constexpr static auto attachment_unused = VK_ATTACHMENT_UNUSED;
+    constexpr static auto queue_family_ignored = VK_QUEUE_FAMILY_IGNORED;
+    constexpr static auto level_ignored = -1_u32;
+    constexpr static auto remaining_levels = VK_REMAINING_MIP_LEVELS;
+    constexpr static auto layer_ignored = -1_u32;
+    constexpr static auto remaining_layers = VK_REMAINING_ARRAY_LAYERS;
 }

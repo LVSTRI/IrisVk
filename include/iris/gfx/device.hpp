@@ -32,7 +32,7 @@ namespace ir {
 
         IR_NODISCARD static auto make(
             const instance_t& instance,
-            const device_create_info_t& info = {}) noexcept -> intrusive_atomic_ptr_t<self>;
+            const device_create_info_t& info = {}) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkDevice;
         IR_NODISCARD auto gpu() const noexcept -> VkPhysicalDevice;
@@ -48,6 +48,8 @@ namespace ir {
 
         IR_NODISCARD auto fetch_queue(const queue_family_t& family) const noexcept -> VkQueue;
 
+        auto wait_idle() const noexcept -> void;
+
     private:
         VkDevice _handle = {};
         VkPhysicalDevice _gpu = {};
@@ -60,12 +62,12 @@ namespace ir {
         VkPhysicalDeviceVulkan12Features _features_12 = {};
         VkPhysicalDeviceVulkan13Features _features_13 = {};
 
-        intrusive_atomic_ptr_t<queue_t> _graphics;
-        intrusive_atomic_ptr_t<queue_t> _compute;
-        intrusive_atomic_ptr_t<queue_t> _transfer;
+        arc_ptr<queue_t> _graphics;
+        arc_ptr<queue_t> _compute;
+        arc_ptr<queue_t> _transfer;
 
         device_create_info_t _info = {};
-        intrusive_atomic_ptr_t<const instance_t> _instance;
+        arc_ptr<const instance_t> _instance;
         std::shared_ptr<spdlog::logger> _logger;
     };
 }

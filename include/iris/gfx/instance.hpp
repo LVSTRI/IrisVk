@@ -30,7 +30,7 @@ namespace ir {
         instance_t() noexcept;
         ~instance_t() noexcept;
 
-        IR_NODISCARD static auto make(const instance_create_info_t& info = {}) noexcept -> intrusive_atomic_ptr_t<self>;
+        IR_NODISCARD static auto make(const instance_create_info_t& info = {}) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkInstance;
         IR_NODISCARD auto api_version() const noexcept -> uint32;

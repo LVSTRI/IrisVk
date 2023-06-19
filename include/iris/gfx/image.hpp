@@ -28,10 +28,12 @@ namespace ir {
             component_swizzle_t a = component_swizzle_t::e_identity;
         } swizzle = {};
         uint32 level = level_ignored;
-        uint32 level_count = 1;
+        uint32 level_count = remaining_levels;
         uint32 layer = layer_ignored;
-        uint32 layer_count = 1;
+        uint32 layer_count = remaining_layers;
     };
+
+    constexpr static auto default_image_view_info = image_view_create_info_t();
 
     struct image_create_info_t {
         uint32 width = 0;
@@ -57,20 +59,21 @@ namespace ir {
             const device_t& device,
             const image_t& image,
             const image_view_create_info_t& info
-        ) noexcept -> intrusive_atomic_ptr_t<self>;
+        ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkImageView;
-
+        IR_NODISCARD auto aspect() const noexcept -> image_aspect_t;
         IR_NODISCARD auto info() const noexcept -> const image_view_create_info_t&;
         IR_NODISCARD auto image() const noexcept -> const image_t&;
         IR_NODISCARD auto device() const noexcept -> const device_t&;
 
     private:
         VkImageView _handle = {};
+        image_aspect_t _aspect = {};
 
         image_view_create_info_t _info = {};
         std::reference_wrapper<const image_t> _image;
-        intrusive_atomic_ptr_t<const device_t> _device = {};
+        arc_ptr<const device_t> _device = {};
     };
 
     class image_t : public enable_intrusive_refcount_t<image_t> {
@@ -83,13 +86,19 @@ namespace ir {
         IR_NODISCARD static auto make(
             const device_t& device,
             const image_create_info_t& info
-        ) noexcept -> intrusive_atomic_ptr_t<self>;
+        ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD static auto make_from_swapchain(
             const device_t& device,
             const swapchain_t& swapchain,
             const image_create_info_t& info
-        ) noexcept -> std::vector<intrusive_atomic_ptr_t<self>>;
+        ) noexcept -> std::vector<arc_ptr<self>>;
+
+        IR_NODISCARD static auto make_from_attachment(
+            const device_t& device,
+            const attachment_info_t& attachment,
+            const image_create_info_t& info
+        ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkImage;
         IR_NODISCARD auto allocation() const noexcept -> VmaAllocation;
@@ -110,9 +119,9 @@ namespace ir {
     private:
         VkImage _handle = {};
         VmaAllocation _allocation = {};
-        intrusive_atomic_ptr_t<image_view_t> _view;
+        arc_ptr<image_view_t> _view;
 
         image_create_info_t _info = {};
-        intrusive_atomic_ptr_t<const device_t> _device = {};
+        arc_ptr<const device_t> _device = {};
     };
 }
