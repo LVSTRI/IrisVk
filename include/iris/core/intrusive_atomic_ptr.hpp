@@ -173,28 +173,16 @@ namespace ir {
     }
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<T>::operator ==(const self& other) const noexcept -> bool {
-        IR_PROFILE_SCOPED();
-        return _ptr == other._ptr;
-    }
+    auto intrusive_atomic_ptr_t<T>::operator ==(const self& other) const noexcept -> bool = default;
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<T>::operator !=(const self& other) const noexcept -> bool {
-        IR_PROFILE_SCOPED();
-        return _ptr != other._ptr;
-    }
+    auto intrusive_atomic_ptr_t<T>::operator !=(const self& other) const noexcept -> bool = default;
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<T>::operator ==(std::nullptr_t) const noexcept -> bool {
-        IR_PROFILE_SCOPED();
-        return _ptr == nullptr;
-    }
+    auto intrusive_atomic_ptr_t<T>::operator ==(std::nullptr_t) const noexcept -> bool = default;
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<T>::operator !=(std::nullptr_t) const noexcept -> bool {
-        IR_PROFILE_SCOPED();
-        return _ptr != nullptr;
-    }
+    auto intrusive_atomic_ptr_t<T>::operator !=(std::nullptr_t) const noexcept -> bool = default;
 
     template <typename T>
     auto intrusive_atomic_ptr_t<T>::operator !() const noexcept -> bool {
@@ -398,28 +386,16 @@ namespace ir {
     }
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<const T>::operator ==(const self& other) const noexcept -> bool {
-        IR_PROFILE_SCOPED();
-        return _ptr == other._ptr;
-    }
+    auto intrusive_atomic_ptr_t<const T>::operator ==(const self& other) const noexcept -> bool = default;
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<const T>::operator !=(const self& other) const noexcept -> bool {
-        IR_PROFILE_SCOPED();
-        return _ptr != other._ptr;
-    }
+    auto intrusive_atomic_ptr_t<const T>::operator !=(const self& other) const noexcept -> bool = default;
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<const T>::operator ==(std::nullptr_t) const noexcept -> bool {
-        IR_PROFILE_SCOPED();
-        return _ptr == nullptr;
-    }
+    auto intrusive_atomic_ptr_t<const T>::operator ==(std::nullptr_t) const noexcept -> bool = default;
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<const T>::operator !=(std::nullptr_t) const noexcept -> bool {
-        IR_PROFILE_SCOPED();
-        return _ptr != nullptr;
-    }
+    auto intrusive_atomic_ptr_t<const T>::operator !=(std::nullptr_t) const noexcept -> bool = default;
 
     template <typename T>
     auto intrusive_atomic_ptr_t<const T>::operator !() const noexcept -> bool {

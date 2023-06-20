@@ -4,6 +4,7 @@
 #include <iris/gfx/command_pool.hpp>
 #include <iris/gfx/command_buffer.hpp>
 #include <iris/gfx/framebuffer.hpp>
+#include <iris/gfx/pipeline.hpp>
 #include <iris/gfx/fence.hpp>
 #include <iris/gfx/clear_value.hpp>
 #include <iris/gfx/semaphore.hpp>
@@ -73,7 +74,7 @@ namespace app {
                     .source_stage =
                         ir::pipeline_stage_t::e_color_attachment_output |
                         ir::pipeline_stage_t::e_early_fragment_tests,
-                    .dest_stage = ir::pipeline_stage_t::e_copy,
+                    .dest_stage = ir::pipeline_stage_t::e_transfer,
                     .source_access =
                         ir::resource_access_t::e_color_attachment_write |
                         ir::resource_access_t::e_depth_stencil_attachment_write,
@@ -101,9 +102,23 @@ namespace app {
             ir::make_clear_depth(0.0f, 0)
         };
 
+        _main_pass.main_pipeline = ir::pipeline_t::make(*_main_pass.framebuffer, {
+            .vertex = "../shaders/0.1/main.vert",
+            .fragment = "../shaders/0.1/main.frag",
+            .blend = {
+                ir::attachment_blend_t::e_disabled
+            },
+            .dynamic_states = {},
+            .depth_flags =
+                ir::depth_state_flag_t::e_enable_test |
+                ir::depth_state_flag_t::e_enable_write,
+            .depth_compare_op = ir::compare_op_t::e_greater,
+            .cull_mode = ir::cull_mode_t::e_none,
+        });
+
         _command_pools = ir::command_pool_t::make(*_device, frames_in_flight, {
             .queue = ir::queue_type_t::e_graphics,
-            .flags = {}
+            .flags = ir::command_pool_flag_t::e_transient
         });
         for (auto& pool : _command_pools) {
             _command_buffers.emplace_back(ir::command_buffer_t::make(*pool, {}));
@@ -151,11 +166,13 @@ namespace app {
 
         command_buffer.begin();
         command_buffer.begin_render_pass(*_main_pass.framebuffer, _main_pass.clear_values);
+        command_buffer.bind_pipeline(*_main_pass.main_pipeline);
+        command_buffer.draw(3, 1, 0, 0);
         command_buffer.end_render_pass();
         command_buffer.image_barrier({
             .image = std::cref(_swapchain.as_const_ref().image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
-            .dest_stage = ir::pipeline_stage_t::e_copy,
+            .dest_stage = ir::pipeline_stage_t::e_transfer,
             .source_access = ir::resource_access_t::e_none,
             .dest_access = ir::resource_access_t::e_transfer_write,
             .old_layout = ir::image_layout_t::e_undefined,
@@ -167,7 +184,7 @@ namespace app {
         });
         command_buffer.image_barrier({
             .image = std::cref(_swapchain.as_const_ref().image(image_index)),
-            .source_stage = ir::pipeline_stage_t::e_copy,
+            .source_stage = ir::pipeline_stage_t::e_transfer,
             .dest_stage = ir::pipeline_stage_t::e_bottom_of_pipe,
             .source_access = ir::resource_access_t::e_transfer_write,
             .dest_access = ir::resource_access_t::e_none,
@@ -179,10 +196,10 @@ namespace app {
         _device.as_const_ref().graphics_queue().submit({
             .command_buffers = { std::cref(command_buffer) },
             .wait_semaphores = {
-                { std::cref(image_semaphore), ir::pipeline_stage_t::e_copy }
+                { std::cref(image_semaphore), ir::pipeline_stage_t::e_transfer }
             },
             .signal_semaphores = {
-                { std::cref(render_semaphore), ir::pipeline_stage_t::e_copy }
+                { std::cref(render_semaphore), ir::pipeline_stage_t::e_transfer }
             },
         }, &fence);
 

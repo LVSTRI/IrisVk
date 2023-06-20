@@ -70,7 +70,7 @@ namespace ir {
         return _device.get();
     }
 
-    auto queue_t::logger() const noexcept -> const spdlog::logger& {
+    auto queue_t::logger() const noexcept -> spdlog::logger& {
         IR_PROFILE_SCOPED();
         return *_logger;
     }
@@ -121,14 +121,12 @@ namespace ir {
         submit_info.signalSemaphoreInfoCount = signal_semaphore_info.size();
         submit_info.pSignalSemaphoreInfos = signal_semaphore_info.data();
         IR_VULKAN_CHECK(_device.get().logger(), vkQueueSubmit2(_handle, 1, &submit_info, fence ? fence->handle() : nullptr));
-
     }
 
     auto queue_t::present(const queue_present_info_t& info) const noexcept -> void {
         IR_PROFILE_SCOPED();
         auto wait_semaphore_info = std::vector<VkSemaphore>();
         wait_semaphore_info.reserve(info.wait_semaphores.size());
-
         for (const auto& semaphore : info.wait_semaphores) {
             wait_semaphore_info.emplace_back(semaphore.get().handle());
         }

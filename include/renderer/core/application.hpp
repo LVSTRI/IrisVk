@@ -14,7 +14,9 @@ namespace app {
         ir::arc_ptr<ir::image_t> depth;
         ir::arc_ptr<ir::framebuffer_t> framebuffer;
         std::vector<ir::clear_value_t> clear_values;
-    };
+
+        ir::arc_ptr<ir::pipeline_t> main_pipeline;
+   };
 
     class application_t {
     public:

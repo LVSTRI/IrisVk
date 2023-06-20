@@ -173,7 +173,7 @@ namespace ir {
         return _info;
     }
 
-    auto instance_t::logger() const noexcept -> const spdlog::logger& {
+    auto instance_t::logger() const noexcept -> spdlog::logger& {
         IR_PROFILE_SCOPED();
         return *_logger;
     }

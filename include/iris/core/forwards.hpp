@@ -19,6 +19,7 @@ namespace ir {
     struct command_pool_create_info_t;
     struct command_buffer_create_info_t;
     struct framebuffer_create_info_t;
+    struct graphics_pipeline_create_info_t;
 
     enum class sample_count_t;
     enum class image_usage_t;
@@ -37,7 +38,8 @@ namespace ir {
     enum class attachment_load_op_t;
     enum class attachment_store_op_t;
     enum class pipeline_bind_point_t;
-    enum class command_pool_flags_t;
+    enum class command_pool_flag_t;
+    enum class compare_op_t;
 
     enum class queue_type_t;
     struct queue_family_t;
@@ -55,6 +57,10 @@ namespace ir {
     union clear_color_t;
     struct clear_depth_t;
 
+    enum class pipeline_type_t;
+    enum class attachment_blend_t;
+    enum class depth_state_flag_t;
+
     class wsi_platform_t;
     class instance_t;
     class device_t;
@@ -69,4 +75,5 @@ namespace ir {
     class fence_t;
     class semaphore_t;
     class clear_value_t;
+    class pipeline_t;
 }

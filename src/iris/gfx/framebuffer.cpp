@@ -41,6 +41,9 @@ namespace ir {
             vkCreateFramebuffer(render_pass.device().handle(), &framebuffer_info, nullptr, &framebuffer->_handle));
         IR_LOG_INFO(render_pass.device().logger(), "framebuffer {} created", fmt::ptr(framebuffer->_handle));
 
+        framebuffer->_width = width;
+        framebuffer->_height = height;
+        framebuffer->_layers = layers;
         framebuffer->_info = info;
         framebuffer->_render_pass = render_pass.as_intrusive_ptr();
         return framebuffer;
@@ -51,14 +54,19 @@ namespace ir {
         return _handle;
     }
 
-    auto framebuffer_t::attachments() const noexcept -> std::span<const arc_ptr<const image_t>> {
+    auto framebuffer_t::width() const noexcept -> uint32 {
         IR_PROFILE_SCOPED();
-        return _info.attachments;
+        return _width;
     }
 
-    auto framebuffer_t::attachment(uint32 index) const noexcept -> const image_t& {
+    auto framebuffer_t::height() const noexcept -> uint32 {
         IR_PROFILE_SCOPED();
-        return *_info.attachments[index];
+        return _height;
+    }
+
+    auto framebuffer_t::layers() const noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
+        return _layers;
     }
 
     auto framebuffer_t::info() const noexcept -> const framebuffer_create_info_t& {
@@ -71,18 +79,13 @@ namespace ir {
         return *_render_pass;
     }
 
-    auto framebuffer_t::width() const noexcept -> uint32 {
+    auto framebuffer_t::attachments() const noexcept -> std::span<const arc_ptr<const image_t>> {
         IR_PROFILE_SCOPED();
-        return attachment(0).width();
+        return _info.attachments;
     }
 
-    auto framebuffer_t::height() const noexcept -> uint32 {
+    auto framebuffer_t::attachment(uint32 index) const noexcept -> const image_t& {
         IR_PROFILE_SCOPED();
-        return attachment(0).height();
-    }
-
-    auto framebuffer_t::layers() const noexcept -> uint32 {
-        IR_PROFILE_SCOPED();
-        return attachment(0).layers();
+        return *_info.attachments[index];
     }
 }

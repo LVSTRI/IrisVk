@@ -36,7 +36,7 @@ namespace ir {
         IR_NODISCARD auto api_version() const noexcept -> uint32;
 
         IR_NODISCARD auto info() const noexcept -> const instance_create_info_t&;
-        IR_NODISCARD auto logger() const noexcept -> const spdlog::logger&;
+        IR_NODISCARD auto logger() const noexcept -> spdlog::logger&;
 
         IR_NODISCARD auto enumerate_physical_devices() const noexcept -> std::vector<VkPhysicalDevice>;
 

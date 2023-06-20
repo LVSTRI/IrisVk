@@ -23,9 +23,7 @@ namespace ir {
         int32 x = 0;
         int32 y = 0;
 
-        constexpr auto operator ==(const offset_2d_t& other) const noexcept -> bool {
-            return x == other.x && y == other.y;
-        }
+        constexpr auto operator ==(const offset_2d_t& other) const noexcept -> bool = default;
     };
     constexpr static auto ignored_offset_2d = offset_2d_t { -1_i32, -1_i32 };
 
@@ -34,9 +32,7 @@ namespace ir {
         int32 y = 0;
         int32 z = 0;
 
-        constexpr auto operator ==(const offset_3d_t& other) const noexcept -> bool {
-            return x == other.x && y == other.y && z == other.z;
-        }
+        constexpr auto operator ==(const offset_3d_t& other) const noexcept -> bool = default;
     };
     constexpr static auto ignored_offset_3d = offset_3d_t { -1_i32, -1_i32, -1_i32 };
 
@@ -44,9 +40,7 @@ namespace ir {
         uint32 width = 0;
         uint32 height = 0;
 
-        constexpr auto operator ==(const extent_2d_t& other) const noexcept -> bool {
-            return width == other.width && height == other.height;
-        }
+        constexpr auto operator ==(const extent_2d_t& other) const noexcept -> bool = default;
     };
     constexpr static auto ignored_extent_2d = extent_2d_t { -1_u32, -1_u32 };
 
@@ -55,9 +49,7 @@ namespace ir {
         uint32 height = 0;
         uint32 depth = 0;
 
-        constexpr auto operator ==(const extent_3d_t& other) const noexcept -> bool {
-            return width == other.width && height == other.height && depth == other.depth;
-        }
+        constexpr auto operator ==(const extent_3d_t& other) const noexcept -> bool = default;
     };
     constexpr static auto ignored_extent_3d = extent_3d_t { -1_u32, -1_u32, -1_u32 };
 

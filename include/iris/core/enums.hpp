@@ -50,7 +50,8 @@ namespace ir {
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(attachment_load_op_t, VkAttachmentLoadOp);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(attachment_store_op_t, VkAttachmentStoreOp);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(pipeline_bind_point_t, VkPipelineBindPoint);
-        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(command_pool_flags_t, VkCommandPoolCreateFlagBits);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(command_pool_flag_t, VkCommandPoolCreateFlagBits);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(compare_op_t, VkCompareOp);
 
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSampleCountFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageUsageFlagBits);
@@ -69,6 +70,7 @@ namespace ir {
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkAttachmentStoreOp);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkPipelineBindPoint);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCommandPoolCreateFlagBits);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCompareOp);
 
 
 #undef IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION
@@ -782,10 +784,22 @@ namespace ir {
     };
 
     // VkCommandPoolCreateFlagBits
-    enum class command_pool_flags_t : std::underlying_type_t<VkCommandPoolCreateFlagBits> {
+    enum class command_pool_flag_t : std::underlying_type_t<VkCommandPoolCreateFlagBits> {
         e_transient = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
         e_reset_command_buffer = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         e_protected = VK_COMMAND_POOL_CREATE_PROTECTED_BIT,
+    };
+
+    // VkCompareOp
+    enum class compare_op_t : std::underlying_type_t<VkCompareOp> {
+        e_never = VK_COMPARE_OP_NEVER,
+        e_less = VK_COMPARE_OP_LESS,
+        e_equal = VK_COMPARE_OP_EQUAL,
+        e_less_or_equal = VK_COMPARE_OP_LESS_OR_EQUAL,
+        e_greater = VK_COMPARE_OP_GREATER,
+        e_not_equal = VK_COMPARE_OP_NOT_EQUAL,
+        e_greater_or_equal = VK_COMPARE_OP_GREATER_OR_EQUAL,
+        e_always = VK_COMPARE_OP_ALWAYS,
     };
 
     // constants

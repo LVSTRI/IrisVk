@@ -64,6 +64,37 @@ if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(TracyClient PRIVATE -Wno-everything)
 endif()
 
+# SPIRV-Headers setup
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(deps/SPIRV-Headers)
+
+# SPIRV-Tools setup
+set(SPIRV_WARN_EVERYTHING OFF CACHE BOOL "" FORCE)
+set(SPIRV_SKIP_TESTS ON CACHE BOOL "" FORCE)
+set(SKIP_SPIRV_TOOLS_INSTALL ON CACHE BOOL "" FORCE)
+add_subdirectory(deps/SPIRV-Tools)
+
+# glslang setup
+set(SKIP_GLSLANG_INSTALL ON CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_JS OFF CACHE BOOL "" FORCE)
+add_subdirectory(deps/glslang)
+
+# SPIRV-Cross setup
+set(SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS ON CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+set(SPIRV_CROSS_STATIC ON CACHE BOOL "" FORCE)
+add_subdirectory(deps/SPIRV-Cross)
+
+# shaderc setup
+set(SHADERC_SKIP_TESTS ON CACHE BOOL "" FORCE)
+set(SHADERC_SKIP_EXAMPLES ON CACHE BOOL "" FORCE)
+add_subdirectory(deps/shaderc)
+# doesn't compile under clang on Windows unless I do this
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(shaderc PRIVATE -Wno-everything -std=c++20)
+    target_compile_options(shaderc_util PRIVATE -Wno-everything -std=c++20)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 
 set(IRIS_MAIN_HEADERS
@@ -81,6 +112,7 @@ set(IRIS_MAIN_HEADERS
     include/iris/gfx/fence.hpp
     include/iris/gfx/framebuffer.hpp
     include/iris/gfx/instance.hpp
+    include/iris/gfx/pipeline.hpp
     include/iris/gfx/image.hpp
     include/iris/gfx/queue.hpp
     include/iris/gfx/render_pass.hpp
@@ -100,12 +132,14 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/framebuffer.cpp
     src/iris/gfx/image.cpp
     src/iris/gfx/instance.cpp
+    src/iris/gfx/pipeline.cpp
     src/iris/gfx/queue.cpp
     src/iris/gfx/render_pass.cpp
     src/iris/gfx/semaphore.cpp
     src/iris/gfx/swapchain.cpp
 
-    src/iris/wsi/wsi_platform.cpp)
+    src/iris/wsi/wsi_platform.cpp
+)
 
 add_library(IrisVk
     ${IRIS_MAIN_HEADERS}
@@ -140,7 +174,9 @@ target_link_libraries(IrisVk PUBLIC
     glfw
     cgltf
     spdlog
+    shaderc
     TracyClient
+    spirv-cross-glsl
 )
 
 target_include_directories(IrisVk PUBLIC include ${Vulkan_INCLUDE_DIRS})

@@ -19,11 +19,7 @@ namespace ir {
         uint32 family = 0;
         uint32 index = 0;
 
-        constexpr auto operator ==(const queue_family_t& other) const noexcept -> bool {
-            return
-                family == other.family &&
-                index == other.index;
-        }
+        constexpr auto operator ==(const queue_family_t& other) const noexcept -> bool = default;
     };
 
     enum class queue_type_t {
@@ -70,7 +66,7 @@ namespace ir {
 
         IR_NODISCARD auto info() const noexcept -> const queue_create_info_t&;
         IR_NODISCARD auto device() const noexcept -> const device_t&;
-        IR_NODISCARD auto logger() const noexcept -> const spdlog::logger&;
+        IR_NODISCARD auto logger() const noexcept -> spdlog::logger&;
 
         auto submit(const queue_submit_info_t& info, const fence_t* fence = nullptr) const noexcept -> void;
         auto present(const queue_present_info_t& info) const noexcept -> void;

@@ -19,7 +19,7 @@
 namespace ir {
     struct command_pool_create_info_t {
         queue_type_t queue = {};
-        command_pool_flags_t flags = {};
+        command_pool_flag_t flags = {};
     };
 
     class command_pool_t : public enable_intrusive_refcount_t<command_pool_t> {

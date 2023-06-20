@@ -15,8 +15,8 @@ namespace ir {
     swapchain_t::~swapchain_t() noexcept {
         IR_PROFILE_SCOPED();
         _images.clear();
-        vkDestroySurfaceKHR(_device.as_const_ref().instance().handle(), _surface, nullptr);
         vkDestroySwapchainKHR(_device.as_const_ref().handle(), _handle, nullptr);
+        vkDestroySurfaceKHR(_device.as_const_ref().instance().handle(), _surface, nullptr);
         IR_LOG_INFO(_device.as_const_ref().logger(), "swapchain destroyed");
     }
 
@@ -93,7 +93,7 @@ namespace ir {
             if (capabilities.currentExtent.width == 0) {
                 IR_VULKAN_CHECK(
                     device.logger(),
-                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.gpu(), swapchain->_surface, &capabilities));
+                    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device.gpu(), surface, &capabilities));
             }
             swapchain->_width = capabilities.currentExtent.width;
             swapchain->_height = capabilities.currentExtent.height;
@@ -153,6 +153,7 @@ namespace ir {
             .format = format,
             .view = default_image_view_info
         });
+        swapchain->_surface = surface;
         swapchain->_format = format;
         swapchain->_images = std::move(images);
         swapchain->_info = info;

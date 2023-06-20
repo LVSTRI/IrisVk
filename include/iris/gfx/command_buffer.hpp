@@ -75,6 +75,8 @@ namespace ir {
 
         auto begin() const noexcept -> void;
         auto begin_render_pass(const framebuffer_t& framebuffer, const std::vector<clear_value_t>& clears) noexcept -> void;
+        auto bind_pipeline(const pipeline_t& pipeline) noexcept -> void;
+        auto draw(uint32 vertices, uint32 instances, uint32 first_vertex, uint32 first_instance) const noexcept -> void;
         auto end_render_pass() noexcept -> void;
         auto copy_image(const image_copy_t& copy) const noexcept -> void;
         auto memory_barrier(const memory_barrier_t& barrier) const noexcept -> void;
@@ -87,6 +89,7 @@ namespace ir {
 
         struct {
             const framebuffer_t* framebuffer = nullptr;
+            const pipeline_t* pipeline = nullptr;
         } _state;
 
         command_buffer_create_info_t _info = {};

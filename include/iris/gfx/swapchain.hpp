@@ -21,7 +21,7 @@ namespace ir {
             image_usage_t::e_color_attachment |
             image_usage_t::e_transfer_dst;
         bool vsync = true;
-        bool srgb = false;
+        bool srgb = true;
     };
 
     class swapchain_t : public enable_intrusive_refcount_t<swapchain_t> {

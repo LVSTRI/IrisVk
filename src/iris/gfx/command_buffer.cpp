@@ -1,6 +1,7 @@
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/command_pool.hpp>
 #include <iris/gfx/command_buffer.hpp>
+#include <iris/gfx/pipeline.hpp>
 #include <iris/gfx/clear_value.hpp>
 #include <iris/gfx/render_pass.hpp>
 #include <iris/gfx/framebuffer.hpp>
@@ -122,6 +123,24 @@ namespace ir {
         vkCmdBeginRenderPass(_handle, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
     }
 
+    auto command_buffer_t::bind_pipeline(const pipeline_t& pipeline) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        _state.pipeline = &pipeline;
+        const auto bind_point = [&]() -> VkPipelineBindPoint {
+            switch (pipeline.type()) {
+                case pipeline_type_t::e_graphics: return VK_PIPELINE_BIND_POINT_GRAPHICS;
+                case pipeline_type_t::e_compute: return VK_PIPELINE_BIND_POINT_COMPUTE;
+                case pipeline_type_t::e_ray_tracing: return VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
+            }
+        }();
+        vkCmdBindPipeline(_handle, bind_point, pipeline.handle());
+    }
+
+    auto command_buffer_t::draw(uint32 vertices, uint32 instances, uint32 first_vertex, uint32 first_instance) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdDraw(_handle, vertices, instances, first_vertex, first_instance);
+    }
+
     auto command_buffer_t::end_render_pass() noexcept -> void {
         IR_PROFILE_SCOPED();
         _state.framebuffer = nullptr;
@@ -144,6 +163,7 @@ namespace ir {
             copy_region.srcSubresource.baseArrayLayer = 0;
             copy_region.srcSubresource.layerCount = source.layers();
         }
+
         copy_region.dstSubresource.aspectMask = as_enum_counterpart(dest.view().aspect());
         if (copy.dest_subresource.level != level_ignored) {
             copy_region.dstSubresource.mipLevel = copy.dest_subresource.level;
