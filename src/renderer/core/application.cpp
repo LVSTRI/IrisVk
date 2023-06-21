@@ -29,7 +29,9 @@ namespace app {
                 .swapchain = true
             }
         });
-        _swapchain = ir::swapchain_t::make(*_device, _platform, {});
+        _swapchain = ir::swapchain_t::make(*_device, _platform, {
+            .vsync = false
+        });
         _main_pass.description = ir::render_pass_t::make(*_device, {
             .attachments = {
                 {
@@ -102,7 +104,7 @@ namespace app {
             ir::make_clear_depth(0.0f, 0)
         };
 
-        _main_pass.main_pipeline = ir::pipeline_t::make(*_main_pass.framebuffer, {
+        _main_pass.main_pipeline = ir::pipeline_t::make(*_device, *_main_pass.framebuffer, {
             .vertex = "../shaders/0.1/main.vert",
             .fragment = "../shaders/0.1/main.frag",
             .blend = {
@@ -149,7 +151,7 @@ namespace app {
         const auto current_time = ch::steady_clock::now();
         _delta_time = ch::duration<float32>(current_time - _last_time).count();
         _last_time = current_time;
-        _frame_count++;
+        _device.as_ref().frame_counter().tick();
     }
 
     auto application_t::_render() noexcept -> void {

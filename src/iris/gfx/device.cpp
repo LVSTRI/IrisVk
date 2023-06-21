@@ -1,3 +1,4 @@
+#include <iris/gfx/descriptor_layout.hpp>
 #include <iris/gfx/instance.hpp>
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/queue.hpp>
@@ -286,6 +287,8 @@ namespace ir {
             IR_LOG_INFO(logger, "main allocator initialized");
         }
 
+        device->_frame_counter = ir::master_frame_counter_t::make();
+
         device->_info = info;
         device->_instance = instance.as_intrusive_ptr();
         device->_logger = std::move(logger);
@@ -307,6 +310,21 @@ namespace ir {
         return _allocator;
     }
 
+    auto device_t::properties() const noexcept -> const VkPhysicalDeviceProperties& {
+        IR_PROFILE_SCOPED();
+        return _properties.properties;
+    }
+
+    auto device_t::memory_properties() const noexcept -> const VkPhysicalDeviceMemoryProperties& {
+        IR_PROFILE_SCOPED();
+        return _memory_properties.memoryProperties;
+    }
+
+    auto device_t::features() const noexcept -> const VkPhysicalDeviceFeatures& {
+        IR_PROFILE_SCOPED();
+        return _features.features;
+    }
+
     auto device_t::graphics_queue() const noexcept -> const queue_t& {
         IR_PROFILE_SCOPED();
         return *_graphics;
@@ -320,6 +338,16 @@ namespace ir {
     auto device_t::transfer_queue() const noexcept -> const queue_t& {
         IR_PROFILE_SCOPED();
         return *_transfer;
+    }
+
+    auto device_t::frame_counter() noexcept -> master_frame_counter_t& {
+        IR_PROFILE_SCOPED();
+        return *_frame_counter;
+    }
+
+    auto device_t::frame_counter() const noexcept -> const master_frame_counter_t& {
+        IR_PROFILE_SCOPED();
+        return *_frame_counter;
     }
 
     auto device_t::info() const noexcept -> const device_create_info_t& {
@@ -347,5 +375,13 @@ namespace ir {
     auto device_t::wait_idle() const noexcept -> void {
         IR_PROFILE_SCOPED();
         IR_VULKAN_CHECK(_logger, vkDeviceWaitIdle(_handle));
+    }
+
+    auto device_t::make_descriptor_layout(const std::vector<descriptor_binding_t>& bindings) noexcept -> arc_ptr<descriptor_layout_t> {
+        IR_PROFILE_SCOPED();
+        if (_descriptor_layouts.contains(bindings)) {
+            return _descriptor_layouts.at(bindings);
+        }
+        return _descriptor_layouts[bindings] = descriptor_layout_t::make(*this, bindings);
     }
 }

@@ -95,11 +95,15 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(shaderc_util PRIVATE -Wno-everything -std=c++20)
 endif()
 
+# unordered_dense setup
+add_subdirectory(deps/unordered_dense)
+
 set(CMAKE_CXX_STANDARD 23)
 
 set(IRIS_MAIN_HEADERS
     include/iris/core/enums.hpp
     include/iris/core/forwards.hpp
+    include/iris/core/hash.hpp
     include/iris/core/intrusive_atomic_ptr.hpp
     include/iris/core/macros.hpp
     include/iris/core/types.hpp
@@ -108,8 +112,10 @@ set(IRIS_MAIN_HEADERS
     include/iris/gfx/clear_value.hpp
     include/iris/gfx/command_buffer.hpp
     include/iris/gfx/command_pool.hpp
+    include/iris/gfx/descriptor_layout.hpp
     include/iris/gfx/device.hpp
     include/iris/gfx/fence.hpp
+    include/iris/gfx/frame_counter.hpp
     include/iris/gfx/framebuffer.hpp
     include/iris/gfx/instance.hpp
     include/iris/gfx/pipeline.hpp
@@ -127,8 +133,10 @@ set(IRIS_MAIN_SOURCES
 
     src/iris/gfx/command_buffer.cpp
     src/iris/gfx/command_pool.cpp
+    src/iris/gfx/descriptor_layout.cpp
     src/iris/gfx/device.cpp
     src/iris/gfx/fence.cpp
+    src/iris/gfx/frame_counter.cpp
     src/iris/gfx/framebuffer.cpp
     src/iris/gfx/image.cpp
     src/iris/gfx/instance.cpp
@@ -176,13 +184,32 @@ target_link_libraries(IrisVk PUBLIC
     spdlog
     shaderc
     TracyClient
+    unordered_dense
     spirv-cross-glsl
 )
 
 target_include_directories(IrisVk PUBLIC include ${Vulkan_INCLUDE_DIRS})
 
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(IrisVk PRIVATE -march=native -mavx2 -Wall -Wextra)
+    target_compile_options(IrisVk PRIVATE
+        -march=native
+        -mmmx
+        -msse
+        -msse2
+        -msse3
+        -mssse3
+        -msse4
+        -msse4a
+        -msse4.1
+        -msse4.2
+        -mavx
+        -mavx2
+        -msha
+        -maes
+        -mprefetchi
+        -mraoint
+        -Wall
+        -Wextra)
 endif()
 
 set(IRIS_RENDERER_HEADERS

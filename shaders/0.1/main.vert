@@ -15,7 +15,11 @@ const vec3[] colors = vec3[](
     vec3(0.0, 0.0, 1.0)
 );
 
+layout (push_constant) uniform vertex_pc {
+    uint x;
+};
+
 void main() {
     gl_Position = vec4(positions[gl_VertexIndex], 1.0);
-    o_color = colors[gl_VertexIndex];
+    o_color = colors[x];
 }

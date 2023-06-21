@@ -53,10 +53,14 @@ namespace ir {
         pipeline_t(const graphics_pipeline_create_info_t& info) noexcept;
         ~pipeline_t() noexcept;
 
-        IR_NODISCARD static auto make(const framebuffer_t& framebuffer, const graphics_pipeline_create_info_t& info) noexcept -> arc_ptr<self>;
+        IR_NODISCARD static auto make(device_t& device, const framebuffer_t& framebuffer, const graphics_pipeline_create_info_t& info) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkPipeline;
         IR_NODISCARD auto layout() const noexcept -> VkPipelineLayout;
+        IR_NODISCARD auto descriptor_layouts() const noexcept -> std::span<const arc_ptr<descriptor_layout_t>>;
+        IR_NODISCARD auto descriptor_layout(uint32 index) const noexcept -> const descriptor_layout_t&;
+        IR_NODISCARD auto descriptor_binding(const descriptor_reference& reference) const noexcept -> const descriptor_binding_t&;
+
         IR_NODISCARD auto type() const noexcept -> pipeline_type_t;
         IR_NODISCARD auto info() const noexcept -> const graphics_pipeline_create_info_t&;
         IR_NODISCARD auto framebuffer() const noexcept -> const framebuffer_t&;
@@ -64,9 +68,11 @@ namespace ir {
     private:
         VkPipeline _handle;
         VkPipelineLayout _layout;
+        std::vector<arc_ptr<descriptor_layout_t>> _descriptor_layout;
         pipeline_type_t _type = {};
 
         graphics_pipeline_create_info_t _info;
+        arc_ptr<device_t> _device;
         arc_ptr<const framebuffer_t> _framebuffer;
     };
 }

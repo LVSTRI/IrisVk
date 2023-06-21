@@ -115,7 +115,7 @@ namespace ir {
 
         auto present_mode = info.vsync ?
             VK_PRESENT_MODE_FIFO_KHR :
-            VK_PRESENT_MODE_MAILBOX_KHR;
+            VK_PRESENT_MODE_IMMEDIATE_KHR;
         IR_ASSERT(std::ranges::any_of(present_modes, [present_mode](const auto& each) {
             return each == present_mode;
         }), "requested present mode not supported");

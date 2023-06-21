@@ -1,7 +1,11 @@
 #pragma once
 
+#include <ankerl/unordered_dense.h>
+
 #include <filesystem>
+#include <memory>
 #include <cstdint>
+#include <utility>
 
 namespace ir {
     namespace fs = std::filesystem;
@@ -20,6 +24,22 @@ namespace ir {
 
         using platform_window_handle = void*;
         using gfx_api_object_handle = void*;
+
+        using descriptor_reference = uint64;
+    }
+
+    namespace akl {
+        using namespace ankerl::unordered_dense;
+        namespace wyhash = detail::wyhash;
+
+        template <
+            typename K,
+            typename T,
+            typename H = hash<K>,
+            typename E = std::equal_to<K>,
+            typename A = std::allocator<std::pair<K, T>>,
+            typename B = bucket_type::standard>
+        using fast_hash_map = map<K, T, H, E, A, B>;
     }
 
     inline namespace literals {

@@ -34,3 +34,6 @@
 [submodule "deps/SPIRV-Cross"]
 	path = deps/SPIRV-Cross
 	url = https://github.com/KhronosGroup/SPIRV-Cross
+[submodule "deps/unordered_dense"]
+	path = deps/unordered_dense
+	url = https://github.com/martinus/unordered_dense

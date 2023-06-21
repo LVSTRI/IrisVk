@@ -46,7 +46,6 @@ namespace app {
 
         ch::steady_clock::time_point _last_time = {};
         float32 _delta_time = 0.0_f32;
-        uint64 _frame_count = 0;
         uint64 _frame_index = 0;
     };
 }

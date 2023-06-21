@@ -1,5 +1,6 @@
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/image.hpp>
+#include <iris/gfx/descriptor_layout.hpp>
 #include <iris/gfx/render_pass.hpp>
 #include <iris/gfx/framebuffer.hpp>
 #include <iris/gfx/pipeline.hpp>
@@ -13,7 +14,6 @@
 
 #include <volk.h>
 
-#include <unordered_map>
 #include <algorithm>
 #include <utility>
 #include <numeric>
@@ -23,15 +23,51 @@ namespace ir {
     namespace spvc = spirv_cross;
     namespace shc = shaderc;
 
+    using descriptor_bindings = akl::fast_hash_map<uint32, akl::fast_hash_map<uint32, descriptor_binding_t>>;
+
     IR_NODISCARD static auto whole_file(const fs::path& path, bool is_binary = false) noexcept -> std::vector<uint8> {
         IR_PROFILE_SCOPED();
-        // read the whole file into a vec<uint8>
         auto file = std::ifstream(path, std::ios::ate | (is_binary ? std::ios::binary : 0));
         auto size = file.tellg();
         auto data = std::vector<uint8>(size);
         file.seekg(0);
         file.read(reinterpret_cast<char*>(data.data()), size);
         return data;
+    }
+
+    template <typename R>
+    static auto process_resource(
+        const spvc::Compiler& compiler,
+        const R& resources,
+        descriptor_type_t desc_type,
+        shader_stage_t stage,
+        descriptor_bindings& bindings
+    ) noexcept -> void {
+        for (const auto& each : resources) {
+            const auto set = compiler.get_decoration(each.id, spv::DecorationDescriptorSet);
+            const auto binding = compiler.get_decoration(each.id, spv::DecorationBinding);
+            const auto& type = compiler.get_type(each.type_id);
+            // TODO: multidimensional arrays?
+            auto count = type.array.empty() ? 1 : type.array[0];
+            const auto is_array = !type.array.empty();
+            const auto is_dynamic = is_array && type.array[0] == 0;
+            if (is_dynamic) {
+                count = 16384_u32;
+            }
+            auto& layout = bindings[set];
+            if (layout.contains(binding)) {
+                layout[binding].stage |= stage;
+            } else {
+                layout[binding] = {
+                    .set = set,
+                    .binding = binding,
+                    .count = count,
+                    .type = desc_type,
+                    .stage = stage,
+                    .dynamic = is_dynamic,
+                };
+            }
+        }
     }
 
     class shader_includer_t : public shc::CompileOptions::IncluderInterface {
@@ -97,12 +133,12 @@ namespace ir {
         while (include_path.filename().generic_string() != "shaders") {
             include_path = include_path.parent_path();
         }
-        /*options.SetGenerateDebugInfo();
+        options.SetGenerateDebugInfo();
         options.SetOptimizationLevel(shaderc_optimization_level_performance);
         options.SetSourceLanguage(shaderc_source_language_glsl);
         options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
         options.SetTargetSpirv(shaderc_spirv_version_1_6);
-        options.SetIncluder(std::make_unique<shader_includer_t>(std::move(include_path)));*/
+        options.SetIncluder(std::make_unique<shader_includer_t>(std::move(include_path)));
         auto spirv = compiler.CompileGlslToSpv(reinterpret_cast<const char*>(file.data()), file.size(), kind, path.string().c_str(), options);
         if (spirv.GetCompilationStatus() != shaderc_compilation_status_success) {
             logger.error("shader compile failed:\n\"{}\"", spirv.GetErrorMessage());
@@ -120,25 +156,32 @@ namespace ir {
         IR_PROFILE_SCOPED();
         const auto& device = _framebuffer.as_const_ref().render_pass().device();
         vkDestroyPipeline(device.handle(), _handle, nullptr);
-        // TODO: hash n' cache
         vkDestroyPipelineLayout(device.handle(), _layout, nullptr);
     }
 
     auto pipeline_t::make(
+        device_t& device,
         const framebuffer_t& framebuffer,
         const graphics_pipeline_create_info_t& info
     ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         auto pipeline = ir::arc_ptr<self>(new self(info));
-        const auto& device = framebuffer.render_pass().device();
         IR_ASSERT(!info.vertex.empty(), "cannot create graphics pipeline without vertex shader");
 
         auto shader_stages = std::vector<VkPipelineShaderStageCreateInfo>();
+        auto desc_bindings = descriptor_bindings();
+
+        auto push_constant_info = std::vector<VkPushConstantRange>();
+
+        auto vertex_binding_info = VkVertexInputBindingDescription();
+        vertex_binding_info.binding = 0;
+        vertex_binding_info.stride = 0;
+        vertex_binding_info.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        auto vertex_attribute_info = std::vector<VkVertexInputAttributeDescription>();
 
         { // compile vertex stage
             const auto binary = compile_shader(info.vertex, shaderc_glsl_vertex_shader, device.logger());
             const auto compiler = spvc::CompilerGLSL(binary.data(), binary.size());
-            // TODO: reflect all resources
             const auto resources = compiler.get_shader_resources();
 
             auto vertex_stage_info = VkPipelineShaderStageCreateInfo();
@@ -152,6 +195,62 @@ namespace ir {
             module_info.pCode = binary.data();
             IR_VULKAN_CHECK(device.logger(), vkCreateShaderModule(device.handle(), &module_info, nullptr, &vertex_stage_info.module));
             shader_stages.emplace_back(vertex_stage_info);
+
+            process_resource(
+                compiler,
+                resources.uniform_buffers,
+                descriptor_type_t::e_uniform_buffer,
+                shader_stage_t::e_vertex,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_buffers,
+                descriptor_type_t::e_storage_buffer,
+                shader_stage_t::e_vertex,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_images,
+                descriptor_type_t::e_storage_image,
+                shader_stage_t::e_vertex,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.sampled_images,
+                descriptor_type_t::e_combined_image_sampler,
+                shader_stage_t::e_vertex,
+                desc_bindings);
+
+            for (const auto& input : resources.stage_inputs) {
+                const auto& type = compiler.get_type(input.type_id);
+                const auto format = [&]() {
+                    switch (type.vecsize) {
+                        case 1: return VK_FORMAT_R32_SFLOAT;
+                        case 2: return VK_FORMAT_R32G32_SFLOAT;
+                        case 3: return VK_FORMAT_R32G32B32_SFLOAT;
+                        case 4: return VK_FORMAT_R32G32B32A32_SFLOAT;
+                    }
+                    IR_UNREACHABLE();
+                }();
+                const auto size = type.vecsize * sizeof(float32);
+                auto attribute_info = VkVertexInputAttributeDescription();
+                attribute_info.binding = 0;
+                attribute_info.location = compiler.get_decoration(input.id, spv::DecorationLocation);
+                attribute_info.format = format;
+                attribute_info.offset = vertex_binding_info.stride;
+                vertex_attribute_info.emplace_back(attribute_info);
+                vertex_binding_info.stride += size;
+            }
+
+            if (!resources.push_constant_buffers.empty()) {
+                const auto& pc = resources.push_constant_buffers.front();
+                const auto& type = compiler.get_type(pc.type_id);
+                push_constant_info.emplace_back(VkPushConstantRange {
+                    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                    .offset = 0,
+                    .size = static_cast<uint32>(compiler.get_declared_struct_size(type))
+                });
+            }
         }
 
         auto color_blend_attachments = std::vector<VkPipelineColorBlendAttachmentState>();
@@ -172,6 +271,31 @@ namespace ir {
             module_info.pCode = binary.data();
             IR_VULKAN_CHECK(device.logger(), vkCreateShaderModule(device.handle(), &module_info, nullptr, &fragment_shader_info.module));
             shader_stages.emplace_back(fragment_shader_info);
+
+            process_resource(
+                compiler,
+                resources.uniform_buffers,
+                descriptor_type_t::e_uniform_buffer,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_buffers,
+                descriptor_type_t::e_storage_buffer,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_images,
+                descriptor_type_t::e_storage_image,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.sampled_images,
+                descriptor_type_t::e_combined_image_sampler,
+                shader_stage_t::e_fragment,
+                desc_bindings);
 
             for (auto i = 0_u32; i < resources.stage_outputs.size(); ++i) {
                 const auto& type = compiler.get_type(resources.stage_outputs[i].type_id);
@@ -202,17 +326,34 @@ namespace ir {
                 }
                 color_blend_attachments.emplace_back(color_blend_attachment);
             }
+
+            if (!resources.push_constant_buffers.empty()) {
+                const auto& pc = resources.push_constant_buffers.front();
+                const auto& type = compiler.get_type(pc.type_id);
+                const auto size = compiler.get_declared_struct_size(type);
+                auto* last = push_constant_info.empty() ? nullptr : &push_constant_info.back();
+                if (push_constant_info.empty() || (last && last->size < size)) {
+                    push_constant_info.emplace_back(VkPushConstantRange {
+                        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                        .offset = 0,
+                        .size = static_cast<uint32>(compiler.get_declared_struct_size(type))
+                    });
+                } else {
+                    last->stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+                }
+            }
         }
 
         auto vertex_input_info = VkPipelineVertexInputStateCreateInfo();
         vertex_input_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vertex_input_info.pNext = nullptr;
         vertex_input_info.flags = 0;
-        // TODO
-        vertex_input_info.vertexBindingDescriptionCount = 0;
-        vertex_input_info.pVertexBindingDescriptions = nullptr;
-        vertex_input_info.vertexAttributeDescriptionCount = 0;
-        vertex_input_info.pVertexAttributeDescriptions = nullptr;
+        if (!vertex_attribute_info.empty()) {
+            vertex_input_info.vertexBindingDescriptionCount = 1;
+            vertex_input_info.pVertexBindingDescriptions = &vertex_binding_info;
+            vertex_input_info.vertexAttributeDescriptionCount = vertex_attribute_info.size();
+            vertex_input_info.pVertexAttributeDescriptions = vertex_attribute_info.data();
+        }
 
         auto input_assembly_info = VkPipelineInputAssemblyStateCreateInfo();
         input_assembly_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -224,8 +365,8 @@ namespace ir {
         auto viewport = VkViewport();
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = static_cast<float>(framebuffer.width());
-        viewport.height = static_cast<float>(framebuffer.height());
+        viewport.width = static_cast<float32>(framebuffer.width());
+        viewport.height = static_cast<float32>(framebuffer.height());
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
 
@@ -314,15 +455,51 @@ namespace ir {
         dynamic_state_info.dynamicStateCount = dynamic_states.size();
         dynamic_state_info.pDynamicStates = dynamic_states.data();
 
-        // TODO
+        auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
+        descriptor_layout.reserve(desc_bindings.size());
+        for (const auto& [set, layout] : desc_bindings) {
+            const auto& pair_bindings = layout.values();
+            auto bindings = std::vector<descriptor_binding_t>();
+            bindings.reserve(pair_bindings.size());
+            std::transform(
+                pair_bindings.begin(),
+                pair_bindings.end(),
+                std::back_inserter(bindings),
+                [](const auto& pair) {
+                    return pair.second;
+                });
+            if (set >= descriptor_layout.size()) {
+                descriptor_layout.resize(set);
+            }
+            descriptor_layout[set] = device.make_descriptor_layout(bindings);
+        }
+        descriptor_layout.erase(
+            std::remove_if(
+                descriptor_layout.begin(),
+                descriptor_layout.end(),
+                [](const auto& layout) {
+                    return !layout;
+                }),
+            descriptor_layout.end());
+
+        auto descriptor_layout_handles = std::vector<VkDescriptorSetLayout>();
+        descriptor_layout_handles.reserve(descriptor_layout.size());
+        std::transform(
+            descriptor_layout.begin(),
+            descriptor_layout.end(),
+            std::back_inserter(descriptor_layout_handles),
+            [](const auto& layout) {
+                return layout.as_const_ref().handle();
+            });
+
         auto pipeline_layout_info = VkPipelineLayoutCreateInfo();
         pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipeline_layout_info.pNext = nullptr;
         pipeline_layout_info.flags = 0;
-        pipeline_layout_info.setLayoutCount = 0;
-        pipeline_layout_info.pSetLayouts = nullptr;
-        pipeline_layout_info.pushConstantRangeCount = 0;
-        pipeline_layout_info.pPushConstantRanges = nullptr;
+        pipeline_layout_info.setLayoutCount = descriptor_layout_handles.size();
+        pipeline_layout_info.pSetLayouts = descriptor_layout_handles.data();
+        pipeline_layout_info.pushConstantRangeCount = push_constant_info.size();
+        pipeline_layout_info.pPushConstantRanges = push_constant_info.data();
         IR_VULKAN_CHECK(device.logger(), vkCreatePipelineLayout(device.handle(), &pipeline_layout_info, nullptr, &pipeline->_layout));
 
         auto pipeline_info = VkGraphicsPipelineCreateInfo();
@@ -347,9 +524,9 @@ namespace ir {
         pipeline_info.basePipelineIndex = 0;
         IR_VULKAN_CHECK(device.logger(), vkCreateGraphicsPipelines(device.handle(), nullptr, 1, &pipeline_info, nullptr, &pipeline->_handle));
         if (info.fragment.empty()) {
-            IR_LOG_INFO(device.logger(), "compiled pipeline: ({}, null)", info.vertex.generic_string());
+            IR_LOG_INFO(device.logger(), "compiled graphics pipeline: ({}, null)", info.vertex.generic_string());
         } else {
-            IR_LOG_INFO(device.logger(), "compiled pipeline: ({}, {})", info.vertex.generic_string(), info.fragment.generic_string());
+            IR_LOG_INFO(device.logger(), "compiled graphics pipeline: ({}, {})", info.vertex.generic_string(), info.fragment.generic_string());
         }
 
         for (const auto& stage : shader_stages) {
@@ -357,6 +534,7 @@ namespace ir {
         }
 
         pipeline->_type = pipeline_type_t::e_graphics;
+        pipeline->_device = device.as_intrusive_ptr();
         pipeline->_framebuffer = framebuffer.as_intrusive_ptr();
         return pipeline;
     }
@@ -369,6 +547,22 @@ namespace ir {
     auto pipeline_t::layout() const noexcept -> VkPipelineLayout {
         IR_PROFILE_SCOPED();
         return _layout;
+    }
+
+    auto pipeline_t::descriptor_layouts() const noexcept -> std::span<const arc_ptr<descriptor_layout_t>> {
+        IR_PROFILE_SCOPED();
+        return _descriptor_layout;
+    }
+
+    auto pipeline_t::descriptor_layout(uint32 index) const noexcept -> const descriptor_layout_t& {
+        IR_PROFILE_SCOPED();
+        return *_descriptor_layout[index];
+    }
+
+    auto pipeline_t::descriptor_binding(const descriptor_reference& reference) const noexcept -> const descriptor_binding_t& {
+        IR_PROFILE_SCOPED();
+        const auto [set, binding] = unpack_descriptor_reference(reference);
+        return descriptor_layout(set).binding(binding);
     }
 
     auto pipeline_t::type() const noexcept -> pipeline_type_t {

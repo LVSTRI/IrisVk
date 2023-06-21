@@ -61,6 +61,8 @@ namespace ir {
     enum class attachment_blend_t;
     enum class depth_state_flag_t;
 
+    struct descriptor_binding_t;
+
     class wsi_platform_t;
     class instance_t;
     class device_t;
@@ -76,4 +78,7 @@ namespace ir {
     class semaphore_t;
     class clear_value_t;
     class pipeline_t;
+    class master_frame_counter_t;
+    class frame_counter_t;
+    class descriptor_layout_t;
 }
