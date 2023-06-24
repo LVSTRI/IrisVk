@@ -51,6 +51,20 @@ namespace ir {
         extent_3d_t extent = ignored_extent_3d;
     };
 
+    struct viewport_t {
+        float32 x = 0.0f;
+        float32 y = 0.0f;
+        float32 width = 0.0f;
+        float32 height = 0.0f;
+    };
+
+    struct scissor_t {
+        int32 x = 0;
+        int32 y = 0;
+        uint32 width = 0;
+        uint32 height = 0;
+    };
+
     class command_buffer_t : public enable_intrusive_refcount_t<command_buffer_t> {
     public:
         using self = command_buffer_t;
@@ -75,6 +89,8 @@ namespace ir {
 
         auto begin() noexcept -> void;
         auto begin_render_pass(const framebuffer_t& framebuffer, const std::vector<clear_value_t>& clears) noexcept -> void;
+        auto set_viewport(const viewport_t& viewport) const noexcept -> void;
+        auto set_scissor(const scissor_t& scissor) const noexcept -> void;
         auto bind_pipeline(const pipeline_t& pipeline) noexcept -> void;
         auto bind_descriptor_set(const descriptor_set_t& set) noexcept -> void;
         auto push_constants(shader_stage_t stage, uint32 offset, uint64 size, const void* data) const noexcept -> void;

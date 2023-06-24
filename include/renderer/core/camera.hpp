@@ -59,10 +59,10 @@ namespace app {
     private:
         glm::vec3 _position = { 0.0f, 0.0f, 2.0f };
         glm::vec3 _front = { 0.0f, 0.0f, -1.0f };
-        glm::vec3 _up = { 0.0f, -1.0f, 0.0f };
+        glm::vec3 _up = { 0.0f, 1.0f, 0.0f };
         glm::vec3 _right = { 1.0f, 0.0f, 0.0f };
 
-        float32 _yaw = 0.0f;
+        float32 _yaw = -90.0f;
         float32 _pitch = 0.0f;
         float32 _fov = 60.0f;
         float32 _near = 0.1f;

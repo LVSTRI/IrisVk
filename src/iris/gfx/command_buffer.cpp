@@ -124,6 +124,26 @@ namespace ir {
         vkCmdBeginRenderPass(_handle, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
     }
 
+    auto command_buffer_t::set_viewport(const viewport_t& viewport) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto v = VkViewport();
+        v.x = viewport.x;
+        v.y = viewport.height - viewport.y;
+        v.width = viewport.width;
+        v.height = viewport.y - viewport.height;
+        v.minDepth = 0.0f;
+        v.maxDepth = 1.0f;
+        vkCmdSetViewport(_handle, 0, 1, &v);
+    }
+
+    auto command_buffer_t::set_scissor(const scissor_t& scissor) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto s = VkRect2D();
+        s.offset = { scissor.x, scissor.y };
+        s.extent = { scissor.width, scissor.height };
+        vkCmdSetScissor(_handle, 0, 1, &s);
+    }
+
     auto command_buffer_t::bind_pipeline(const pipeline_t& pipeline) noexcept -> void {
         IR_PROFILE_SCOPED();
         _state.pipeline = &pipeline;

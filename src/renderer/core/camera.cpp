@@ -56,7 +56,7 @@ namespace app {
 
     auto camera_t::fov() const noexcept -> float32 {
         IR_PROFILE_SCOPED();
-        return _fov;
+        return glm::radians(_fov);
     }
 
     auto camera_t::aspect() const noexcept -> float32 {
@@ -108,7 +108,6 @@ namespace app {
         const auto speed = 7.5f * dt;
 
         const auto& [dx, dy] = window.input().cursor_delta();
-        spdlog::info("{} {}", dx, dy);
         _yaw += sensitivity * dx;
         _pitch += sensitivity * dy;
         if (_pitch > 89.9f) {

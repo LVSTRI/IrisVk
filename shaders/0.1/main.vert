@@ -11,9 +11,9 @@ struct camera_data_t {
 layout (location = 0) out vec3 o_color;
 
 const vec3[] positions = vec3[](
-    vec3(-0.5,  0.5, 1.0),
-    vec3( 0.5,  0.5, 1.0),
-    vec3( 0.0, -0.5, 1.0)
+    vec3(-0.5, -0.5, 1.0),
+    vec3( 0.5, -0.5, 1.0),
+    vec3( 0.0,  0.5, 1.0)
 );
 
 const vec3[] colors = vec3[](

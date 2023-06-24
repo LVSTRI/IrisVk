@@ -97,6 +97,16 @@ namespace ir {
         return *this;
     }
 
+    auto descriptor_set_builder_t::bind_storage_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self& {
+        IR_PROFILE_SCOPED();
+        _binding.bindings.emplace_back(descriptor_content_t {
+            .binding = binding,
+            .type = descriptor_type_t::e_storage_buffer,
+            .contents = { buffer }
+        });
+        return *this;
+    }
+
     auto descriptor_set_builder_t::build() const noexcept -> arc_ptr<descriptor_set_t> {
         IR_PROFILE_SCOPED();
         auto& device = _layout.get().device();
@@ -156,6 +166,9 @@ namespace ir {
                 case descriptor_type_t::e_storage_texel_buffer:
                     // TODO
                     IR_ASSERT(false, "not implemented");
+                    break;
+
+                default:
                     break;
             }
             writes.emplace_back(write);

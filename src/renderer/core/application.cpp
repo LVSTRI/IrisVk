@@ -117,7 +117,10 @@ namespace app {
             .blend = {
                 ir::attachment_blend_t::e_disabled
             },
-            .dynamic_states = {},
+            .dynamic_states = {
+                ir::dynamic_state_t::e_viewport,
+                ir::dynamic_state_t::e_scissor
+            },
             .depth_flags =
                 ir::depth_state_flag_t::e_enable_test |
                 ir::depth_state_flag_t::e_enable_write,
@@ -246,6 +249,14 @@ namespace app {
         command_buffer().begin();
         command_buffer().begin_render_pass(*_main_pass.framebuffer, _main_pass.clear_values);
         command_buffer().bind_pipeline(*_main_pass.main_pipeline);
+        command_buffer().set_viewport({
+            .width = static_cast<float32>(swapchain().width()),
+            .height = static_cast<float32>(swapchain().height()),
+        });
+        command_buffer().set_scissor({
+            .width = swapchain().width(),
+            .height = swapchain().height(),
+        });
         command_buffer().bind_descriptor_set(*main_set);
         command_buffer().draw(3, 1, 0, 0);
         command_buffer().end_render_pass();

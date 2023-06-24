@@ -90,6 +90,7 @@ namespace ir {
         descriptor_set_builder_t(pipeline_t& pipeline, uint32 set) noexcept;
 
         auto bind_uniform_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self&;
+        auto bind_storage_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self&;
 
         auto build() const noexcept -> arc_ptr<descriptor_set_t>;
 
