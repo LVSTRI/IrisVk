@@ -3,6 +3,8 @@
 #include <iris/core/macros.hpp>
 #include <iris/core/types.hpp>
 
+#include <iris/wsi/input.hpp>
+
 #include <spdlog/spdlog.h>
 
 #include <string_view>
@@ -31,7 +33,15 @@ namespace ir {
         IR_NODISCARD auto height() const noexcept -> uint32;
         IR_NODISCARD auto title() const noexcept -> std::string_view;
 
+        IR_NODISCARD auto is_focused() const noexcept -> bool;
+        IR_NODISCARD auto is_cursor_captured() const noexcept -> bool;
+
+        IR_NODISCARD auto input() noexcept -> input_t&;
+
         IR_NODISCARD auto should_close() const noexcept -> bool;
+
+        auto capture_cursor() noexcept -> void;
+        auto release_cursor() noexcept -> void;
 
         IR_NODISCARD auto make_surface(gfx_api_object_handle instance) const noexcept -> gfx_api_object_handle;
 
@@ -42,6 +52,10 @@ namespace ir {
         uint32 _width = 0;
         uint32 _height = 0;
         std::string _title;
+
+        bool _is_cursor_captured = false;
+
+        input_t _input;
 
         std::shared_ptr<spdlog::logger> _logger;
     };

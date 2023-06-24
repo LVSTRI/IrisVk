@@ -814,4 +814,5 @@ namespace ir {
     constexpr static auto remaining_levels = VK_REMAINING_MIP_LEVELS;
     constexpr static auto layer_ignored = -1_u32;
     constexpr static auto remaining_layers = VK_REMAINING_ARRAY_LAYERS;
+    constexpr static auto max_ttl = 4_u32;
 }

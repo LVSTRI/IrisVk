@@ -35,11 +35,19 @@ namespace ir {
         e_enable_write = 0x4,
     };
 
+    enum class vertex_attribute_t {
+        e_vec1 = sizeof(float32[1]),
+        e_vec2 = sizeof(float32[2]),
+        e_vec3 = sizeof(float32[3]),
+        e_vec4 = sizeof(float32[4]),
+    };
+
     struct graphics_pipeline_create_info_t {
         fs::path vertex;
         fs::path fragment;
         std::vector<attachment_blend_t> blend;
         std::vector<dynamic_state_t> dynamic_states;
+        std::vector<vertex_attribute_t> vertex_attributes;
         depth_state_flag_t depth_flags = {};
         compare_op_t depth_compare_op = compare_op_t::e_less;
         cull_mode_t cull_mode = cull_mode_t::e_none;
@@ -63,7 +71,9 @@ namespace ir {
 
         IR_NODISCARD auto type() const noexcept -> pipeline_type_t;
         IR_NODISCARD auto info() const noexcept -> const graphics_pipeline_create_info_t&;
+        IR_NODISCARD auto device() noexcept -> device_t&;
         IR_NODISCARD auto framebuffer() const noexcept -> const framebuffer_t&;
+        IR_NODISCARD auto render_pass() const noexcept -> const render_pass_t&;
 
     private:
         VkPipeline _handle;

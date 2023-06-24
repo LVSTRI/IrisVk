@@ -7,8 +7,20 @@
 
 #include <ankerl/unordered_dense.h>
 
+#include <variant>
 #include <vector>
 #include <span>
+
+template <typename... Ts>
+struct ir::akl::hash<std::variant<Ts...>> {
+    using is_avalanching = void;
+    using is_transparent = void;
+    IR_NODISCARD constexpr auto operator ()(const std::variant<Ts...>& value) const noexcept -> std::size_t {
+        return std::visit([]<typename T>(const T& value) {
+            return ir::akl::hash<T>()(value);
+        }, value);
+    }
+};
 
 template <typename T>
 struct ir::akl::hash<std::vector<T>> {

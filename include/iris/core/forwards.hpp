@@ -3,7 +3,7 @@
 #include <iris/core/types.hpp>
 
 namespace ir {
-    template <typename T>
+    template <typename>
     class intrusive_atomic_ptr_t;
     // shorthand
     template <typename T>
@@ -60,10 +60,25 @@ namespace ir {
     enum class pipeline_type_t;
     enum class attachment_blend_t;
     enum class depth_state_flag_t;
+    enum class vertex_attribute_t;
 
     struct descriptor_binding_t;
 
-    class wsi_platform_t;
+    enum class buffer_flag_t;
+    struct memory_properties_t;
+    struct buffer_create_info_t;
+
+    struct image_info_t;
+    struct buffer_info_t;
+    struct descriptor_content_t;
+    struct descriptor_set_binding_t;
+
+    template <typename>
+    struct cache_entry_t;
+
+    enum class keyboard_t;
+    struct cursor_position_t;
+
     class instance_t;
     class device_t;
     class queue_t;
@@ -81,4 +96,14 @@ namespace ir {
     class master_frame_counter_t;
     class frame_counter_t;
     class descriptor_layout_t;
+    class descriptor_pool_t;
+    template <typename>
+    class buffer_t;
+    class descriptor_set_t;
+    class deletion_queue_t;
+    template <typename>
+    class cache_t;
+
+    class wsi_platform_t;
+    class input_t;
 }

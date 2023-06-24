@@ -6,8 +6,8 @@ namespace ir {
 
     fence_t::~fence_t() noexcept {
         IR_PROFILE_SCOPED();
-        vkDestroyFence(_device.as_const_ref().handle(), _handle, nullptr);
-        IR_LOG_INFO(_device.as_const_ref().logger(), "fence {} destroyed", fmt::ptr(_handle));
+        vkDestroyFence(device().handle(), _handle, nullptr);
+        IR_LOG_INFO(device().logger(), "fence {} destroyed", fmt::ptr(_handle));
     }
 
     auto fence_t::make(const device_t& device, bool signaled) noexcept -> arc_ptr<self> {
@@ -45,16 +45,16 @@ namespace ir {
 
     auto fence_t::is_ready() const noexcept -> bool {
         IR_PROFILE_SCOPED();
-        return vkGetFenceStatus(_device.as_const_ref().handle(), _handle) == VK_SUCCESS;
+        return vkGetFenceStatus(device().handle(), _handle) == VK_SUCCESS;
     }
 
     auto fence_t::wait(uint64 timeout) const noexcept -> void {
         IR_PROFILE_SCOPED();
-        IR_VULKAN_CHECK(_device.as_const_ref().logger(), vkWaitForFences(_device.as_const_ref().handle(), 1, &_handle, true, timeout));
+        IR_VULKAN_CHECK(device().logger(), vkWaitForFences(device().handle(), 1, &_handle, true, timeout));
     }
 
     auto fence_t::reset() const noexcept -> void {
         IR_PROFILE_SCOPED();
-        IR_VULKAN_CHECK(_device.as_const_ref().logger(), vkResetFences(_device.as_const_ref().handle(), 1, &_handle));
+        IR_VULKAN_CHECK(device().logger(), vkResetFences(device().handle(), 1, &_handle));
     }
 }

@@ -28,8 +28,8 @@ namespace ir {
 
     image_view_t::~image_view_t() noexcept {
         IR_PROFILE_SCOPED();
-        IR_LOG_INFO(_device.as_const_ref().logger(), "image view {} destroyed", fmt::ptr(_handle));
-        vkDestroyImageView(_device.as_const_ref().handle(), _handle, nullptr);
+        IR_LOG_INFO(device().logger(), "image view {} destroyed", fmt::ptr(_handle));
+        vkDestroyImageView(device().handle(), _handle, nullptr);
     }
 
     auto image_view_t::make(
@@ -112,9 +112,9 @@ namespace ir {
             _view.reset();
         }
         if (_allocation) {
-            vmaDestroyImage(_device.as_const_ref().allocator(), _handle, _allocation);
+            vmaDestroyImage(device().allocator(), _handle, _allocation);
         }
-        IR_LOG_INFO(_device.as_const_ref().logger(), "image {} destroyed", fmt::ptr(_handle));
+        IR_LOG_INFO(device().logger(), "image {} destroyed", fmt::ptr(_handle));
     }
 
     auto image_t::make(

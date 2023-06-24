@@ -73,9 +73,11 @@ namespace ir {
         IR_NODISCARD auto info() const noexcept -> const command_buffer_create_info_t&;
         IR_NODISCARD auto pool() const noexcept -> const command_pool_t&;
 
-        auto begin() const noexcept -> void;
+        auto begin() noexcept -> void;
         auto begin_render_pass(const framebuffer_t& framebuffer, const std::vector<clear_value_t>& clears) noexcept -> void;
         auto bind_pipeline(const pipeline_t& pipeline) noexcept -> void;
+        auto bind_descriptor_set(const descriptor_set_t& set) noexcept -> void;
+        auto push_constants(shader_stage_t stage, uint32 offset, uint64 size, const void* data) const noexcept -> void;
         auto draw(uint32 vertices, uint32 instances, uint32 first_vertex, uint32 first_instance) const noexcept -> void;
         auto end_render_pass() noexcept -> void;
         auto copy_image(const image_copy_t& copy) const noexcept -> void;

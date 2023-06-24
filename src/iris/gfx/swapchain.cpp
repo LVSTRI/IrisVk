@@ -15,9 +15,9 @@ namespace ir {
     swapchain_t::~swapchain_t() noexcept {
         IR_PROFILE_SCOPED();
         _images.clear();
-        vkDestroySwapchainKHR(_device.as_const_ref().handle(), _handle, nullptr);
-        vkDestroySurfaceKHR(_device.as_const_ref().instance().handle(), _surface, nullptr);
-        IR_LOG_INFO(_device.as_const_ref().logger(), "swapchain destroyed");
+        vkDestroySwapchainKHR(device().handle(), _handle, nullptr);
+        vkDestroySurfaceKHR(device().instance().handle(), _surface, nullptr);
+        IR_LOG_INFO(device().logger(), "swapchain destroyed");
     }
 
     auto swapchain_t::make(
@@ -215,9 +215,9 @@ namespace ir {
         IR_PROFILE_SCOPED();
         auto index = uint32();
         IR_VULKAN_CHECK(
-            _device.as_const_ref().logger(),
+            device().logger(),
             vkAcquireNextImageKHR(
-                _device.as_const_ref().handle(),
+                device().handle(),
                 _handle,
                 -1_u64,
                 semaphore.handle(),

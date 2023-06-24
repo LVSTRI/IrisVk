@@ -1,5 +1,6 @@
 #pragma once
 
+#include <renderer/core/camera.hpp>
 #include <renderer/core/utilities.hpp>
 
 #include <iris/core/forwards.hpp>
@@ -7,7 +8,16 @@
 
 #include <iris/wsi/wsi_platform.hpp>
 
+#include <glm/glm.hpp>
+
 namespace app {
+    struct camera_data_t {
+        glm::mat4 projection = {};
+        glm::mat4 view = {};
+        glm::mat4 pv = {};
+        glm::vec4 position = {};
+    };
+
     struct main_pass_t {
         ir::arc_ptr<ir::render_pass_t> description;
         ir::arc_ptr<ir::image_t> color;
@@ -16,6 +26,8 @@ namespace app {
         std::vector<ir::clear_value_t> clear_values;
 
         ir::arc_ptr<ir::pipeline_t> main_pipeline;
+
+        std::vector<ir::arc_ptr<ir::buffer_t<camera_data_t>>> camera_buffer;
    };
 
     class application_t {
@@ -27,6 +39,18 @@ namespace app {
         auto operator =(application_t) -> application_t& = delete;
 
         auto run() noexcept -> void;
+
+        auto wsi_platform() noexcept -> ir::wsi_platform_t&;
+        auto device() noexcept -> ir::device_t&;
+        auto swapchain() noexcept -> ir::swapchain_t&;
+        auto command_pool(uint32 frame_index = -1) noexcept -> ir::command_pool_t&;
+        auto command_buffer(uint32 frame_index = -1) noexcept -> ir::command_buffer_t&;
+        auto image_available(uint32 frame_index = -1) noexcept -> ir::semaphore_t&;
+        auto render_done(uint32 frame_index = -1) noexcept -> ir::semaphore_t&;
+        auto frame_fence(uint32 frame_index = -1) noexcept -> ir::fence_t&;
+
+        auto main_pass() noexcept -> main_pass_t&;
+        auto camera_buffer(uint32 frame_index = -1) noexcept -> ir::buffer_t<camera_data_t>&;
 
     private:
         auto _render() noexcept -> void;
@@ -42,6 +66,7 @@ namespace app {
         std::vector<ir::arc_ptr<ir::semaphore_t>> _render_done;
         std::vector<ir::arc_ptr<ir::fence_t>> _frame_fence;
 
+        camera_t _camera;
         main_pass_t _main_pass;
 
         ch::steady_clock::time_point _last_time = {};

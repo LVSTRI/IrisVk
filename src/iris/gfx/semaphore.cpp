@@ -6,8 +6,8 @@ namespace ir {
 
     semaphore_t::~semaphore_t() noexcept {
         IR_PROFILE_SCOPED();
-        vkDestroySemaphore(_device.as_const_ref().handle(), _handle, nullptr);
-        IR_LOG_INFO(_device.as_const_ref().logger(), "semaphore {} destroyed", fmt::ptr(_handle));
+        vkDestroySemaphore(device().handle(), _handle, nullptr);
+        IR_LOG_INFO(device().logger(), "semaphore {} destroyed", fmt::ptr(_handle));
     }
 
     auto semaphore_t::make(const device_t& device) noexcept -> arc_ptr<self> {

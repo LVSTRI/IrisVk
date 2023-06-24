@@ -1,4 +1,6 @@
 #include <iris/gfx/descriptor_layout.hpp>
+#include <iris/gfx/descriptor_pool.hpp>
+#include <iris/gfx/descriptor_set.hpp>
 #include <iris/gfx/instance.hpp>
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/queue.hpp>
@@ -10,10 +12,13 @@ namespace ir {
 
     device_t::~device_t() noexcept {
         IR_PROFILE_SCOPED();
-        IR_VULKAN_CHECK(_logger, vkDeviceWaitIdle(_handle));
-        _graphics.reset();
-        _compute.reset();
+        wait_idle();
+        _descriptor_layouts.clear();
+        _descriptor_sets.clear();
+        _descriptor_pool.reset();
         _transfer.reset();
+        _compute.reset();
+        _graphics.reset();
         vmaDestroyAllocator(_allocator);
         IR_LOG_INFO(_logger, "allocator destroyed");
         vkDestroyDevice(_handle, nullptr);
@@ -244,14 +249,14 @@ namespace ir {
             volkLoadDevice(device->_handle);
             IR_LOG_INFO(logger, "device function table initialized");
 
-            device->_graphics = queue_t::make(device.as_const_ref(), { *graphics_family, queue_type_t::e_graphics });
+            device->_graphics = queue_t::make(*device, { *graphics_family, queue_type_t::e_graphics });
             device->_compute = device->_graphics;
             device->_transfer = device->_graphics;
             if (graphics_family != compute_family) {
-                device->_compute = queue_t::make(device.as_const_ref(), { *compute_family, queue_type_t::e_compute });
+                device->_compute = queue_t::make(*device, { *compute_family, queue_type_t::e_compute });
             }
             if (transfer_family != graphics_family && transfer_family != compute_family) {
-                device->_transfer = queue_t::make(device.as_const_ref(), { *transfer_family, queue_type_t::e_transfer });
+                device->_transfer = queue_t::make(*device, { *transfer_family, queue_type_t::e_transfer });
             }
 
             device->_properties = properties2;
@@ -292,6 +297,9 @@ namespace ir {
         device->_info = info;
         device->_instance = instance.as_intrusive_ptr();
         device->_logger = std::move(logger);
+
+        device->_descriptor_pool = descriptor_pool_t::make(device.as_ref(), 1);
+
         return device;
     }
 
@@ -320,11 +328,6 @@ namespace ir {
         return _memory_properties.memoryProperties;
     }
 
-    auto device_t::features() const noexcept -> const VkPhysicalDeviceFeatures& {
-        IR_PROFILE_SCOPED();
-        return _features.features;
-    }
-
     auto device_t::graphics_queue() const noexcept -> const queue_t& {
         IR_PROFILE_SCOPED();
         return *_graphics;
@@ -340,6 +343,11 @@ namespace ir {
         return *_transfer;
     }
 
+    auto device_t::descriptor_pool() const noexcept -> const descriptor_pool_t& {
+        IR_PROFILE_SCOPED();
+        return *_descriptor_pool;
+    }
+
     auto device_t::frame_counter() noexcept -> master_frame_counter_t& {
         IR_PROFILE_SCOPED();
         return *_frame_counter;
@@ -348,6 +356,11 @@ namespace ir {
     auto device_t::frame_counter() const noexcept -> const master_frame_counter_t& {
         IR_PROFILE_SCOPED();
         return *_frame_counter;
+    }
+
+    auto device_t::deletion_queue() noexcept -> deletion_queue_t& {
+        IR_PROFILE_SCOPED();
+        return _deletion_queue;
     }
 
     auto device_t::info() const noexcept -> const device_create_info_t& {
@@ -377,11 +390,48 @@ namespace ir {
         IR_VULKAN_CHECK(_logger, vkDeviceWaitIdle(_handle));
     }
 
+    auto device_t::resize_descriptor_pool(const akl::fast_hash_map<descriptor_type_t, uint32>& size) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        _descriptor_pool = descriptor_pool_t::make(*this, size);
+    }
+
     auto device_t::make_descriptor_layout(const std::vector<descriptor_binding_t>& bindings) noexcept -> arc_ptr<descriptor_layout_t> {
         IR_PROFILE_SCOPED();
         if (_descriptor_layouts.contains(bindings)) {
-            return _descriptor_layouts.at(bindings);
+            return _descriptor_layouts.acquire(bindings);
         }
-        return _descriptor_layouts[bindings] = descriptor_layout_t::make(*this, bindings);
+        return _descriptor_layouts.insert(bindings, descriptor_layout_t::make(*this, bindings));
+    }
+
+    auto device_t::acquire_descriptor_set(const descriptor_set_binding_t& bindings) noexcept -> arc_ptr<descriptor_set_t> {
+        IR_PROFILE_SCOPED();
+        if (_descriptor_sets.contains(bindings)) {
+            return _descriptor_sets.acquire(bindings);
+        }
+        IR_LOG_WARN(logger(), "descriptor_set_t: cache miss");
+        return nullptr;
+    }
+
+    auto device_t::register_descriptor_set(
+        const descriptor_set_binding_t& bindings,
+        arc_ptr<descriptor_set_t> set
+    ) noexcept -> arc_ptr<descriptor_set_t> {
+        IR_PROFILE_SCOPED();
+        return _descriptor_sets.insert(bindings, std::move(set));
+    }
+
+    auto device_t::is_supported(device_feature_t feature) const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        switch (feature) {
+            case device_feature_t::e_buffer_device_address: return _features_12.bufferDeviceAddress;
+        }
+        IR_UNREACHABLE();
+    }
+
+    auto device_t::tick() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        frame_counter().tick();
+        deletion_queue().tick();
+        _descriptor_layouts.tick();
     }
 }

@@ -1,3 +1,5 @@
+#include <iris/core/hash.hpp>
+
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/descriptor_layout.hpp>
 
@@ -9,7 +11,8 @@ namespace ir {
 
     descriptor_layout_t::~descriptor_layout_t() noexcept {
         IR_PROFILE_SCOPED();
-        vkDestroyDescriptorSetLayout(_device.get().handle(), _handle, nullptr);
+        vkDestroyDescriptorSetLayout(device().handle(), _handle, nullptr);
+        IR_LOG_INFO(device().logger(), "descriptor layout {} freed", fmt::ptr(_handle));
     }
 
     auto descriptor_layout_t::make(
@@ -71,6 +74,11 @@ namespace ir {
         return _handle;
     }
 
+    auto descriptor_layout_t::device() const noexcept -> device_t& {
+        IR_PROFILE_SCOPED();
+        return _device.get();
+    }
+
     auto descriptor_layout_t::bindings() const noexcept -> std::span<const descriptor_binding_t> {
         IR_PROFILE_SCOPED();
         return _bindings;
@@ -79,6 +87,11 @@ namespace ir {
     auto descriptor_layout_t::binding(uint32 index) const noexcept -> const descriptor_binding_t& {
         IR_PROFILE_SCOPED();
         return _bindings[index];
+    }
+
+    auto descriptor_layout_t::index() const noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
+        return binding(0).set;
     }
 
     auto descriptor_layout_t::is_dynamic() const noexcept -> bool {

@@ -7,6 +7,10 @@
 #include <iris/core/types.hpp>
 
 #include <iris/gfx/frame_counter.hpp>
+#include <iris/gfx/deletion_queue.hpp>
+#include <iris/gfx/cache.hpp>
+#include <iris/gfx/descriptor_layout.hpp>
+#include <iris/gfx/descriptor_set.hpp>
 
 #include <volk.h>
 #include <vulkan/vulkan.h>
@@ -26,6 +30,10 @@ namespace ir {
         device_features_t features = {};
     };
 
+    enum class device_feature_t {
+        e_buffer_device_address
+    };
+
     class device_t : public enable_intrusive_refcount_t<device_t> {
     public:
         using self = device_t;
@@ -43,14 +51,16 @@ namespace ir {
 
         IR_NODISCARD auto properties() const noexcept -> const VkPhysicalDeviceProperties&;
         IR_NODISCARD auto memory_properties() const noexcept -> const VkPhysicalDeviceMemoryProperties&;
-        IR_NODISCARD auto features() const noexcept -> const VkPhysicalDeviceFeatures&;
 
         IR_NODISCARD auto graphics_queue() const noexcept -> const queue_t&;
         IR_NODISCARD auto compute_queue() const noexcept -> const queue_t&;
         IR_NODISCARD auto transfer_queue() const noexcept -> const queue_t&;
 
+        IR_NODISCARD auto descriptor_pool() const noexcept -> const descriptor_pool_t&;
+
         IR_NODISCARD auto frame_counter() noexcept -> master_frame_counter_t&;
         IR_NODISCARD auto frame_counter() const noexcept -> const master_frame_counter_t&;
+        IR_NODISCARD auto deletion_queue() noexcept -> deletion_queue_t&;
 
         IR_NODISCARD auto info() const noexcept -> const device_create_info_t&;
         IR_NODISCARD auto instance() const noexcept -> const instance_t&;
@@ -60,7 +70,18 @@ namespace ir {
 
         auto wait_idle() const noexcept -> void;
 
+        auto resize_descriptor_pool(const akl::fast_hash_map<descriptor_type_t, uint32>& size) noexcept -> void;
+
         IR_NODISCARD auto make_descriptor_layout(const std::vector<descriptor_binding_t>& bindings) noexcept -> arc_ptr<descriptor_layout_t>;
+        IR_NODISCARD auto acquire_descriptor_set(const descriptor_set_binding_t& bindings) noexcept -> arc_ptr<descriptor_set_t>;
+        IR_NODISCARD auto register_descriptor_set(
+            const descriptor_set_binding_t& bindings,
+            arc_ptr<descriptor_set_t> set
+        ) noexcept -> arc_ptr<descriptor_set_t>;
+
+        IR_NODISCARD auto is_supported(device_feature_t feature) const noexcept -> bool;
+
+        auto tick() noexcept -> void;
 
     private:
         VkDevice _handle = {};
@@ -78,9 +99,13 @@ namespace ir {
         arc_ptr<queue_t> _compute;
         arc_ptr<queue_t> _transfer;
 
-        arc_ptr<master_frame_counter_t> _frame_counter;
+        arc_ptr<descriptor_pool_t> _descriptor_pool;
 
-        akl::fast_hash_map<std::vector<descriptor_binding_t>, arc_ptr<descriptor_layout_t>> _descriptor_layouts;
+        arc_ptr<master_frame_counter_t> _frame_counter;
+        deletion_queue_t _deletion_queue;
+
+        cache_t<descriptor_layout_t> _descriptor_layouts;
+        cache_t<descriptor_set_t> _descriptor_sets;
 
         device_create_info_t _info = {};
         arc_ptr<const instance_t> _instance;

@@ -1,4 +1,5 @@
 #include <iris/wsi/wsi_platform.hpp>
+#include <iris/wsi/input.hpp>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -18,7 +19,10 @@ namespace ir {
         }
     };
 
-    wsi_platform_t::wsi_platform_t() noexcept = default;
+    wsi_platform_t::wsi_platform_t() noexcept
+        : _input(*this) {
+        IR_PROFILE_SCOPED();
+    }
 
     wsi_platform_t::~wsi_platform_t() noexcept = default;
 
@@ -47,6 +51,7 @@ namespace ir {
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         platform._window_handle = reinterpret_cast<platform_window_handle>(
             glfwCreateWindow(width, height, title.data(), nullptr, nullptr));
+        glfwSetWindowUserPointer(reinterpret_cast<GLFWwindow*>(platform._window_handle), &platform);
         IR_ASSERT(platform._window_handle, "failed to make wsi platform");
 
         return platform;
@@ -72,6 +77,21 @@ namespace ir {
         return _title;
     }
 
+    auto wsi_platform_t::is_focused() const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        return glfwGetWindowAttrib(reinterpret_cast<GLFWwindow*>(_window_handle), GLFW_FOCUSED);
+    }
+
+    auto wsi_platform_t::is_cursor_captured() const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        return _is_cursor_captured;
+    }
+
+    auto wsi_platform_t::input() noexcept -> input_t& {
+        IR_PROFILE_SCOPED();
+        return _input;
+    }
+
     auto wsi_platform_t::poll_events() noexcept -> void {
         IR_PROFILE_SCOPED();
         glfwPollEvents();
@@ -80,6 +100,20 @@ namespace ir {
     auto wsi_platform_t::should_close() const noexcept -> bool {
         IR_PROFILE_SCOPED();
         return glfwWindowShouldClose(reinterpret_cast<GLFWwindow*>(_window_handle));
+    }
+
+    auto wsi_platform_t::capture_cursor() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        glfwSetInputMode(reinterpret_cast<GLFWwindow*>(_window_handle), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        _input.reset_cursor();
+        _is_cursor_captured = true;
+    }
+
+    auto wsi_platform_t::release_cursor() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        glfwSetInputMode(reinterpret_cast<GLFWwindow*>(_window_handle), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        _input.reset_cursor();
+        _is_cursor_captured = false;
     }
 
     auto wsi_platform_t::context_extensions() noexcept -> std::vector<const char*> {

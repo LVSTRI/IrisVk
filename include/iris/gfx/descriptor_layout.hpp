@@ -30,6 +30,11 @@ namespace ir {
     class descriptor_layout_t : public enable_intrusive_refcount_t<descriptor_layout_t> {
     public:
         using self = descriptor_layout_t;
+        using cache_key_type = std::vector<descriptor_binding_t>;
+        using cache_value_type = arc_ptr<self>;
+
+        constexpr static auto max_ttl = -1_u32;
+        constexpr static auto is_persistent = true;
 
         descriptor_layout_t(device_t& device) noexcept;
         ~descriptor_layout_t() noexcept;
@@ -37,9 +42,11 @@ namespace ir {
         IR_NODISCARD static auto make(device_t& device, std::span<const descriptor_binding_t> bindings) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkDescriptorSetLayout;
+        IR_NODISCARD auto device() const noexcept -> device_t&;
 
         IR_NODISCARD auto bindings() const noexcept -> std::span<const descriptor_binding_t>;
         IR_NODISCARD auto binding(uint32 index) const noexcept -> const descriptor_binding_t&;
+        IR_NODISCARD auto index() const noexcept -> uint32;
         IR_NODISCARD auto is_dynamic() const noexcept -> bool;
 
     private:
@@ -60,8 +67,8 @@ namespace ir {
 
 IR_MAKE_AVALANCHING_TRANSPARENT_HASH_SPECIALIZATION(ir::descriptor_binding_t, ([](const auto& x) -> std::size_t {
     IR_PROFILE_SCOPED();
-    auto seed = static_cast<std::size_t>(0);
-    seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::uint32>()(x.set));
+    auto seed = std::size_t();
+    seed = ir::akl::hash<ir::uint32>()(x.set);
     seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::uint32>()(x.binding));
     seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::uint32>()(x.count));
     seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::descriptor_type_t>()(x.type));

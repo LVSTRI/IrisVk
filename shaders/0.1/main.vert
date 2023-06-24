@@ -1,6 +1,13 @@
 #version 460
 #extension GL_ARB_separate_shader_objects : enable
 
+struct camera_data_t {
+    mat4 projection;
+    mat4 view;
+    mat4 pv;
+    vec4 position;
+};
+
 layout (location = 0) out vec3 o_color;
 
 const vec3[] positions = vec3[](
@@ -15,11 +22,11 @@ const vec3[] colors = vec3[](
     vec3(0.0, 0.0, 1.0)
 );
 
-layout (push_constant) uniform vertex_pc {
-    uint x;
-};
+layout (set = 0, binding = 0) uniform u_camera_block {
+    camera_data_t data;
+} u_camera;
 
 void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 1.0);
-    o_color = colors[x];
+    gl_Position = u_camera.data.pv * vec4(positions[gl_VertexIndex], 1.0);
+    o_color = colors[gl_VertexIndex];
 }

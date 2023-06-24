@@ -7,8 +7,8 @@ namespace ir {
 
     command_pool_t::~command_pool_t() noexcept {
         IR_PROFILE_SCOPED();
-        vkDestroyCommandPool(_device.as_const_ref().handle(), _handle, nullptr);
-        IR_LOG_INFO(_device.as_const_ref().logger(), "command pool {} destroyed", fmt::ptr(_handle));
+        vkDestroyCommandPool(device().handle(), _handle, nullptr);
+        IR_LOG_INFO(device().logger(), "command pool {} destroyed", fmt::ptr(_handle));
     }
 
     auto command_pool_t::make(const device_t& device, const command_pool_create_info_t& info) noexcept -> arc_ptr<self> {
@@ -66,6 +66,6 @@ namespace ir {
 
     auto command_pool_t::reset() const noexcept -> void {
         IR_PROFILE_SCOPED();
-        IR_VULKAN_CHECK(_device.as_const_ref().logger(), vkResetCommandPool(_device.as_const_ref().handle(), _handle, 0));
+        IR_VULKAN_CHECK(device().logger(), vkResetCommandPool(device().handle(), _handle, 0));
     }
 }

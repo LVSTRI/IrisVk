@@ -20,6 +20,7 @@ namespace ir {
         uint32 index = 0;
 
         constexpr auto operator ==(const queue_family_t& other) const noexcept -> bool = default;
+        constexpr auto operator !=(const queue_family_t& other) const noexcept -> bool = default;
     };
 
     enum class queue_type_t {

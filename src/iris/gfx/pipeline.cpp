@@ -128,11 +128,11 @@ namespace ir {
         IR_PROFILE_SCOPED();
         const auto file = whole_file(path);
         auto compiler = shc::Compiler();
-        auto options = shc::CompileOptions();
         auto include_path = path.parent_path();
         while (include_path.filename().generic_string() != "shaders") {
             include_path = include_path.parent_path();
         }
+        auto options = shc::CompileOptions();
         options.SetGenerateDebugInfo();
         options.SetOptimizationLevel(shaderc_optimization_level_performance);
         options.SetSourceLanguage(shaderc_source_language_glsl);
@@ -154,9 +154,8 @@ namespace ir {
 
     pipeline_t::~pipeline_t() noexcept {
         IR_PROFILE_SCOPED();
-        const auto& device = _framebuffer.as_const_ref().render_pass().device();
-        vkDestroyPipeline(device.handle(), _handle, nullptr);
-        vkDestroyPipelineLayout(device.handle(), _layout, nullptr);
+        vkDestroyPipeline(device().handle(), _handle, nullptr);
+        vkDestroyPipelineLayout(device().handle(), _layout, nullptr);
     }
 
     auto pipeline_t::make(
@@ -172,12 +171,6 @@ namespace ir {
         auto desc_bindings = descriptor_bindings();
 
         auto push_constant_info = std::vector<VkPushConstantRange>();
-
-        auto vertex_binding_info = VkVertexInputBindingDescription();
-        vertex_binding_info.binding = 0;
-        vertex_binding_info.stride = 0;
-        vertex_binding_info.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-        auto vertex_attribute_info = std::vector<VkVertexInputAttributeDescription>();
 
         { // compile vertex stage
             const auto binary = compile_shader(info.vertex, shaderc_glsl_vertex_shader, device.logger());
@@ -220,27 +213,6 @@ namespace ir {
                 descriptor_type_t::e_combined_image_sampler,
                 shader_stage_t::e_vertex,
                 desc_bindings);
-
-            for (const auto& input : resources.stage_inputs) {
-                const auto& type = compiler.get_type(input.type_id);
-                const auto format = [&]() {
-                    switch (type.vecsize) {
-                        case 1: return VK_FORMAT_R32_SFLOAT;
-                        case 2: return VK_FORMAT_R32G32_SFLOAT;
-                        case 3: return VK_FORMAT_R32G32B32_SFLOAT;
-                        case 4: return VK_FORMAT_R32G32B32A32_SFLOAT;
-                    }
-                    IR_UNREACHABLE();
-                }();
-                const auto size = type.vecsize * sizeof(float32);
-                auto attribute_info = VkVertexInputAttributeDescription();
-                attribute_info.binding = 0;
-                attribute_info.location = compiler.get_decoration(input.id, spv::DecorationLocation);
-                attribute_info.format = format;
-                attribute_info.offset = vertex_binding_info.stride;
-                vertex_attribute_info.emplace_back(attribute_info);
-                vertex_binding_info.stride += size;
-            }
 
             if (!resources.push_constant_buffers.empty()) {
                 const auto& pc = resources.push_constant_buffers.front();
@@ -342,6 +314,31 @@ namespace ir {
                     last->stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
                 }
             }
+        }
+
+        auto vertex_binding_info = VkVertexInputBindingDescription();
+        vertex_binding_info.binding = 0;
+        vertex_binding_info.stride = 0;
+        vertex_binding_info.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        auto vertex_attribute_info = std::vector<VkVertexInputAttributeDescription>();
+        for (auto location = 0_u32; const auto& attribute : info.vertex_attributes) {
+            const auto format = [&]() {
+                switch (attribute) {
+                    case vertex_attribute_t::e_vec1: return VK_FORMAT_R32_SFLOAT;
+                    case vertex_attribute_t::e_vec2: return VK_FORMAT_R32G32_SFLOAT;
+                    case vertex_attribute_t::e_vec3: return VK_FORMAT_R32G32B32_SFLOAT;
+                    case vertex_attribute_t::e_vec4: return VK_FORMAT_R32G32B32A32_SFLOAT;
+                }
+                IR_UNREACHABLE();
+            }();
+            const auto size = as_underlying(attribute);
+            auto attribute_info = VkVertexInputAttributeDescription();
+            attribute_info.binding = 0;
+            attribute_info.location = location++;
+            attribute_info.format = format;
+            attribute_info.offset = vertex_binding_info.stride;
+            vertex_attribute_info.emplace_back(attribute_info);
+            vertex_binding_info.stride += size;
         }
 
         auto vertex_input_info = VkPipelineVertexInputStateCreateInfo();
@@ -469,7 +466,7 @@ namespace ir {
                     return pair.second;
                 });
             if (set >= descriptor_layout.size()) {
-                descriptor_layout.resize(set);
+                descriptor_layout.resize(set + 1);
             }
             descriptor_layout[set] = device.make_descriptor_layout(bindings);
         }
@@ -534,6 +531,7 @@ namespace ir {
         }
 
         pipeline->_type = pipeline_type_t::e_graphics;
+        pipeline->_descriptor_layout = std::move(descriptor_layout);
         pipeline->_device = device.as_intrusive_ptr();
         pipeline->_framebuffer = framebuffer.as_intrusive_ptr();
         return pipeline;
@@ -575,8 +573,18 @@ namespace ir {
         return _info;
     }
 
+    auto pipeline_t::device() noexcept -> device_t& {
+        IR_PROFILE_SCOPED();
+        return *_device;
+    }
+
     auto pipeline_t::framebuffer() const noexcept -> const framebuffer_t& {
         IR_PROFILE_SCOPED();
         return *_framebuffer;
+    }
+
+    auto pipeline_t::render_pass() const noexcept -> const render_pass_t& {
+        IR_PROFILE_SCOPED();
+        return framebuffer().render_pass();
     }
 }

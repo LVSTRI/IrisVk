@@ -2,6 +2,7 @@
 #include <iris/gfx/command_pool.hpp>
 #include <iris/gfx/command_buffer.hpp>
 #include <iris/gfx/pipeline.hpp>
+#include <iris/gfx/descriptor_set.hpp>
 #include <iris/gfx/clear_value.hpp>
 #include <iris/gfx/render_pass.hpp>
 #include <iris/gfx/framebuffer.hpp>
@@ -12,8 +13,8 @@ namespace ir {
 
     command_buffer_t::~command_buffer_t() noexcept {
         IR_PROFILE_SCOPED();
-        vkFreeCommandBuffers(_pool.as_const_ref().device().handle(), _pool->handle(), 1, &_handle);
-        IR_LOG_INFO(_pool.as_const_ref().device().logger(), "command buffer {} destroyed", fmt::ptr(_handle));
+        vkFreeCommandBuffers(pool().device().handle(), pool().handle(), 1, &_handle);
+        IR_LOG_INFO(pool().device().logger(), "command buffer {} destroyed", fmt::ptr(_handle));
     }
 
     auto command_buffer_t::make(
@@ -79,14 +80,14 @@ namespace ir {
         return *_pool;
     }
 
-    auto command_buffer_t::begin() const noexcept -> void {
+    auto command_buffer_t::begin() noexcept -> void {
         IR_PROFILE_SCOPED();
         auto command_buffer_begin_info = VkCommandBufferBeginInfo();
         command_buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         command_buffer_begin_info.pNext = nullptr;
         command_buffer_begin_info.flags = 0;
         command_buffer_begin_info.pInheritanceInfo = nullptr;
-        IR_VULKAN_CHECK(_pool.as_const_ref().device().logger(), vkBeginCommandBuffer(_handle, &command_buffer_begin_info));
+        IR_VULKAN_CHECK(pool().device().logger(), vkBeginCommandBuffer(_handle, &command_buffer_begin_info));
     }
 
     auto command_buffer_t::begin_render_pass(const framebuffer_t& framebuffer, const std::vector<clear_value_t>& clears) noexcept -> void {
@@ -134,6 +135,32 @@ namespace ir {
             }
         }();
         vkCmdBindPipeline(_handle, bind_point, pipeline.handle());
+    }
+
+    auto command_buffer_t::bind_descriptor_set(const descriptor_set_t& set) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto bind_point = [this]() -> VkPipelineBindPoint {
+            switch (_state.pipeline->type()) {
+                case pipeline_type_t::e_graphics: return VK_PIPELINE_BIND_POINT_GRAPHICS;
+                case pipeline_type_t::e_compute: return VK_PIPELINE_BIND_POINT_COMPUTE;
+                case pipeline_type_t::e_ray_tracing: return VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
+            }
+        }();
+        const auto handle = set.handle();
+        vkCmdBindDescriptorSets(
+            _handle,
+            bind_point,
+            _state.pipeline->layout(),
+            set.layout().index(),
+            1,
+            &handle,
+            0,
+            nullptr);
+    }
+
+    auto command_buffer_t::push_constants(shader_stage_t stage, uint32 offset, uint64 size, const void* data) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdPushConstants(_handle, _state.pipeline->layout(), as_enum_counterpart(stage), offset, size, data);
     }
 
     auto command_buffer_t::draw(uint32 vertices, uint32 instances, uint32 first_vertex, uint32 first_instance) const noexcept -> void {
@@ -281,6 +308,6 @@ namespace ir {
 
     auto command_buffer_t::end() const noexcept -> void {
         IR_PROFILE_SCOPED();
-        IR_VULKAN_CHECK(_pool.as_const_ref().device().logger(), vkEndCommandBuffer(_handle));
+        IR_VULKAN_CHECK(pool().device().logger(), vkEndCommandBuffer(_handle));
     }
 }

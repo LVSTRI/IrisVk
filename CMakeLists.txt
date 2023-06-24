@@ -109,10 +109,15 @@ set(IRIS_MAIN_HEADERS
     include/iris/core/types.hpp
     include/iris/core/utilities.hpp
 
+    include/iris/gfx/buffer.hpp
+    include/iris/gfx/cache.hpp
     include/iris/gfx/clear_value.hpp
     include/iris/gfx/command_buffer.hpp
     include/iris/gfx/command_pool.hpp
+    include/iris/gfx/deletion_queue.hpp
     include/iris/gfx/descriptor_layout.hpp
+    include/iris/gfx/descriptor_pool.hpp
+    include/iris/gfx/descriptor_set.hpp
     include/iris/gfx/device.hpp
     include/iris/gfx/fence.hpp
     include/iris/gfx/frame_counter.hpp
@@ -125,6 +130,7 @@ set(IRIS_MAIN_HEADERS
     include/iris/gfx/semaphore.hpp
     include/iris/gfx/swapchain.hpp
 
+    include/iris/wsi/input.hpp
     include/iris/wsi/wsi_platform.hpp
 )
 
@@ -133,7 +139,10 @@ set(IRIS_MAIN_SOURCES
 
     src/iris/gfx/command_buffer.cpp
     src/iris/gfx/command_pool.cpp
+    src/iris/gfx/deletion_queue.cpp
     src/iris/gfx/descriptor_layout.cpp
+    src/iris/gfx/descriptor_pool.cpp
+    src/iris/gfx/descriptor_set.cpp
     src/iris/gfx/device.cpp
     src/iris/gfx/fence.cpp
     src/iris/gfx/frame_counter.cpp
@@ -146,6 +155,7 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/semaphore.cpp
     src/iris/gfx/swapchain.cpp
 
+    src/iris/wsi/input.cpp
     src/iris/wsi/wsi_platform.cpp
 )
 
@@ -214,10 +224,13 @@ endif()
 
 set(IRIS_RENDERER_HEADERS
     include/renderer/core/application.hpp
+    include/renderer/core/camera.hpp
+    include/renderer/core/utilities.hpp
 )
 
 set(IRIS_RENDERER_SOURCES
     src/renderer/core/application.cpp
+    src/renderer/core/camera.cpp
 
     src/main.cpp
 )

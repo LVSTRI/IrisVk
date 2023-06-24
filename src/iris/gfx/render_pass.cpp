@@ -7,8 +7,8 @@ namespace ir {
 
     render_pass_t::~render_pass_t() noexcept {
         IR_PROFILE_SCOPED();
-        IR_LOG_INFO(_device.as_const_ref().logger(), "render pass destroyed");
-        vkDestroyRenderPass(_device.as_const_ref().handle(), _handle, nullptr);
+        IR_LOG_INFO(device().logger(), "render pass destroyed");
+        vkDestroyRenderPass(device().handle(), _handle, nullptr);
     }
 
     auto render_pass_t::make(const device_t& device, const render_pass_create_info_t& info) noexcept -> arc_ptr<self> {

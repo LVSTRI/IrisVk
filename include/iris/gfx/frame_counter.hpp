@@ -23,9 +23,9 @@ namespace ir {
         master_frame_counter_t() noexcept;
         ~master_frame_counter_t() noexcept;
 
-        IR_NODISCARD static auto make(uint32 current = 0) noexcept -> arc_ptr<self>;
+        IR_NODISCARD static auto make(uint64 current = 0) noexcept -> arc_ptr<self>;
 
-        IR_NODISCARD auto current() const noexcept -> uint32;
+        IR_NODISCARD auto current() const noexcept -> uint64;
         IR_NODISCARD auto fork() const noexcept -> frame_counter_t;
 
         auto tick() noexcept -> void;
@@ -49,8 +49,8 @@ namespace ir {
 
         IR_NODISCARD auto master() const noexcept -> const master_frame_counter_t&;
 
-        IR_NODISCARD auto current_absolute() const noexcept -> uint32;
-        IR_NODISCARD auto current_relative() const noexcept -> uint32;
+        IR_NODISCARD auto current_absolute() const noexcept -> uint64;
+        IR_NODISCARD auto current_relative() const noexcept -> uint64;
         auto reset() noexcept -> void;
 
     private:

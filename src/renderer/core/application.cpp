@@ -6,6 +6,10 @@
 #include <iris/gfx/framebuffer.hpp>
 #include <iris/gfx/pipeline.hpp>
 #include <iris/gfx/fence.hpp>
+#include <iris/gfx/buffer.hpp>
+#include <iris/gfx/descriptor_set.hpp>
+#include <iris/gfx/descriptor_pool.hpp>
+#include <iris/gfx/descriptor_layout.hpp>
 #include <iris/gfx/clear_value.hpp>
 #include <iris/gfx/semaphore.hpp>
 #include <iris/gfx/queue.hpp>
@@ -14,8 +18,12 @@
 
 #include <renderer/core/application.hpp>
 
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 namespace app {
-    application_t::application_t() noexcept {
+    application_t::application_t() noexcept
+        : _camera(_platform) {
         IR_PROFILE_SCOPED();
         _platform = ir::wsi_platform_t::make(1280, 720, "Iris");
         _instance = ir::instance_t::make({
@@ -38,7 +46,7 @@ namespace app {
                     .layout = {
                         .final = ir::image_layout_t::e_transfer_src_optimal
                     },
-                    .format = _swapchain.as_const_ref().format(),
+                    .format = swapchain().format(),
                     .load_op = ir::attachment_load_op_t::e_clear,
                     .store_op = ir::attachment_store_op_t::e_store,
                 }, {
@@ -85,14 +93,14 @@ namespace app {
             }
         });
         _main_pass.color = ir::image_t::make_from_attachment(*_device, _main_pass.description.as_const_ref().attachment(0), {
-            .width = _swapchain.as_const_ref().width(),
-            .height = _swapchain.as_const_ref().height(),
+            .width = swapchain().width(),
+            .height = swapchain().height(),
             .usage = ir::image_usage_t::e_color_attachment | ir::image_usage_t::e_transfer_src,
             .view = ir::default_image_view_info,
         });
         _main_pass.depth = ir::image_t::make_from_attachment(*_device, _main_pass.description.as_const_ref().attachment(1), {
-            .width = _swapchain.as_const_ref().width(),
-            .height = _swapchain.as_const_ref().height(),
+            .width = swapchain().width(),
+            .height = swapchain().height(),
             .usage = ir::image_usage_t::e_depth_stencil_attachment,
             .view = ir::default_image_view_info,
         });
@@ -103,7 +111,6 @@ namespace app {
             ir::make_clear_color({ 0.597f, 0.808f, 1.0f, 1.0f }),
             ir::make_clear_depth(0.0f, 0)
         };
-
         _main_pass.main_pipeline = ir::pipeline_t::make(*_device, *_main_pass.framebuffer, {
             .vertex = "../shaders/0.1/main.vert",
             .fragment = "../shaders/0.1/main.frag",
@@ -116,6 +123,11 @@ namespace app {
                 ir::depth_state_flag_t::e_enable_write,
             .depth_compare_op = ir::compare_op_t::e_greater,
             .cull_mode = ir::cull_mode_t::e_none,
+        });
+        _main_pass.camera_buffer = ir::buffer_t<camera_data_t>::make(*_device, frames_in_flight, {
+            .usage = ir::buffer_usage_t::e_uniform_buffer,
+            .flags = ir::buffer_flag_t::e_mapped,
+            .capacity = sizeof(camera_data_t),
         });
 
         _command_pools = ir::command_pool_t::make(*_device, frames_in_flight, {
@@ -131,7 +143,7 @@ namespace app {
     }
 
     application_t::~application_t() noexcept {
-        _device.as_const_ref().wait_idle();
+        device().wait_idle();
     }
 
     auto application_t::run() noexcept -> void {
@@ -144,6 +156,56 @@ namespace app {
         }
     }
 
+    auto application_t::wsi_platform() noexcept -> ir::wsi_platform_t& {
+        IR_PROFILE_SCOPED();
+        return _platform;
+    }
+
+    auto application_t::device() noexcept -> ir::device_t& {
+        IR_PROFILE_SCOPED();
+        return *_device;
+    }
+
+    auto application_t::swapchain() noexcept -> ir::swapchain_t& {
+        IR_PROFILE_SCOPED();
+        return *_swapchain;
+    }
+
+    auto application_t::command_pool(uint32 frame_index) noexcept -> ir::command_pool_t& {
+        IR_PROFILE_SCOPED();
+        return *_command_pools[frame_index == -1 ? _frame_index : frame_index];
+    }
+
+    auto application_t::command_buffer(uint32 frame_index) noexcept -> ir::command_buffer_t& {
+        IR_PROFILE_SCOPED();
+        return *_command_buffers[frame_index == -1 ? _frame_index : frame_index];
+    }
+
+    auto application_t::image_available(uint32 frame_index) noexcept -> ir::semaphore_t& {
+        IR_PROFILE_SCOPED();
+        return *_image_available[frame_index == -1 ? _frame_index : frame_index];
+    }
+
+    auto application_t::render_done(uint32 frame_index) noexcept -> ir::semaphore_t& {
+        IR_PROFILE_SCOPED();
+        return *_render_done[frame_index == -1 ? _frame_index : frame_index];
+    }
+
+    auto application_t::frame_fence(uint32 frame_index) noexcept -> ir::fence_t& {
+        IR_PROFILE_SCOPED();
+        return *_frame_fence[frame_index == -1 ? _frame_index : frame_index];
+    }
+
+    auto application_t::main_pass() noexcept -> main_pass_t& {
+        IR_PROFILE_SCOPED();
+        return _main_pass;
+    }
+
+    auto application_t::camera_buffer(uint32 frame_index) noexcept -> ir::buffer_t<camera_data_t>& {
+        IR_PROFILE_SCOPED();
+        return *_main_pass.camera_buffer[frame_index == -1 ? _frame_index : frame_index];
+    }
+
     auto application_t::_update() noexcept -> void {
         IR_PROFILE_SCOPED();
         ir::wsi_platform_t::poll_events();
@@ -151,28 +213,44 @@ namespace app {
         const auto current_time = ch::steady_clock::now();
         _delta_time = ch::duration<float32>(current_time - _last_time).count();
         _last_time = current_time;
-        _device.as_ref().frame_counter().tick();
+        device().tick();
+        wsi_platform().input().capture();
+        if (wsi_platform().input().is_pressed_once(ir::mouse_t::e_right_button)) {
+            wsi_platform().capture_cursor();
+        }
+        if (wsi_platform().input().is_released_once(ir::mouse_t::e_right_button)) {
+            wsi_platform().release_cursor();
+        }
+        _camera.update(_delta_time);
     }
 
     auto application_t::_render() noexcept -> void {
         IR_PROFILE_SCOPED();
-        const auto& fence = *_frame_fence[_frame_index];
-        const auto& image_semaphore = *_image_available[_frame_index];
-        const auto& render_semaphore = *_render_done[_frame_index];
-        auto& command_buffer = *_command_buffers[_frame_index];
 
-        fence.wait();
-        fence.reset();
-        command_buffer.pool().reset();
-        const auto image_index = _swapchain.as_const_ref().acquire_next_image(image_semaphore);
+        frame_fence().wait();
+        frame_fence().reset();
+        command_buffer().pool().reset();
+        const auto image_index = swapchain().acquire_next_image(image_available());
 
-        command_buffer.begin();
-        command_buffer.begin_render_pass(*_main_pass.framebuffer, _main_pass.clear_values);
-        command_buffer.bind_pipeline(*_main_pass.main_pipeline);
-        command_buffer.draw(3, 1, 0, 0);
-        command_buffer.end_render_pass();
-        command_buffer.image_barrier({
-            .image = std::cref(_swapchain.as_const_ref().image(image_index)),
+        camera_buffer().insert({
+            .projection = _camera.projection(),
+            .view = _camera.view(),
+            .pv = _camera.projection() * _camera.view(),
+            .position = glm::make_vec4(_camera.position()),
+        });
+
+        auto main_set = ir::descriptor_set_builder_t(*main_pass().main_pipeline, 0)
+            .bind_uniform_buffer(0, camera_buffer().slice())
+            .build();
+
+        command_buffer().begin();
+        command_buffer().begin_render_pass(*_main_pass.framebuffer, _main_pass.clear_values);
+        command_buffer().bind_pipeline(*_main_pass.main_pipeline);
+        command_buffer().bind_descriptor_set(*main_set);
+        command_buffer().draw(3, 1, 0, 0);
+        command_buffer().end_render_pass();
+        command_buffer().image_barrier({
+            .image = std::cref(swapchain().image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
             .dest_stage = ir::pipeline_stage_t::e_transfer,
             .source_access = ir::resource_access_t::e_none,
@@ -180,12 +258,12 @@ namespace app {
             .old_layout = ir::image_layout_t::e_undefined,
             .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
         });
-        command_buffer.copy_image({
-            .source = std::cref(_main_pass.color.as_const_ref()),
-            .dest = std::cref(_swapchain.as_const_ref().image(image_index)),
+        command_buffer().copy_image({
+            .source = std::cref(*_main_pass.color),
+            .dest = std::cref(swapchain().image(image_index)),
         });
-        command_buffer.image_barrier({
-            .image = std::cref(_swapchain.as_const_ref().image(image_index)),
+        command_buffer().image_barrier({
+            .image = std::cref(swapchain().image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_transfer,
             .dest_stage = ir::pipeline_stage_t::e_bottom_of_pipe,
             .source_access = ir::resource_access_t::e_transfer_write,
@@ -193,22 +271,22 @@ namespace app {
             .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
             .new_layout = ir::image_layout_t::e_present_src,
         });
-        command_buffer.end();
+        command_buffer().end();
 
-        _device.as_const_ref().graphics_queue().submit({
-            .command_buffers = { std::cref(command_buffer) },
+        device().graphics_queue().submit({
+            .command_buffers = { std::cref(command_buffer()) },
             .wait_semaphores = {
-                { std::cref(image_semaphore), ir::pipeline_stage_t::e_transfer }
+                { std::cref(image_available()), ir::pipeline_stage_t::e_transfer }
             },
             .signal_semaphores = {
-                { std::cref(render_semaphore), ir::pipeline_stage_t::e_transfer }
+                { std::cref(render_done()), ir::pipeline_stage_t::e_bottom_of_pipe }
             },
-        }, &fence);
+        }, &frame_fence());
 
-        _device.as_const_ref().graphics_queue().present({
-            .swapchain = std::cref(_swapchain.as_const_ref()),
+        device().graphics_queue().present({
+            .swapchain = std::cref(swapchain()),
             .wait_semaphores = {
-                std::cref(render_semaphore)
+                std::cref(render_done())
             },
             .image = image_index
         });
