@@ -58,8 +58,8 @@ namespace ir {
         instance_info.ppEnabledLayerNames = &validation_layer_extension;
 
         constexpr auto validation_extensions = std::to_array({
-            VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
-            //VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,
+            //VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+            VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,
             VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
             VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT
         });

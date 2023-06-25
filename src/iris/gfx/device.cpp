@@ -134,6 +134,8 @@ namespace ir {
             }
 
             auto extensions = std::vector<const char*>();
+            extensions.emplace_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
+            extensions.emplace_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
             if (info.features.swapchain) {
                 extensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
             }
@@ -149,6 +151,12 @@ namespace ir {
             features_11.storagePushConstant16 = true;
             features_11.variablePointersStorageBuffer = true;
             features_11.variablePointers = true;
+
+            auto fragment_shading_rate_features = VkPhysicalDeviceFragmentShadingRateFeaturesKHR();
+            fragment_shading_rate_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
+            fragment_shading_rate_features.pNext = nullptr;
+            fragment_shading_rate_features.pipelineFragmentShadingRate = true;
+            append_extension_chain(features_11, &fragment_shading_rate_features);
 
             auto mesh_shader_features = VkPhysicalDeviceMeshShaderFeaturesEXT();
             mesh_shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;

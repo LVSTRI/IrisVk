@@ -42,77 +42,23 @@ namespace app {
             .vsync = true
         });
         _main_pass.description = ir::render_pass_t::make(*_device, {
-            .attachments = {
-                {
-                    .layout = {
-                        .final = ir::image_layout_t::e_transfer_src_optimal
-                    },
-                    .format = swapchain().format(),
-                    .load_op = ir::attachment_load_op_t::e_clear,
-                    .store_op = ir::attachment_store_op_t::e_store,
-                }, {
-                    .layout = {
-                        .final = ir::image_layout_t::e_depth_stencil_attachment_optimal
-                    },
-                    .format = ir::resource_format_t::e_d32_sfloat,
-                    .load_op = ir::attachment_load_op_t::e_clear,
-                    .store_op = ir::attachment_store_op_t::e_store,
-                }
-            },
-            .subpasses = {
-                {
-                    .color_attachments = { 0 },
-                    .depth_stencil_attachment = 1
-                }
-            },
-            .dependencies = {
-                {
-                    .source = ir::external_subpass,
-                    .dest = 0,
-                    .source_stage =
-                        ir::pipeline_stage_t::e_color_attachment_output |
-                        ir::pipeline_stage_t::e_early_fragment_tests,
-                    .dest_stage =
-                        ir::pipeline_stage_t::e_color_attachment_output |
-                        ir::pipeline_stage_t::e_early_fragment_tests,
-                    .source_access = ir::resource_access_t::e_none,
-                    .dest_access =
-                        ir::resource_access_t::e_color_attachment_write |
-                        ir::resource_access_t::e_depth_stencil_attachment_write
-                }, {
-                    .source = 0,
-                    .dest = ir::external_subpass,
-                    .source_stage =
-                        ir::pipeline_stage_t::e_color_attachment_output |
-                        ir::pipeline_stage_t::e_early_fragment_tests,
-                    .dest_stage = ir::pipeline_stage_t::e_transfer,
-                    .source_access =
-                        ir::resource_access_t::e_color_attachment_write |
-                        ir::resource_access_t::e_depth_stencil_attachment_write,
-                    .dest_access = ir::resource_access_t::e_transfer_read
-                }
-            }
-        });
-        _main_pass.color = ir::image_t::make_from_attachment(*_device, _main_pass.description.as_const_ref().attachment(0), {
-            .width = swapchain().width(),
-            .height = swapchain().height(),
-            .usage = ir::image_usage_t::e_color_attachment | ir::image_usage_t::e_transfer_src,
-            .view = ir::default_image_view_info,
-        });
-        _main_pass.depth = ir::image_t::make_from_attachment(*_device, _main_pass.description.as_const_ref().attachment(1), {
-            .width = swapchain().width(),
-            .height = swapchain().height(),
-            .usage = ir::image_usage_t::e_depth_stencil_attachment,
-            .view = ir::default_image_view_info,
+            .attachments = {},
+            .subpasses = { ir::subpass_info_t() },
+            .dependencies = {}
         });
         _main_pass.framebuffer = ir::framebuffer_t::make(*_main_pass.description, {
-            .attachments = { _main_pass.color, _main_pass.depth },
+            .width = swapchain().width(),
+            .height = swapchain().height(),
+            .layers = 1
         });
-        _main_pass.clear_values = {
-            ir::make_clear_color({ 0.597f, 0.808f, 1.0f, 1.0f }),
-            ir::make_clear_depth(0.0f, 0)
-        };
-        _main_pass.main_pipeline = ir::pipeline_t::make(*_device, *_main_pass.framebuffer, {
+        _main_pass.visbuffer = ir::image_t::make(*_device, {
+            .width = swapchain().width(),
+            .height = swapchain().height(),
+            .usage = ir::image_usage_t::e_storage | ir::image_usage_t::e_transfer_dst,
+            .format = ir::resource_format_t::e_r64_uint,
+            .view = ir::default_image_view_info,
+        });
+        _main_pass.pipeline = ir::pipeline_t::make(*_device, *_main_pass.framebuffer, {
             .mesh = "../shaders/0.1/main.mesh.glsl",
             .fragment = "../shaders/0.1/main.frag",
             .blend = {
@@ -132,6 +78,76 @@ namespace app {
             .usage = ir::buffer_usage_t::e_uniform_buffer,
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = 1,
+        });
+
+        _final_pass.description = ir::render_pass_t::make(*_device, {
+            .attachments = {
+                {
+                    .layout = {
+                        .final = ir::image_layout_t::e_transfer_src_optimal
+                    },
+                    .format = swapchain().format(),
+                    .load_op = ir::attachment_load_op_t::e_clear,
+                    .store_op = ir::attachment_store_op_t::e_store,
+                }
+            },
+            .subpasses = {
+                {
+                    .color_attachments = { 0 }
+                }
+            },
+            .dependencies = {
+                {
+                    .source = ir::external_subpass,
+                    .dest = 0,
+                    .source_stage =
+                        ir::pipeline_stage_t::e_color_attachment_output,
+                    .dest_stage =
+                        ir::pipeline_stage_t::e_color_attachment_output,
+                    .source_access = ir::resource_access_t::e_none,
+                    .dest_access =
+                        ir::resource_access_t::e_color_attachment_write
+                }, {
+                    .source = 0,
+                    .dest = ir::external_subpass,
+                    .source_stage =
+                        ir::pipeline_stage_t::e_color_attachment_output,
+                    .dest_stage = ir::pipeline_stage_t::e_transfer,
+                    .source_access =
+                        ir::resource_access_t::e_color_attachment_write,
+                    .dest_access = ir::resource_access_t::e_transfer_read
+                }
+            }
+        });
+        _final_pass.color = ir::image_t::make_from_attachment(*_device, _final_pass.description.as_const_ref().attachment(0), {
+            .width = swapchain().width(),
+            .height = swapchain().height(),
+            .usage =
+                ir::image_usage_t::e_color_attachment |
+                ir::image_usage_t::e_transfer_src,
+            .view = ir::default_image_view_info,
+        });
+        _final_pass.framebuffer = ir::framebuffer_t::make(*_final_pass.description, {
+            .attachments = {
+                _final_pass.color
+            },
+            .width = swapchain().width(),
+            .height = swapchain().height(),
+            .layers = 1,
+        });
+        _final_pass.clear_values = {
+            ir::make_clear_color({ 0.597f, 0.808f, 1.0f, 1.0f })
+        };
+        _final_pass.pipeline = ir::pipeline_t::make(*_device, *_final_pass.framebuffer, {
+            .vertex = "../shaders/0.1/final.vert",
+            .fragment = "../shaders/0.1/final.frag",
+            .blend = {
+                ir::attachment_blend_t::e_disabled
+            },
+            .dynamic_states = {
+                ir::dynamic_state_t::e_viewport,
+                ir::dynamic_state_t::e_scissor
+            },
         });
 
         {
@@ -263,8 +279,9 @@ namespace app {
             .position = glm::make_vec4(_camera.position()),
         });
 
-        auto main_set = ir::descriptor_set_builder_t(*_main_pass.main_pipeline, 0)
+        auto main_set = ir::descriptor_set_builder_t(*_main_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
+            .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
             .build();
 
         auto constants = std::to_array({
@@ -276,8 +293,27 @@ namespace app {
         });
 
         command_buffer().begin();
-        command_buffer().begin_render_pass(*_main_pass.framebuffer, _main_pass.clear_values);
-        command_buffer().bind_pipeline(*_main_pass.main_pipeline);
+        command_buffer().image_barrier({
+            .image = std::cref(*_main_pass.visbuffer),
+            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_transfer_write,
+            .old_layout = ir::image_layout_t::e_undefined,
+            .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
+        });
+        command_buffer().clear_image(*_main_pass.visbuffer, ir::make_clear_color({ 0_u32 }), {});
+        command_buffer().image_barrier({
+            .image = std::cref(*_main_pass.visbuffer),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_write,
+            .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
+            .new_layout = ir::image_layout_t::e_general,
+        });
+        command_buffer().begin_render_pass(*_main_pass.framebuffer, {});
+        command_buffer().bind_pipeline(*_main_pass.pipeline);
         command_buffer().set_viewport({
             .width = static_cast<float32>(swapchain().width()),
             .height = static_cast<float32>(swapchain().height()),
@@ -290,6 +326,36 @@ namespace app {
         command_buffer().push_constants(ir::shader_stage_t::e_mesh, 0, ir::size_bytes(constants), constants.data());
         command_buffer().draw_mesh_tasks(_main_pass.meshlets.as_const_ref().size());
         command_buffer().end_render_pass();
+
+        command_buffer().image_barrier({
+            .image = std::cref(*_main_pass.visbuffer),
+            .source_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read,
+            .old_layout = ir::image_layout_t::e_general,
+            .new_layout = ir::image_layout_t::e_general,
+        });
+
+        auto final_set = ir::descriptor_set_builder_t(*_final_pass.pipeline, 0)
+            .bind_uniform_buffer(0, camera_buffer().slice())
+            .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
+            .build();
+
+        command_buffer().begin_render_pass(*_final_pass.framebuffer, _final_pass.clear_values);
+        command_buffer().bind_pipeline(*_final_pass.pipeline);
+        command_buffer().set_viewport({
+            .width = static_cast<float32>(swapchain().width()),
+            .height = static_cast<float32>(swapchain().height()),
+        });
+        command_buffer().set_scissor({
+            .width = swapchain().width(),
+            .height = swapchain().height(),
+        });
+        command_buffer().bind_descriptor_set(*final_set);
+        command_buffer().push_constants(ir::shader_stage_t::e_fragment, 0, ir::size_bytes(constants), constants.data());
+        command_buffer().draw(3, 1, 0, 0);
+        command_buffer().end_render_pass();
         command_buffer().image_barrier({
             .image = std::cref(swapchain().image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
@@ -300,7 +366,7 @@ namespace app {
             .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
         });
         command_buffer().copy_image(
-            std::cref(*_main_pass.color),
+            std::cref(*_final_pass.color),
             std::cref(swapchain().image(image_index)),
             {});
         command_buffer().image_barrier({

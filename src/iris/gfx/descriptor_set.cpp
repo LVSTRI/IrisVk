@@ -1,6 +1,7 @@
 #include <iris/core/hash.hpp>
 
 #include <iris/gfx/device.hpp>
+#include <iris/gfx/image.hpp>
 #include <iris/gfx/pipeline.hpp>
 #include <iris/gfx/descriptor_set.hpp>
 #include <iris/gfx/descriptor_pool.hpp>
@@ -103,6 +104,21 @@ namespace ir {
             .binding = binding,
             .type = descriptor_type_t::e_storage_buffer,
             .contents = { buffer }
+        });
+        return *this;
+    }
+
+    auto descriptor_set_builder_t::bind_storage_image(uint32 binding, const image_view_t& view) noexcept -> descriptor_set_builder_t::self& {
+        IR_PROFILE_SCOPED();
+        _binding.bindings.emplace_back(descriptor_content_t {
+            .binding = binding,
+            .type = descriptor_type_t::e_storage_image,
+            .contents = {
+                image_info_t {
+                    .view = view.handle(),
+                    .layout = image_layout_t::e_general
+                }
+            }
         });
         return *this;
     }

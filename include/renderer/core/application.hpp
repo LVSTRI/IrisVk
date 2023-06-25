@@ -30,12 +30,10 @@ namespace app {
 
     struct main_pass_t {
         ir::arc_ptr<ir::render_pass_t> description;
-        ir::arc_ptr<ir::image_t> color;
-        ir::arc_ptr<ir::image_t> depth;
         ir::arc_ptr<ir::framebuffer_t> framebuffer;
-        std::vector<ir::clear_value_t> clear_values;
+        ir::arc_ptr<ir::image_t> visbuffer;
 
-        ir::arc_ptr<ir::pipeline_t> main_pipeline;
+        ir::arc_ptr<ir::pipeline_t> pipeline;
 
         ir::arc_ptr<ir::buffer_t<meshlet_glsl_t>> meshlets;
         ir::arc_ptr<ir::buffer_t<meshlet_vertex_format_t>> vertices;
@@ -44,6 +42,16 @@ namespace app {
         ir::arc_ptr<ir::buffer_t<glm::mat4>> transforms;
 
         std::vector<ir::arc_ptr<ir::buffer_t<camera_data_t>>> camera_buffer;
+    };
+
+    struct final_pass_t {
+        ir::arc_ptr<ir::render_pass_t> description;
+        ir::arc_ptr<ir::framebuffer_t> framebuffer;
+        ir::arc_ptr<ir::image_t> color;
+        std::vector<ir::clear_value_t> clear_values;
+
+        ir::arc_ptr<ir::pipeline_t> pipeline;
+
    };
 
     class application_t {
@@ -83,6 +91,7 @@ namespace app {
 
         camera_t _camera;
         main_pass_t _main_pass;
+        final_pass_t _final_pass;
 
         ch::steady_clock::time_point _last_time = {};
         float32 _delta_time = 0.0_f32;

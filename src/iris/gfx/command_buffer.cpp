@@ -214,6 +214,37 @@ namespace ir {
         vkCmdEndRenderPass(_handle);
     }
 
+    auto command_buffer_t::clear_image(const image_t& image, const clear_value_t& clear, const image_subresource_t& subresource) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        IR_ASSERT(clear.type() == clear_value_type_t::e_color, "clear_image: color only");
+        auto clear_value = VkClearColorValue();
+        std::memcpy(&clear_value, as_const_ptr(clear.color()), sizeof(clear.color()));
+        auto subresource_range = VkImageSubresourceRange();
+        subresource_range.aspectMask = as_enum_counterpart(image.view().aspect());
+        if (subresource.level != level_ignored) {
+            subresource_range.baseMipLevel = subresource.level;
+            subresource_range.levelCount = subresource.level_count;
+        } else {
+            subresource_range.baseMipLevel = 0;
+            subresource_range.levelCount = image.levels();
+        }
+        if (subresource.layer != layer_ignored) {
+            subresource_range.baseArrayLayer = subresource.layer;
+            subresource_range.layerCount = subresource.layer_count;
+        } else {
+            subresource_range.baseArrayLayer = 0;
+            subresource_range.layerCount = image.layers();
+        }
+
+        vkCmdClearColorImage(
+            _handle,
+            image.handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            &clear_value,
+            1,
+            &subresource_range);
+    }
+
     auto command_buffer_t::copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void {
         IR_PROFILE_SCOPED();
         auto copy_region = VkImageCopy();

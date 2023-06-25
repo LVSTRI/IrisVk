@@ -117,15 +117,15 @@ namespace ir {
         swap(lhs._type, rhs._type);
     }
 
-    IR_CONSTEXPR auto make_clear_color(const float32 (&color)[4]) noexcept -> clear_color_t {
+    IR_CONSTEXPR auto make_clear_color(const float32(&color)[4]) noexcept -> clear_color_t {
         return { .f32 = {color[0], color[1], color[2], color[3] } };
     }
 
-    IR_CONSTEXPR auto make_clear_color(const int32 (&color)[4]) noexcept -> clear_color_t {
+    IR_CONSTEXPR auto make_clear_color(const int32(&color)[4]) noexcept -> clear_color_t {
         return { .i32 = {color[0], color[1], color[2], color[3] } };
     }
 
-    IR_CONSTEXPR auto make_clear_color(const uint32 (&color)[4]) noexcept -> clear_color_t {
+    IR_CONSTEXPR auto make_clear_color(const uint32(&color)[4]) noexcept -> clear_color_t {
         return { .u32 = {color[0], color[1], color[2], color[3] } };
     }
 

@@ -19,7 +19,9 @@
 namespace ir {
     struct framebuffer_create_info_t {
         std::vector<arc_ptr<const image_t>> attachments = {};
-        // TODO
+        uint32 width = 0;
+        uint32 height = 0;
+        uint32 layers = 1;
     };
 
     class framebuffer_t : public enable_intrusive_refcount_t<framebuffer_t> {
@@ -43,9 +45,6 @@ namespace ir {
 
     private:
         VkFramebuffer _handle = {};
-        uint32 _width = 0;
-        uint32 _height = 0;
-        uint32 _layers = 0;
 
         framebuffer_create_info_t _info = {};
         arc_ptr<const render_pass_t> _render_pass;

@@ -103,6 +103,7 @@ namespace ir {
         auto draw_indexed(uint32 indices, uint32 instances, uint32 first_index, int32 vertex_offset, uint32 first_instance) const noexcept -> void;
         auto draw_mesh_tasks(uint32 x = 1, uint32 y = 1, uint32 z = 1) const noexcept -> void;
         auto end_render_pass() noexcept -> void;
+        auto clear_image(const image_t& image, const clear_value_t& clear, const image_subresource_t& subresource) const noexcept -> void;
         auto copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void;
         auto copy_buffer(const buffer_info_t& source, const buffer_info_t& dest, const buffer_copy_t& copy) const noexcept -> void;
         auto memory_barrier(const memory_barrier_t& barrier) const noexcept -> void;

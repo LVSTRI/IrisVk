@@ -3,30 +3,10 @@
 #extension GL_EXT_mesh_shader : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_buffer_reference : enable
+#extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_shader_explicit_arithmetic_types : enable
 
-struct camera_data_t {
-    mat4 projection;
-    mat4 view;
-    mat4 pv;
-    vec4 position;
-};
-
-struct meshlet_glsl_t {
-    uint vertex_offset;
-    uint index_offset;
-    uint primitive_offset;
-    uint index_count;
-    uint primitive_count;
-    uint group_id;
-};
-
-struct vertex_format_t {
-    float[3] position;
-    float[3] normal;
-    float[2] uv;
-    float[4] tangent;
-};
+#include "common.glsl"
 
 #define LOCAL_THREAD_COUNT 64
 #define MAX_VERTICES 64
@@ -38,8 +18,6 @@ layout (triangles, max_vertices = MAX_VERTICES, max_primitives = MAX_PRIMITIVES)
 
 layout (location = 0) out o_vertex_data_block {
     flat uint meshlet_id;
-    flat uint group_id;
-    vec3 normal;
 } o_vertex_data[];
 
 layout (set = 0, binding = 0) uniform u_camera_block {
@@ -74,10 +52,8 @@ layout (push_constant) uniform pc_address_block {
     uint64_t transforms_address;
 };
 
-const vec3[] colors = vec3[](vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, 1.0));
-
 void main() {
-    const uint meshlet_index = gl_WorkGroupID.x;
+    const uint meshlet_id = gl_WorkGroupID.x;
     const uint thread_index = gl_LocalInvocationID.x;
 
     restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
@@ -86,7 +62,7 @@ void main() {
     restrict b_primitive_buffer primitive_ptr = b_primitive_buffer(primitive_address);
     restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
 
-    const meshlet_glsl_t meshlet = meshlet_ptr.data[meshlet_index];
+    const meshlet_glsl_t meshlet = meshlet_ptr.data[meshlet_id];
     const uint vertex_offset = meshlet.vertex_offset;
     const uint index_offset = meshlet.index_offset;
     const uint primitive_offset = meshlet.primitive_offset;
@@ -103,12 +79,7 @@ void main() {
         const mat4 transform = transform_ptr.data[group_id];
 
         gl_MeshVerticesEXT[thread_index].gl_Position = u_camera.data.pv * transform * vec4(position, 1.0);
-        o_vertex_data[thread_index].meshlet_id = meshlet_index;
-        o_vertex_data[thread_index].group_id = group_id;
-        o_vertex_data[thread_index].normal = mat3(transform) * vec3(
-            vertex.normal[0],
-            vertex.normal[1],
-            vertex.normal[2]);
+        o_vertex_data[thread_index].meshlet_id = meshlet_id;
     }
 
     // gl_PrimitiveTriangleIndicesEXT
