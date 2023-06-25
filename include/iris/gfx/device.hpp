@@ -24,6 +24,7 @@
 namespace ir {
     struct device_features_t {
         bool swapchain = false;
+        bool mesh_shader = false;
     };
 
     struct device_create_info_t {
@@ -52,8 +53,11 @@ namespace ir {
         IR_NODISCARD auto properties() const noexcept -> const VkPhysicalDeviceProperties&;
         IR_NODISCARD auto memory_properties() const noexcept -> const VkPhysicalDeviceMemoryProperties&;
 
+        IR_NODISCARD auto graphics_queue() noexcept -> queue_t&;
         IR_NODISCARD auto graphics_queue() const noexcept -> const queue_t&;
+        IR_NODISCARD auto compute_queue() noexcept -> queue_t&;
         IR_NODISCARD auto compute_queue() const noexcept -> const queue_t&;
+        IR_NODISCARD auto transfer_queue() noexcept -> queue_t&;
         IR_NODISCARD auto transfer_queue() const noexcept -> const queue_t&;
 
         IR_NODISCARD auto descriptor_pool() const noexcept -> const descriptor_pool_t&;

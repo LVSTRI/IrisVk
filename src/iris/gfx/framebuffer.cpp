@@ -14,7 +14,7 @@ namespace ir {
 
     auto framebuffer_t::make(const render_pass_t& render_pass, const framebuffer_create_info_t& info) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto framebuffer = ir::arc_ptr<self>(new self());
+        auto framebuffer = arc_ptr<self>(new self());
 
         auto attachments = std::vector<VkImageView>();
         attachments.reserve(info.attachments.size());

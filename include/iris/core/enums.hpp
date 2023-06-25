@@ -52,6 +52,7 @@ namespace ir {
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(pipeline_bind_point_t, VkPipelineBindPoint);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(command_pool_flag_t, VkCommandPoolCreateFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(compare_op_t, VkCompareOp);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(index_type_t, VkIndexType);
 
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSampleCountFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageUsageFlagBits);
@@ -71,7 +72,7 @@ namespace ir {
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkPipelineBindPoint);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCommandPoolCreateFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCompareOp);
-
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkIndexType);
 
 #undef IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION
 #undef IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION
@@ -800,6 +801,14 @@ namespace ir {
         e_not_equal = VK_COMPARE_OP_NOT_EQUAL,
         e_greater_or_equal = VK_COMPARE_OP_GREATER_OR_EQUAL,
         e_always = VK_COMPARE_OP_ALWAYS,
+    };
+
+    // VkIndexType
+    enum class index_type_t : std::underlying_type_t<VkIndexType> {
+        e_uint16 = VK_INDEX_TYPE_UINT16,
+        e_uint32 = VK_INDEX_TYPE_UINT32,
+        e_none_nv = VK_INDEX_TYPE_NONE_NV,
+        e_uint8 = VK_INDEX_TYPE_UINT8_EXT,
     };
 
     // constants

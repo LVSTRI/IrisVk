@@ -39,7 +39,7 @@ namespace ir {
         buffer_usage_t usage = {};
         memory_properties_t memory = {};
         buffer_flag_t flags = {};
-        uint32 capacity = 0;
+        uint64 capacity = 0;
     };
 
     template <typename T>
@@ -69,7 +69,7 @@ namespace ir {
         IR_NODISCARD auto data() noexcept -> T*;
         IR_NODISCARD auto data() const noexcept -> const T*;
 
-        IR_NODISCARD auto slice(uint64 offset = 0, uint64 size = whole_size) noexcept -> buffer_info_t;
+        IR_NODISCARD auto slice(uint64 offset = 0, uint64 size = whole_size) const noexcept -> buffer_info_t;
         IR_NODISCARD auto info() const noexcept -> const buffer_create_info_t&;
         IR_NODISCARD auto device() const noexcept -> const device_t&;
 
@@ -118,6 +118,36 @@ namespace ir {
         buffer_create_info_t _info = {};
         arc_ptr<const device_t> _device;
     };
+
+    template <typename T>
+    auto upload_buffer(device_t& device, std::span<const T> data, const buffer_create_info_t& info) noexcept -> arc_ptr<buffer_t<T>> {
+        IR_PROFILE_SCOPED();
+        auto staging = buffer_t<T>::make(device, {
+            .usage = buffer_usage_t::e_transfer_src,
+            .flags = buffer_flag_t::e_mapped,
+            .capacity = data.size(),
+        });
+        auto upload = buffer_t<T>::make(device, {
+            .usage = buffer_usage_t::e_transfer_dst | info.usage,
+            .memory = info.memory,
+            .flags = info.flags,
+            .capacity = data.size(),
+        });
+        upload.as_ref().resize(data.size());
+        staging.as_ref().insert(data);
+        const auto& pool = device.transfer_queue().transient_pool(0);
+        auto command_buffer = command_buffer_t::make(pool, {});
+        auto& commands = *command_buffer;
+        commands.begin();
+        commands.copy_buffer(staging.as_const_ref().slice(), upload.as_const_ref().slice(), {});
+        commands.end();
+        auto fence = fence_t::make(device, false);
+        device.transfer_queue().submit({
+            .command_buffers = { std::cref(commands) }
+        }, fence.get());
+        fence.as_const_ref().wait();
+        return upload;
+    }
 
     template <typename T>
     buffer_t<T>::buffer_t() noexcept = default;
@@ -220,9 +250,16 @@ namespace ir {
     }
 
     template <typename T>
-    auto buffer_t<T>::slice(uint64 offset, uint64 size) noexcept -> buffer_info_t {
+    auto buffer_t<T>::slice(uint64 offset, uint64 size) const noexcept -> buffer_info_t {
         IR_PROFILE_SCOPED();
-        return buffer_info_t { _handle, offset, size, _address };
+        return buffer_info_t {
+            _handle,
+            offset * sizeof(T),
+            size == whole_size ?
+                size_bytes() :
+                size * sizeof(T),
+            _address
+        };
     }
 
     template <typename T>

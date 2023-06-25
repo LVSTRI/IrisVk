@@ -21,7 +21,7 @@ namespace ir {
         const command_pool_t& pool,
         const command_buffer_create_info_t& info
     ) noexcept -> arc_ptr<self> {
-        auto command_buffer = ir::arc_ptr<self>(new self());
+        auto command_buffer = arc_ptr<self>(new self());
         auto command_buffer_info = VkCommandBufferAllocateInfo();
         command_buffer_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         command_buffer_info.pNext = nullptr;
@@ -178,6 +178,16 @@ namespace ir {
             nullptr);
     }
 
+    auto command_buffer_t::bind_vertex_buffer(const buffer_info_t& buffer) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdBindVertexBuffers(_handle, 0, 1, &buffer.handle, &buffer.offset);
+    }
+
+    auto command_buffer_t::bind_index_buffer(const buffer_info_t& buffer, index_type_t type) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdBindIndexBuffer(_handle, buffer.handle, buffer.offset, static_cast<VkIndexType>(as_enum_counterpart(type)));
+    }
+
     auto command_buffer_t::push_constants(shader_stage_t stage, uint32 offset, uint64 size, const void* data) const noexcept -> void {
         IR_PROFILE_SCOPED();
         vkCmdPushConstants(_handle, _state.pipeline->layout(), as_enum_counterpart(stage), offset, size, data);
@@ -188,16 +198,24 @@ namespace ir {
         vkCmdDraw(_handle, vertices, instances, first_vertex, first_instance);
     }
 
+    auto command_buffer_t::draw_indexed(uint32 indices, uint32 instances, uint32 first_index, int32 vertex_offset, uint32 first_instance) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdDrawIndexed(_handle, indices, instances, first_index, vertex_offset, first_instance);
+    }
+
+    auto command_buffer_t::draw_mesh_tasks(uint32 x, uint32 y, uint32 z) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdDrawMeshTasksEXT(_handle, x, y, z);
+    }
+
     auto command_buffer_t::end_render_pass() noexcept -> void {
         IR_PROFILE_SCOPED();
         _state.framebuffer = nullptr;
         vkCmdEndRenderPass(_handle);
     }
 
-    auto command_buffer_t::copy_image(const image_copy_t& copy) const noexcept -> void {
+    auto command_buffer_t::copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void {
         IR_PROFILE_SCOPED();
-        const auto& source = copy.source.get();
-        const auto& dest = copy.dest.get();
         auto copy_region = VkImageCopy();
         copy_region.srcSubresource.aspectMask = as_enum_counterpart(source.view().aspect());
         if (copy.source_subresource.level != level_ignored) {
@@ -265,6 +283,19 @@ namespace ir {
             1,
             &copy_region
         );
+    }
+
+    auto command_buffer_t::copy_buffer(
+        const buffer_info_t& source,
+        const buffer_info_t& dest,
+        const buffer_copy_t& copy
+    ) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto copy_region = VkBufferCopy();
+        copy_region.srcOffset = copy.source_offset;
+        copy_region.dstOffset = copy.dest_offset;
+        copy_region.size = source.size;
+        vkCmdCopyBuffer(_handle, source.handle, dest.handle, 1, &copy_region);
     }
 
     auto command_buffer_t::memory_barrier(const memory_barrier_t& barrier) const noexcept -> void {

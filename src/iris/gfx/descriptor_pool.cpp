@@ -34,7 +34,7 @@ namespace ir {
 
     auto descriptor_pool_t::make(device_t& device, const akl::fast_hash_map<descriptor_type_t, uint32>& size) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto pool = ir::arc_ptr<self>(new self(device));
+        auto pool = arc_ptr<self>(new self(device));
         auto pool_sizes = std::vector<VkDescriptorPoolSize>();
         pool_sizes.reserve(16);
         for (const auto& [type, count] : size) {

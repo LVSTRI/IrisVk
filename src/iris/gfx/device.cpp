@@ -8,6 +8,13 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace ir {
+    template <typename T, typename U>
+    static auto append_extension_chain(T& self, U* next) noexcept -> void {
+        auto* old = self.pNext;
+        self.pNext = next;
+        next->pNext = old;
+    }
+
     device_t::device_t() noexcept = default;
 
     device_t::~device_t() noexcept {
@@ -130,19 +137,34 @@ namespace ir {
             if (info.features.swapchain) {
                 extensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
             }
+            if (info.features.mesh_shader) {
+                extensions.emplace_back(VK_EXT_MESH_SHADER_EXTENSION_NAME);
+            }
 
-            auto image64_atomics_features = VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT();
-            image64_atomics_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
-            image64_atomics_features.pNext = nullptr;
-            image64_atomics_features.shaderImageInt64Atomics = true;
             auto features_11 = VkPhysicalDeviceVulkan11Features();
             features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
-            features_11.pNext = &image64_atomics_features;
+            features_11.pNext = nullptr;
             features_11.storageBuffer16BitAccess = true;
             features_11.uniformAndStorageBuffer16BitAccess = true;
             features_11.storagePushConstant16 = true;
             features_11.variablePointersStorageBuffer = true;
             features_11.variablePointers = true;
+
+            auto mesh_shader_features = VkPhysicalDeviceMeshShaderFeaturesEXT();
+            mesh_shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+            mesh_shader_features.pNext = nullptr;
+            mesh_shader_features.meshShader = true;
+            mesh_shader_features.taskShader = true;
+            if (info.features.mesh_shader) {
+                append_extension_chain(features_11, &mesh_shader_features);
+            }
+
+            auto image64_atomics_features = VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT();
+            image64_atomics_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
+            image64_atomics_features.pNext = nullptr;
+            image64_atomics_features.shaderImageInt64Atomics = true;
+            append_extension_chain(features_11, &image64_atomics_features);
+
             auto features_12 = VkPhysicalDeviceVulkan12Features();
             features_12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
             features_12.pNext = &features_11;
@@ -208,6 +230,7 @@ namespace ir {
             features2.features.imageCubeArray = true;
             features2.features.independentBlend = true;
             features2.features.sampleRateShading = true;
+            features2.features.geometryShader = true;
             features2.features.multiDrawIndirect = true;
             features2.features.depthClamp = true;
             features2.features.depthBiasClamp = true;
@@ -292,7 +315,7 @@ namespace ir {
             IR_LOG_INFO(logger, "main allocator initialized");
         }
 
-        device->_frame_counter = ir::master_frame_counter_t::make();
+        device->_frame_counter = master_frame_counter_t::make();
 
         device->_info = info;
         device->_instance = instance.as_intrusive_ptr();
@@ -328,14 +351,29 @@ namespace ir {
         return _memory_properties.memoryProperties;
     }
 
+    auto device_t::graphics_queue() noexcept -> queue_t& {
+        IR_PROFILE_SCOPED();
+        return *_graphics;
+    }
+
     auto device_t::graphics_queue() const noexcept -> const queue_t& {
         IR_PROFILE_SCOPED();
         return *_graphics;
     }
 
+    auto device_t::compute_queue() noexcept -> queue_t& {
+        IR_PROFILE_SCOPED();
+        return *_compute;
+    }
+
     auto device_t::compute_queue() const noexcept -> const queue_t& {
         IR_PROFILE_SCOPED();
         return *_compute;
+    }
+
+    auto device_t::transfer_queue() noexcept -> queue_t& {
+        IR_PROFILE_SCOPED();
+        return *_transfer;
     }
 
     auto device_t::transfer_queue() const noexcept -> const queue_t& {
@@ -433,5 +471,6 @@ namespace ir {
         frame_counter().tick();
         deletion_queue().tick();
         _descriptor_layouts.tick();
+        _descriptor_sets.tick();
     }
 }

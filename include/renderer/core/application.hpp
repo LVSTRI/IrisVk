@@ -2,6 +2,7 @@
 
 #include <renderer/core/camera.hpp>
 #include <renderer/core/utilities.hpp>
+#include <renderer/core/model.hpp>
 
 #include <iris/core/forwards.hpp>
 #include <iris/core/intrusive_atomic_ptr.hpp>
@@ -18,6 +19,15 @@ namespace app {
         glm::vec4 position = {};
     };
 
+    struct meshlet_glsl_t {
+        uint32 vertex_offset = 0;
+        uint32 index_offset = 0;
+        uint32 primitive_offset = 0;
+        uint32 index_count = 0;
+        uint32 primitive_count = 0;
+        uint32 group_id = 0;
+    };
+
     struct main_pass_t {
         ir::arc_ptr<ir::render_pass_t> description;
         ir::arc_ptr<ir::image_t> color;
@@ -26,6 +36,12 @@ namespace app {
         std::vector<ir::clear_value_t> clear_values;
 
         ir::arc_ptr<ir::pipeline_t> main_pipeline;
+
+        ir::arc_ptr<ir::buffer_t<meshlet_glsl_t>> meshlets;
+        ir::arc_ptr<ir::buffer_t<meshlet_vertex_format_t>> vertices;
+        ir::arc_ptr<ir::buffer_t<uint32>> indices;
+        ir::arc_ptr<ir::buffer_t<uint8>> primitives;
+        ir::arc_ptr<ir::buffer_t<glm::mat4>> transforms;
 
         std::vector<ir::arc_ptr<ir::buffer_t<camera_data_t>>> camera_buffer;
    };
@@ -49,7 +65,6 @@ namespace app {
         auto render_done(uint32 frame_index = -1) noexcept -> ir::semaphore_t&;
         auto frame_fence(uint32 frame_index = -1) noexcept -> ir::fence_t&;
 
-        auto main_pass() noexcept -> main_pass_t&;
         auto camera_buffer(uint32 frame_index = -1) noexcept -> ir::buffer_t<camera_data_t>&;
 
     private:

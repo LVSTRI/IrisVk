@@ -12,7 +12,7 @@ namespace ir {
 
     auto fence_t::make(const device_t& device, bool signaled) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto fence = ir::arc_ptr<self>(new self());
+        auto fence = arc_ptr<self>(new self());
         auto fence_info = VkFenceCreateInfo();
         fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fence_info.pNext = nullptr;

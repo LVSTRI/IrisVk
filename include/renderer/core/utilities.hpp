@@ -10,6 +10,7 @@
 namespace app {
     using namespace ir::literals;
     using namespace ir::types;
+    namespace fs = std::filesystem;
 
     namespace ch = std::chrono;
 

@@ -12,7 +12,7 @@ namespace ir {
 
     auto semaphore_t::make(const device_t& device) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto semaphore = ir::arc_ptr<self>(new self());
+        auto semaphore = arc_ptr<self>(new self());
         auto semaphore_info = VkSemaphoreCreateInfo();
         semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         semaphore_info.pNext = nullptr;

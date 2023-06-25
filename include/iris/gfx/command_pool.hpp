@@ -26,7 +26,7 @@ namespace ir {
     public:
         using self = command_pool_t;
 
-        command_pool_t() noexcept;
+        command_pool_t(const device_t& device) noexcept;
         ~command_pool_t() noexcept;
 
         IR_NODISCARD static auto make(const device_t& device, const command_pool_create_info_t& info) noexcept -> arc_ptr<self>;
@@ -46,6 +46,6 @@ namespace ir {
         VkCommandPool _handle = {};
 
         command_pool_create_info_t _info = {};
-        arc_ptr<const device_t> _device;
+        std::reference_wrapper<const device_t> _device;
     };
 }

@@ -20,7 +20,7 @@ namespace ir {
         std::span<const descriptor_binding_t> bindings
     ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto layout = ir::arc_ptr<self>(new self(std::ref(device)));
+        auto layout = arc_ptr<self>(new self(std::ref(device)));
         auto bindings_info = std::vector<VkDescriptorSetLayoutBinding>();
         bindings_info.reserve(bindings.size());
         for (const auto& binding : bindings) {

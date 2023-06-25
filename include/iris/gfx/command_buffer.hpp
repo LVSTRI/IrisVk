@@ -42,13 +42,16 @@ namespace ir {
     };
 
     struct image_copy_t {
-        std::reference_wrapper<const image_t> source;
-        std::reference_wrapper<const image_t> dest;
         offset_3d_t source_offset = ignored_offset_3d;
         offset_3d_t dest_offset = ignored_offset_3d;
         image_subresource_t source_subresource = {};
         image_subresource_t dest_subresource = {};
         extent_3d_t extent = ignored_extent_3d;
+    };
+
+    struct buffer_copy_t {
+        uint32 source_offset = 0;
+        uint32 dest_offset = 0;
     };
 
     struct viewport_t {
@@ -93,10 +96,15 @@ namespace ir {
         auto set_scissor(const scissor_t& scissor) const noexcept -> void;
         auto bind_pipeline(const pipeline_t& pipeline) noexcept -> void;
         auto bind_descriptor_set(const descriptor_set_t& set) noexcept -> void;
+        auto bind_vertex_buffer(const buffer_info_t& buffer) const noexcept -> void;
+        auto bind_index_buffer(const buffer_info_t& buffer, index_type_t type = index_type_t::e_uint32) const noexcept -> void;
         auto push_constants(shader_stage_t stage, uint32 offset, uint64 size, const void* data) const noexcept -> void;
         auto draw(uint32 vertices, uint32 instances, uint32 first_vertex, uint32 first_instance) const noexcept -> void;
+        auto draw_indexed(uint32 indices, uint32 instances, uint32 first_index, int32 vertex_offset, uint32 first_instance) const noexcept -> void;
+        auto draw_mesh_tasks(uint32 x = 1, uint32 y = 1, uint32 z = 1) const noexcept -> void;
         auto end_render_pass() noexcept -> void;
-        auto copy_image(const image_copy_t& copy) const noexcept -> void;
+        auto copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void;
+        auto copy_buffer(const buffer_info_t& source, const buffer_info_t& dest, const buffer_copy_t& copy) const noexcept -> void;
         auto memory_barrier(const memory_barrier_t& barrier) const noexcept -> void;
         auto image_barrier(const image_memory_barrier_t& barrier) const noexcept -> void;
 

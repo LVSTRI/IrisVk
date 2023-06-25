@@ -29,7 +29,7 @@ target_compile_definitions(glm INTERFACE
 add_library(cgltf STATIC
     deps/cgltf/cgltf.h
 
-    src/iris/deps/cgltf.c
+    src/renderer/deps/cgltf.c
 )
 target_include_directories(cgltf PUBLIC deps/cgltf)
 target_compile_definitions(cgltf PUBLIC
@@ -95,6 +95,9 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(shaderc_util PRIVATE -Wno-everything -std=c++20)
 endif()
 
+# meshoptimizer setup
+add_subdirectory(deps/meshoptimizer)
+
 # unordered_dense setup
 add_subdirectory(deps/unordered_dense)
 
@@ -135,8 +138,6 @@ set(IRIS_MAIN_HEADERS
 )
 
 set(IRIS_MAIN_SOURCES
-    src/iris/core/intrusive_atomic_ptr.cpp
-
     src/iris/gfx/command_buffer.cpp
     src/iris/gfx/command_pool.cpp
     src/iris/gfx/deletion_queue.cpp
@@ -174,7 +175,7 @@ target_compile_definitions(IrisVk PUBLIC
 
     # TODO: Make these options
     IRIS_DEBUG_LOGGER
-    IRIS_DEBUG_PROFILER
+    #IRIS_DEBUG_PROFILER
 
     VK_ENABLE_BETA_EXTENSIONS
     VK_NO_PROTOTYPES
@@ -190,7 +191,6 @@ target_link_libraries(IrisVk PUBLIC
     vma
     volk
     glfw
-    cgltf
     spdlog
     shaderc
     TracyClient
@@ -199,25 +199,26 @@ target_link_libraries(IrisVk PUBLIC
 )
 
 target_include_directories(IrisVk PUBLIC include ${Vulkan_INCLUDE_DIRS})
-
+set(IRIS_VECTOR_COMPILER_OPTIONS
+    -march=native
+    -mmmx
+    -msse
+    -msse2
+    -msse3
+    -mssse3
+    -msse4
+    -msse4a
+    -msse4.1
+    -msse4.2
+    -mavx
+    -mavx2
+    -msha
+    -maes
+    -mprefetchi
+    -mraoint)
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(IrisVk PRIVATE
-        -march=native
-        -mmmx
-        -msse
-        -msse2
-        -msse3
-        -mssse3
-        -msse4
-        -msse4a
-        -msse4.1
-        -msse4.2
-        -mavx
-        -mavx2
-        -msha
-        -maes
-        -mprefetchi
-        -mraoint
+    target_compile_options(IrisVk PUBLIC
+        ${IRIS_VECTOR_COMPILER_OPTIONS}
         -Wall
         -Wextra)
 endif()
@@ -225,12 +226,14 @@ endif()
 set(IRIS_RENDERER_HEADERS
     include/renderer/core/application.hpp
     include/renderer/core/camera.hpp
+    include/renderer/core/model.hpp
     include/renderer/core/utilities.hpp
 )
 
 set(IRIS_RENDERER_SOURCES
     src/renderer/core/application.cpp
     src/renderer/core/camera.cpp
+    src/renderer/core/model.cpp
 
     src/main.cpp
 )
@@ -241,4 +244,5 @@ add_executable(
     ${IRIS_RENDERER_SOURCES}
 )
 
-target_link_libraries(IrisVkRenderer PRIVATE IrisVk)
+target_link_libraries(IrisVkRenderer PRIVATE IrisVk cgltf meshoptimizer)
+target_compile_options(IrisVkRenderer PRIVATE ${IRIS_VECTOR_COMPILER_OPTIONS})

@@ -25,7 +25,7 @@ namespace app {
     application_t::application_t() noexcept
         : _camera(_platform) {
         IR_PROFILE_SCOPED();
-        _platform = ir::wsi_platform_t::make(1280, 720, "Iris");
+        _platform = ir::wsi_platform_t::make(1920, 1080, "Iris");
         _instance = ir::instance_t::make({
             .features = {
                 .debug_markers = true
@@ -34,11 +34,12 @@ namespace app {
         });
         _device = ir::device_t::make(*_instance, {
             .features = {
-                .swapchain = true
+                .swapchain = true,
+                .mesh_shader = true
             }
         });
         _swapchain = ir::swapchain_t::make(*_device, _platform, {
-            .vsync = false
+            .vsync = true
         });
         _main_pass.description = ir::render_pass_t::make(*_device, {
             .attachments = {
@@ -112,7 +113,7 @@ namespace app {
             ir::make_clear_depth(0.0f, 0)
         };
         _main_pass.main_pipeline = ir::pipeline_t::make(*_device, *_main_pass.framebuffer, {
-            .vertex = "../shaders/0.1/main.vert",
+            .mesh = "../shaders/0.1/main.mesh.glsl",
             .fragment = "../shaders/0.1/main.frag",
             .blend = {
                 ir::attachment_blend_t::e_disabled
@@ -125,13 +126,38 @@ namespace app {
                 ir::depth_state_flag_t::e_enable_test |
                 ir::depth_state_flag_t::e_enable_write,
             .depth_compare_op = ir::compare_op_t::e_greater,
-            .cull_mode = ir::cull_mode_t::e_none,
+            .cull_mode = ir::cull_mode_t::e_back,
         });
         _main_pass.camera_buffer = ir::buffer_t<camera_data_t>::make(*_device, frames_in_flight, {
             .usage = ir::buffer_usage_t::e_uniform_buffer,
             .flags = ir::buffer_flag_t::e_mapped,
-            .capacity = sizeof(camera_data_t),
+            .capacity = 1,
         });
+
+        {
+            const auto model = meshlet_model_t::make("../models/compressed/bistro/bistro.glb");
+            auto meshlets = std::vector<meshlet_glsl_t>();
+            meshlets.reserve(model.meshlet_count());
+            for (auto group_id = 0_u32; const auto& group : model.meshlet_groups()) {
+                for (const auto& meshlet : group.meshlets) {
+                    meshlets.emplace_back(meshlet_glsl_t {
+                        .vertex_offset = group.vertex_offset,
+                        .index_offset = meshlet.index_offset,
+                        .primitive_offset = meshlet.primitive_offset,
+                        .index_count = meshlet.index_count,
+                        .primitive_count = meshlet.primitive_count,
+                        .group_id = group_id,
+                    });
+                }
+                group_id++;
+            }
+
+            _main_pass.meshlets = ir::upload_buffer(*_device, std::span<const meshlet_glsl_t>(meshlets), {});
+            _main_pass.vertices = ir::upload_buffer(*_device, model.vertices(), {});
+            _main_pass.indices = ir::upload_buffer(*_device, model.indices(), {});
+            _main_pass.primitives = ir::upload_buffer(*_device, model.primitives(), {});
+            _main_pass.transforms = ir::upload_buffer(*_device, model.transforms(), {});
+        }
 
         _command_pools = ir::command_pool_t::make(*_device, frames_in_flight, {
             .queue = ir::queue_type_t::e_graphics,
@@ -176,37 +202,32 @@ namespace app {
 
     auto application_t::command_pool(uint32 frame_index) noexcept -> ir::command_pool_t& {
         IR_PROFILE_SCOPED();
-        return *_command_pools[frame_index == -1 ? _frame_index : frame_index];
+        return *_command_pools[frame_index == -1_u32 ? _frame_index : frame_index];
     }
 
     auto application_t::command_buffer(uint32 frame_index) noexcept -> ir::command_buffer_t& {
         IR_PROFILE_SCOPED();
-        return *_command_buffers[frame_index == -1 ? _frame_index : frame_index];
+        return *_command_buffers[frame_index == -1_u32 ? _frame_index : frame_index];
     }
 
     auto application_t::image_available(uint32 frame_index) noexcept -> ir::semaphore_t& {
         IR_PROFILE_SCOPED();
-        return *_image_available[frame_index == -1 ? _frame_index : frame_index];
+        return *_image_available[frame_index == -1_u32 ? _frame_index : frame_index];
     }
 
     auto application_t::render_done(uint32 frame_index) noexcept -> ir::semaphore_t& {
         IR_PROFILE_SCOPED();
-        return *_render_done[frame_index == -1 ? _frame_index : frame_index];
+        return *_render_done[frame_index == -1_u32 ? _frame_index : frame_index];
     }
 
     auto application_t::frame_fence(uint32 frame_index) noexcept -> ir::fence_t& {
         IR_PROFILE_SCOPED();
-        return *_frame_fence[frame_index == -1 ? _frame_index : frame_index];
-    }
-
-    auto application_t::main_pass() noexcept -> main_pass_t& {
-        IR_PROFILE_SCOPED();
-        return _main_pass;
+        return *_frame_fence[frame_index == -1_u32 ? _frame_index : frame_index];
     }
 
     auto application_t::camera_buffer(uint32 frame_index) noexcept -> ir::buffer_t<camera_data_t>& {
         IR_PROFILE_SCOPED();
-        return *_main_pass.camera_buffer[frame_index == -1 ? _frame_index : frame_index];
+        return *_main_pass.camera_buffer[frame_index == -1_u32 ? _frame_index : frame_index];
     }
 
     auto application_t::_update() noexcept -> void {
@@ -242,9 +263,17 @@ namespace app {
             .position = glm::make_vec4(_camera.position()),
         });
 
-        auto main_set = ir::descriptor_set_builder_t(*main_pass().main_pipeline, 0)
+        auto main_set = ir::descriptor_set_builder_t(*_main_pass.main_pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
             .build();
+
+        auto constants = std::to_array({
+            _main_pass.meshlets.as_const_ref().address(),
+            _main_pass.vertices.as_const_ref().address(),
+            _main_pass.indices.as_const_ref().address(),
+            _main_pass.primitives.as_const_ref().address(),
+            _main_pass.transforms.as_const_ref().address(),
+        });
 
         command_buffer().begin();
         command_buffer().begin_render_pass(*_main_pass.framebuffer, _main_pass.clear_values);
@@ -258,7 +287,8 @@ namespace app {
             .height = swapchain().height(),
         });
         command_buffer().bind_descriptor_set(*main_set);
-        command_buffer().draw(3, 1, 0, 0);
+        command_buffer().push_constants(ir::shader_stage_t::e_mesh, 0, ir::size_bytes(constants), constants.data());
+        command_buffer().draw_mesh_tasks(_main_pass.meshlets.as_const_ref().size());
         command_buffer().end_render_pass();
         command_buffer().image_barrier({
             .image = std::cref(swapchain().image(image_index)),
@@ -269,10 +299,10 @@ namespace app {
             .old_layout = ir::image_layout_t::e_undefined,
             .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
         });
-        command_buffer().copy_image({
-            .source = std::cref(*_main_pass.color),
-            .dest = std::cref(swapchain().image(image_index)),
-        });
+        command_buffer().copy_image(
+            std::cref(*_main_pass.color),
+            std::cref(swapchain().image(image_index)),
+            {});
         command_buffer().image_barrier({
             .image = std::cref(swapchain().image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_transfer,

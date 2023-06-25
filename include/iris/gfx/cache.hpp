@@ -24,8 +24,6 @@ namespace ir {
         using key_type = typename T::cache_key_type;
         using value_type = typename T::cache_value_type;
         using cache_entry_type = cache_entry_t<value_type>;
-        using hash_map_type = akl::fast_hash_map<key_type, cache_entry_type>;
-        using const_iterator = typename hash_map_type::const_iterator;
 
         cache_t() noexcept = default;
         ~cache_t() noexcept = default;
@@ -71,7 +69,7 @@ namespace ir {
             if constexpr (!_is_persistent) {
                 std::erase_if(_map, [](auto& entry) {
                     if (entry.second.ttl-- == 0) {
-                        IR_LOG_INFO(spdlog::get("device"), "cache_t: TTL expired for object", fmt::ptr(&entry.value));
+                        IR_LOG_INFO(spdlog::get("device"), "cache_t: TTL expired for object {}", fmt::ptr(&entry.second.value));
                         return true;
                     }
                     return false;

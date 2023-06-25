@@ -3,7 +3,9 @@
 #include <iris/gfx/command_pool.hpp>
 
 namespace ir {
-    command_pool_t::command_pool_t() noexcept = default;
+    command_pool_t::command_pool_t(const device_t& device) noexcept : _device(std::cref(device)) {
+        IR_PROFILE_SCOPED();
+    }
 
     command_pool_t::~command_pool_t() noexcept {
         IR_PROFILE_SCOPED();
@@ -13,7 +15,7 @@ namespace ir {
 
     auto command_pool_t::make(const device_t& device, const command_pool_create_info_t& info) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto command_pool = arc_ptr<self>(new self());
+        auto command_pool = arc_ptr<self>(new self(device));
         auto command_pool_info = VkCommandPoolCreateInfo();
         command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         command_pool_info.pNext = nullptr;
@@ -32,7 +34,6 @@ namespace ir {
             command_pool_info.queueFamilyIndex);
 
         command_pool->_info = info;
-        command_pool->_device = device.as_intrusive_ptr();
         return command_pool;
     }
 
@@ -42,7 +43,7 @@ namespace ir {
         const command_pool_create_info_t& info
     ) noexcept -> std::vector<arc_ptr<self>> {
         IR_PROFILE_SCOPED();
-        auto command_pools = std::vector<arc_ptr < self>>(count);
+        auto command_pools = std::vector<arc_ptr<self>>(count);
         for (auto& command_pool : command_pools) {
             command_pool = make(device, info);
         }
@@ -61,7 +62,7 @@ namespace ir {
 
     auto command_pool_t::device() const noexcept -> const device_t& {
         IR_PROFILE_SCOPED();
-        return *_device;
+        return _device.get();
     }
 
     auto command_pool_t::reset() const noexcept -> void {

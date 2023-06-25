@@ -3,6 +3,7 @@
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/fence.hpp>
 #include <iris/gfx/semaphore.hpp>
+#include <iris/gfx/command_pool.hpp>
 #include <iris/gfx/command_buffer.hpp>
 #include <iris/gfx/swapchain.hpp>
 #include <iris/gfx/queue.hpp>
@@ -17,7 +18,7 @@ namespace ir {
             case queue_type_t::e_compute: return "compute";
             case queue_type_t::e_transfer: return "transfer";
         }
-        return "";
+        IR_UNREACHABLE();
     }
 
     queue_t::queue_t(const device_t& device) noexcept : _device(std::cref(device)) {
@@ -34,6 +35,7 @@ namespace ir {
         auto queue = arc_ptr<self>(new self(device));
         auto logger = spdlog::stdout_color_mt(internal_enum_as_string(info.type).data());
         IR_LOG_INFO(logger, "queue initialized (family: {}, index: {})", info.family.family, info.family.index);
+
         queue->_handle = device.fetch_queue(info.family);
         queue->_info = info;
         queue->_logger = std::move(logger);
@@ -60,6 +62,18 @@ namespace ir {
         return _info.type;
     }
 
+    auto queue_t::transient_pool(uint32 index) noexcept -> command_pool_t& {
+        IR_PROFILE_SCOPED();
+        if (_transient_pools.empty()) {
+            // index = 0 => main thread
+            _transient_pools = command_pool_t::make(_device, std::thread::hardware_concurrency() + 1, {
+                .queue = type(),
+                .flags = command_pool_flag_t::e_transient,
+            });
+        }
+        return *_transient_pools[index];
+    }
+
     auto queue_t::info() const noexcept -> const queue_create_info_t& {
         IR_PROFILE_SCOPED();
         return _info;
@@ -75,7 +89,7 @@ namespace ir {
         return *_logger;
     }
 
-    auto queue_t::submit(const queue_submit_info_t& info, const fence_t* fence) const noexcept -> void {
+    auto queue_t::submit(const queue_submit_info_t& info, const fence_t* fence) noexcept -> void {
         IR_PROFILE_SCOPED();
         auto wait_semaphore_info = std::vector<VkSemaphoreSubmitInfo>();
         wait_semaphore_info.reserve(info.wait_semaphores.size());
@@ -120,10 +134,11 @@ namespace ir {
         submit_info.pCommandBufferInfos = command_buffer_info.data();
         submit_info.signalSemaphoreInfoCount = signal_semaphore_info.size();
         submit_info.pSignalSemaphoreInfos = signal_semaphore_info.data();
+        auto guard = std::lock_guard(_lock);
         IR_VULKAN_CHECK(_device.get().logger(), vkQueueSubmit2(_handle, 1, &submit_info, fence ? fence->handle() : nullptr));
     }
 
-    auto queue_t::present(const queue_present_info_t& info) const noexcept -> void {
+    auto queue_t::present(const queue_present_info_t& info) noexcept -> void {
         IR_PROFILE_SCOPED();
         auto wait_semaphore_info = std::vector<VkSemaphore>();
         wait_semaphore_info.reserve(info.wait_semaphores.size());
@@ -141,6 +156,7 @@ namespace ir {
         present_info.pSwapchains = &swapchain;
         present_info.pImageIndices = &info.image;
         present_info.pResults = nullptr;
+        auto guard = std::lock_guard(_lock);
         IR_VULKAN_CHECK(_device.get().logger(), vkQueuePresentKHR(_handle, &present_info));
     }
 }

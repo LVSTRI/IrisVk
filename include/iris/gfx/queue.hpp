@@ -65,16 +65,20 @@ namespace ir {
         IR_NODISCARD auto index() const noexcept -> uint32;
         IR_NODISCARD auto type() const noexcept -> queue_type_t;
 
+        IR_NODISCARD auto transient_pool(uint32 index) noexcept -> command_pool_t&;
+
         IR_NODISCARD auto info() const noexcept -> const queue_create_info_t&;
         IR_NODISCARD auto device() const noexcept -> const device_t&;
         IR_NODISCARD auto logger() const noexcept -> spdlog::logger&;
 
-        auto submit(const queue_submit_info_t& info, const fence_t* fence = nullptr) const noexcept -> void;
-        auto present(const queue_present_info_t& info) const noexcept -> void;
+        auto submit(const queue_submit_info_t& info, const fence_t* fence = nullptr) noexcept -> void;
+        auto present(const queue_present_info_t& info) noexcept -> void;
 
     private:
         VkQueue _handle = {};
         std::mutex _lock;
+
+        std::vector<arc_ptr<command_pool_t>> _transient_pools;
 
         queue_create_info_t _info = {};
         std::shared_ptr<spdlog::logger> _logger;

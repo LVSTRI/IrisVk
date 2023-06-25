@@ -98,7 +98,7 @@ namespace app {
                     0.0f, 0.0f, _near, 0.0f
                 };
         }
-        return {};
+        IR_UNREACHABLE();
     }
 
     auto camera_t::update(float32 dt) noexcept -> void {

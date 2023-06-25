@@ -40,6 +40,7 @@ namespace ir {
     enum class pipeline_bind_point_t;
     enum class command_pool_flag_t;
     enum class compare_op_t;
+    enum class index_type_t;
 
     enum class queue_type_t;
     struct queue_family_t;
@@ -52,6 +53,10 @@ namespace ir {
     struct image_memory_barrier_t;
     struct buffer_memory_barrier_t;
     struct memory_barrier_t;
+    struct image_copy_t;
+    struct buffer_copy_t;
+    struct viewport_t;
+    struct scissor_t;
 
     enum class clear_value_type_t;
     union clear_color_t;

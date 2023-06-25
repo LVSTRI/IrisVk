@@ -148,9 +148,7 @@ namespace ir {
         return { spirv.cbegin(), spirv.cend() };
     }
 
-    pipeline_t::pipeline_t(const graphics_pipeline_create_info_t& info) noexcept : _info(info) {
-        IR_PROFILE_SCOPED();
-    }
+    pipeline_t::pipeline_t() noexcept = default;
 
     pipeline_t::~pipeline_t() noexcept {
         IR_PROFILE_SCOPED();
@@ -164,7 +162,7 @@ namespace ir {
         const graphics_pipeline_create_info_t& info
     ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto pipeline = ir::arc_ptr<self>(new self(info));
+        auto pipeline = arc_ptr<self>(new self());
         IR_ASSERT(!info.vertex.empty(), "cannot create graphics pipeline without vertex shader");
 
         auto shader_stages = std::vector<VkPipelineShaderStageCreateInfo>();
@@ -530,8 +528,347 @@ namespace ir {
             vkDestroyShaderModule(device.handle(), stage.module, nullptr);
         }
 
-        pipeline->_type = pipeline_type_t::e_graphics;
         pipeline->_descriptor_layout = std::move(descriptor_layout);
+        pipeline->_type = pipeline_type_t::e_graphics;
+        pipeline->_info = info;
+        pipeline->_device = device.as_intrusive_ptr();
+        pipeline->_framebuffer = framebuffer.as_intrusive_ptr();
+        return pipeline;
+    }
+
+    auto pipeline_t::make(
+        device_t& device,
+        const framebuffer_t& framebuffer,
+        const mesh_shading_pipeline_create_info_t& info
+    ) noexcept -> arc_ptr<self> {
+        IR_PROFILE_SCOPED();
+        auto pipeline = arc_ptr<self>(new self());
+        IR_ASSERT(!info.mesh.empty(), "cannot create graphics pipeline without mesh shader");
+
+        auto shader_stages = std::vector<VkPipelineShaderStageCreateInfo>();
+        auto desc_bindings = descriptor_bindings();
+
+        // TODO: hashmap
+        auto push_constant_info = std::vector<VkPushConstantRange>();
+
+        { // compile mesh stage
+            const auto binary = compile_shader(info.mesh, shaderc_glsl_mesh_shader, device.logger());
+            const auto compiler = spvc::CompilerGLSL(binary.data(), binary.size());
+            const auto resources = compiler.get_shader_resources();
+
+            auto vertex_stage_info = VkPipelineShaderStageCreateInfo();
+            vertex_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            vertex_stage_info.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+            vertex_stage_info.pName = "main";
+
+            auto module_info = VkShaderModuleCreateInfo();
+            module_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            module_info.codeSize = size_bytes(binary);
+            module_info.pCode = binary.data();
+            IR_VULKAN_CHECK(device.logger(), vkCreateShaderModule(device.handle(), &module_info, nullptr, &vertex_stage_info.module));
+            shader_stages.emplace_back(vertex_stage_info);
+
+            process_resource(
+                compiler,
+                resources.uniform_buffers,
+                descriptor_type_t::e_uniform_buffer,
+                shader_stage_t::e_mesh,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_buffers,
+                descriptor_type_t::e_storage_buffer,
+                shader_stage_t::e_mesh,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_images,
+                descriptor_type_t::e_storage_image,
+                shader_stage_t::e_mesh,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.sampled_images,
+                descriptor_type_t::e_combined_image_sampler,
+                shader_stage_t::e_mesh,
+                desc_bindings);
+
+            if (!resources.push_constant_buffers.empty()) {
+                const auto& pc = resources.push_constant_buffers.front();
+                const auto& type = compiler.get_type(pc.type_id);
+                push_constant_info.emplace_back(VkPushConstantRange {
+                    .stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT,
+                    .offset = 0,
+                    .size = static_cast<uint32>(compiler.get_declared_struct_size(type))
+                });
+            }
+        }
+
+        auto color_blend_attachments = std::vector<VkPipelineColorBlendAttachmentState>();
+        if (!info.fragment.empty()) { // compile fragment stage
+            const auto binary = compile_shader(info.fragment, shaderc_glsl_fragment_shader, device.logger());
+            const auto compiler = spvc::CompilerGLSL(binary.data(), binary.size());
+            // TODO: reflect all resources
+            const auto resources = compiler.get_shader_resources();
+
+            auto fragment_shader_info = VkPipelineShaderStageCreateInfo();
+            fragment_shader_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            fragment_shader_info.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+            fragment_shader_info.pName = "main";
+
+            auto module_info = VkShaderModuleCreateInfo();
+            module_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            module_info.codeSize = size_bytes(binary);
+            module_info.pCode = binary.data();
+            IR_VULKAN_CHECK(device.logger(), vkCreateShaderModule(device.handle(), &module_info, nullptr, &fragment_shader_info.module));
+            shader_stages.emplace_back(fragment_shader_info);
+
+            process_resource(
+                compiler,
+                resources.uniform_buffers,
+                descriptor_type_t::e_uniform_buffer,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_buffers,
+                descriptor_type_t::e_storage_buffer,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_images,
+                descriptor_type_t::e_storage_image,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.sampled_images,
+                descriptor_type_t::e_combined_image_sampler,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+
+            for (auto i = 0_u32; i < resources.stage_outputs.size(); ++i) {
+                const auto& type = compiler.get_type(resources.stage_outputs[i].type_id);
+                auto color_blend_attachment = VkPipelineColorBlendAttachmentState();
+                if (info.blend.empty()) {
+                    color_blend_attachment.blendEnable = type.vecsize == 4;
+                } else {
+                    switch (info.blend[i]) {
+                        case attachment_blend_t::e_auto:
+                            color_blend_attachment.blendEnable = type.vecsize == 4;
+                            break;
+                        case attachment_blend_t::e_disabled:
+                            color_blend_attachment.blendEnable = false;
+                            break;
+                    }
+                }
+                color_blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+                color_blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+                color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+                color_blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+                color_blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+                color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+                switch (type.vecsize) {
+                    case 4: color_blend_attachment.colorWriteMask |= VK_COLOR_COMPONENT_A_BIT; IR_FALLTHROUGH;
+                    case 3: color_blend_attachment.colorWriteMask |= VK_COLOR_COMPONENT_B_BIT; IR_FALLTHROUGH;
+                    case 2: color_blend_attachment.colorWriteMask |= VK_COLOR_COMPONENT_G_BIT; IR_FALLTHROUGH;
+                    case 1: color_blend_attachment.colorWriteMask |= VK_COLOR_COMPONENT_R_BIT;
+                }
+                color_blend_attachments.emplace_back(color_blend_attachment);
+            }
+
+            if (!resources.push_constant_buffers.empty()) {
+                const auto& pc = resources.push_constant_buffers.front();
+                const auto& type = compiler.get_type(pc.type_id);
+                const auto size = compiler.get_declared_struct_size(type);
+                auto* last = push_constant_info.empty() ? nullptr : &push_constant_info.back();
+                if (push_constant_info.empty() || (last && last->size < size)) {
+                    push_constant_info.emplace_back(VkPushConstantRange {
+                        .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                        .offset = 0,
+                        .size = static_cast<uint32>(compiler.get_declared_struct_size(type))
+                    });
+                } else {
+                    last->stageFlags |= VK_SHADER_STAGE_FRAGMENT_BIT;
+                }
+            }
+        }
+
+        auto viewport = VkViewport();
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float32>(framebuffer.width());
+        viewport.height = static_cast<float32>(framebuffer.height());
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        auto scissor = VkRect2D();
+        scissor.offset = { 0, 0 };
+        scissor.extent = {
+            static_cast<uint32>(viewport.width),
+            static_cast<uint32>(viewport.height)
+        };
+
+        auto viewport_info = VkPipelineViewportStateCreateInfo();
+        viewport_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewport_info.pNext = nullptr;
+        viewport_info.flags = 0;
+        viewport_info.viewportCount = 1;
+        viewport_info.pViewports = &viewport;
+        viewport_info.scissorCount = 1;
+        viewport_info.pScissors = &scissor;
+
+        auto rasterization_info = VkPipelineRasterizationStateCreateInfo();
+        rasterization_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterization_info.pNext = nullptr;
+        rasterization_info.flags = 0;
+        rasterization_info.depthClampEnable = static_cast<bool>(
+            as_underlying(info.depth_flags & depth_state_flag_t::e_enable_clamp));
+        rasterization_info.rasterizerDiscardEnable = false;
+        rasterization_info.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterization_info.cullMode = as_enum_counterpart(info.cull_mode);
+        rasterization_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterization_info.depthBiasEnable = false;
+        rasterization_info.depthBiasConstantFactor = 0.0f;
+        rasterization_info.depthBiasClamp = 0.0f;
+        rasterization_info.depthBiasSlopeFactor = 0.0f;
+        rasterization_info.lineWidth = 1.0f;
+
+        auto multisample_info = VkPipelineMultisampleStateCreateInfo();
+        multisample_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisample_info.pNext = nullptr;
+        multisample_info.flags = 0;
+        multisample_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisample_info.sampleShadingEnable = true;
+        multisample_info.minSampleShading = 0.2f;
+        multisample_info.pSampleMask = nullptr;
+        multisample_info.alphaToCoverageEnable = false;
+        multisample_info.alphaToOneEnable = false;
+
+        auto depth_stencil_info = VkPipelineDepthStencilStateCreateInfo();
+        depth_stencil_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depth_stencil_info.pNext = nullptr;
+        depth_stencil_info.flags = 0;
+        depth_stencil_info.depthTestEnable = static_cast<bool>(
+            as_underlying(info.depth_flags & depth_state_flag_t::e_enable_test));
+        depth_stencil_info.depthWriteEnable = static_cast<bool>(
+            as_underlying(info.depth_flags & depth_state_flag_t::e_enable_write));
+        depth_stencil_info.depthCompareOp = as_enum_counterpart(info.depth_compare_op);
+        depth_stencil_info.depthBoundsTestEnable = false;
+        depth_stencil_info.stencilTestEnable = false;
+        depth_stencil_info.front = {};
+        depth_stencil_info.back = {};
+        depth_stencil_info.minDepthBounds = 0.0f;
+        depth_stencil_info.maxDepthBounds = 1.0f;
+
+        auto color_blend_info = VkPipelineColorBlendStateCreateInfo();
+        color_blend_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        color_blend_info.pNext = nullptr;
+        color_blend_info.flags = 0;
+        color_blend_info.logicOpEnable = false;
+        color_blend_info.logicOp = VK_LOGIC_OP_COPY;
+        color_blend_info.attachmentCount = color_blend_attachments.size();
+        color_blend_info.pAttachments = color_blend_attachments.data();
+        color_blend_info.blendConstants[0] = 0.0f;
+        color_blend_info.blendConstants[1] = 0.0f;
+        color_blend_info.blendConstants[2] = 0.0f;
+        color_blend_info.blendConstants[3] = 0.0f;
+
+        auto dynamic_states = std::vector<VkDynamicState>();
+        dynamic_states.reserve(info.dynamic_states.size());
+        for (auto state : info.dynamic_states) {
+            dynamic_states.emplace_back(as_enum_counterpart(state));
+        }
+
+        auto dynamic_state_info = VkPipelineDynamicStateCreateInfo();
+        dynamic_state_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamic_state_info.pNext = nullptr;
+        dynamic_state_info.flags = 0;
+        dynamic_state_info.dynamicStateCount = dynamic_states.size();
+        dynamic_state_info.pDynamicStates = dynamic_states.data();
+
+        auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
+        descriptor_layout.reserve(desc_bindings.size());
+        for (const auto& [set, layout] : desc_bindings) {
+            const auto& pair_bindings = layout.values();
+            auto bindings = std::vector<descriptor_binding_t>();
+            bindings.reserve(pair_bindings.size());
+            std::transform(
+                pair_bindings.begin(),
+                pair_bindings.end(),
+                std::back_inserter(bindings),
+                [](const auto& pair) {
+                    return pair.second;
+                });
+            if (set >= descriptor_layout.size()) {
+                descriptor_layout.resize(set + 1);
+            }
+            descriptor_layout[set] = device.make_descriptor_layout(bindings);
+        }
+        descriptor_layout.erase(
+            std::remove_if(
+                descriptor_layout.begin(),
+                descriptor_layout.end(),
+                [](const auto& layout) {
+                    return !layout;
+                }),
+            descriptor_layout.end());
+
+        auto descriptor_layout_handles = std::vector<VkDescriptorSetLayout>();
+        descriptor_layout_handles.reserve(descriptor_layout.size());
+        std::transform(
+            descriptor_layout.begin(),
+            descriptor_layout.end(),
+            std::back_inserter(descriptor_layout_handles),
+            [](const auto& layout) {
+                return layout.as_const_ref().handle();
+            });
+
+        auto pipeline_layout_info = VkPipelineLayoutCreateInfo();
+        pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipeline_layout_info.pNext = nullptr;
+        pipeline_layout_info.flags = 0;
+        pipeline_layout_info.setLayoutCount = descriptor_layout_handles.size();
+        pipeline_layout_info.pSetLayouts = descriptor_layout_handles.data();
+        pipeline_layout_info.pushConstantRangeCount = push_constant_info.size();
+        pipeline_layout_info.pPushConstantRanges = push_constant_info.data();
+        IR_VULKAN_CHECK(device.logger(), vkCreatePipelineLayout(device.handle(), &pipeline_layout_info, nullptr, &pipeline->_layout));
+
+        auto pipeline_info = VkGraphicsPipelineCreateInfo();
+        pipeline_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipeline_info.pNext = nullptr;
+        pipeline_info.flags = 0;
+        pipeline_info.stageCount = shader_stages.size();
+        pipeline_info.pStages = shader_stages.data();
+        pipeline_info.pVertexInputState = nullptr;
+        pipeline_info.pInputAssemblyState = nullptr;
+        pipeline_info.pTessellationState = nullptr;
+        pipeline_info.pViewportState = &viewport_info;
+        pipeline_info.pRasterizationState = &rasterization_info;
+        pipeline_info.pMultisampleState = &multisample_info;
+        pipeline_info.pDepthStencilState = &depth_stencil_info;
+        pipeline_info.pColorBlendState = &color_blend_info;
+        pipeline_info.pDynamicState = &dynamic_state_info;
+        pipeline_info.layout = pipeline->_layout;
+        pipeline_info.renderPass = framebuffer.render_pass().handle();
+        pipeline_info.subpass = info.subpass;
+        pipeline_info.basePipelineHandle = nullptr;
+        pipeline_info.basePipelineIndex = 0;
+        IR_VULKAN_CHECK(device.logger(), vkCreateGraphicsPipelines(device.handle(), nullptr, 1, &pipeline_info, nullptr, &pipeline->_handle));
+        IR_LOG_INFO(
+            device.logger(), "compiled mesh shading pipeline: ({}, {}, {})",
+            info.task.empty() ? "null" : info.task.generic_string().c_str(),
+            info.mesh.generic_string().c_str(),
+            info.fragment.empty() ? "null" : info.fragment.generic_string().c_str());
+
+        for (const auto& stage : shader_stages) {
+            vkDestroyShaderModule(device.handle(), stage.module, nullptr);
+        }
+
+        pipeline->_descriptor_layout = std::move(descriptor_layout);
+        pipeline->_type = pipeline_type_t::e_graphics;
+        pipeline->_info = info;
         pipeline->_device = device.as_intrusive_ptr();
         pipeline->_framebuffer = framebuffer.as_intrusive_ptr();
         return pipeline;
@@ -568,9 +905,14 @@ namespace ir {
         return _type;
     }
 
-    auto pipeline_t::info() const noexcept -> const graphics_pipeline_create_info_t& {
+    auto pipeline_t::graphics_info() const noexcept -> const graphics_pipeline_create_info_t& {
         IR_PROFILE_SCOPED();
-        return _info;
+        return std::get<0>(_info);
+    }
+
+    auto pipeline_t::mesh_info() const noexcept -> const mesh_shading_pipeline_create_info_t& {
+        IR_PROFILE_SCOPED();
+        return std::get<1>(_info);
     }
 
     auto pipeline_t::device() noexcept -> device_t& {
