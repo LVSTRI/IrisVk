@@ -17,11 +17,17 @@ namespace app {
         alignas(alignof(float32)) glm::vec4 tangent = {};
     };
 
+    struct aabb_t {
+        alignas(alignof(float32)) glm::vec3 min = {};
+        alignas(alignof(float32)) glm::vec3 max = {};
+    };
+
     struct meshlet_t {
         uint32 index_offset = 0;
         uint32 index_count = 0;
         uint32 primitive_offset = 0;
         uint32 primitive_count = 0;
+        aabb_t aabb = {};
     };
 
     struct meshlet_group_t {

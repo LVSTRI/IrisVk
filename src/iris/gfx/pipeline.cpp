@@ -302,7 +302,7 @@ namespace ir {
                 const auto& type = compiler.get_type(pc.type_id);
                 const auto size = compiler.get_declared_struct_size(type);
                 auto* last = push_constant_info.empty() ? nullptr : &push_constant_info.back();
-                if (push_constant_info.empty() || (last && last->size < size)) {
+                if (push_constant_info.empty() || (last && last->size != size)) {
                     push_constant_info.emplace_back(VkPushConstantRange {
                         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                         .offset = 0,
@@ -551,22 +551,75 @@ namespace ir {
         // TODO: hashmap
         auto push_constant_info = std::vector<VkPushConstantRange>();
 
-        { // compile mesh stage
-            const auto binary = compile_shader(info.mesh, shaderc_glsl_mesh_shader, device.logger());
+        if (!info.task.empty()) { // compile task stage
+            const auto binary = compile_shader(info.task, shaderc_glsl_task_shader, device.logger());
             const auto compiler = spvc::CompilerGLSL(binary.data(), binary.size());
             const auto resources = compiler.get_shader_resources();
 
-            auto vertex_stage_info = VkPipelineShaderStageCreateInfo();
-            vertex_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            vertex_stage_info.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
-            vertex_stage_info.pName = "main";
+            auto task_stage_info = VkPipelineShaderStageCreateInfo();
+            task_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            task_stage_info.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
+            task_stage_info.pName = "main";
 
             auto module_info = VkShaderModuleCreateInfo();
             module_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
             module_info.codeSize = size_bytes(binary);
             module_info.pCode = binary.data();
-            IR_VULKAN_CHECK(device.logger(), vkCreateShaderModule(device.handle(), &module_info, nullptr, &vertex_stage_info.module));
-            shader_stages.emplace_back(vertex_stage_info);
+            IR_VULKAN_CHECK(device.logger(), vkCreateShaderModule(device.handle(), &module_info, nullptr, &task_stage_info.module));
+            shader_stages.emplace_back(task_stage_info);
+
+            process_resource(
+                compiler,
+                resources.uniform_buffers,
+                descriptor_type_t::e_uniform_buffer,
+                shader_stage_t::e_task,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_buffers,
+                descriptor_type_t::e_storage_buffer,
+                shader_stage_t::e_task,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.storage_images,
+                descriptor_type_t::e_storage_image,
+                shader_stage_t::e_task,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.sampled_images,
+                descriptor_type_t::e_combined_image_sampler,
+                shader_stage_t::e_task,
+                desc_bindings);
+
+            if (!resources.push_constant_buffers.empty()) {
+                const auto& pc = resources.push_constant_buffers.front();
+                const auto& type = compiler.get_type(pc.type_id);
+                push_constant_info.emplace_back(VkPushConstantRange {
+                    .stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT,
+                    .offset = 0,
+                    .size = static_cast<uint32>(compiler.get_declared_struct_size(type))
+                });
+            }
+        }
+
+        { // compile mesh stage
+            const auto binary = compile_shader(info.mesh, shaderc_glsl_mesh_shader, device.logger());
+            const auto compiler = spvc::CompilerGLSL(binary.data(), binary.size());
+            const auto resources = compiler.get_shader_resources();
+
+            auto mesh_stage_info = VkPipelineShaderStageCreateInfo();
+            mesh_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            mesh_stage_info.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+            mesh_stage_info.pName = "main";
+
+            auto module_info = VkShaderModuleCreateInfo();
+            module_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+            module_info.codeSize = size_bytes(binary);
+            module_info.pCode = binary.data();
+            IR_VULKAN_CHECK(device.logger(), vkCreateShaderModule(device.handle(), &module_info, nullptr, &mesh_stage_info.module));
+            shader_stages.emplace_back(mesh_stage_info);
 
             process_resource(
                 compiler,
@@ -596,11 +649,17 @@ namespace ir {
             if (!resources.push_constant_buffers.empty()) {
                 const auto& pc = resources.push_constant_buffers.front();
                 const auto& type = compiler.get_type(pc.type_id);
-                push_constant_info.emplace_back(VkPushConstantRange {
-                    .stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT,
-                    .offset = 0,
-                    .size = static_cast<uint32>(compiler.get_declared_struct_size(type))
-                });
+                const auto size = compiler.get_declared_struct_size(type);
+                auto* last = push_constant_info.empty() ? nullptr : &push_constant_info.back();
+                if (push_constant_info.empty() || (last && last->size != size)) {
+                    push_constant_info.emplace_back(VkPushConstantRange {
+                        .stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT,
+                        .offset = 0,
+                        .size = static_cast<uint32>(compiler.get_declared_struct_size(type))
+                    });
+                } else {
+                    last->stageFlags |= VK_SHADER_STAGE_MESH_BIT_EXT;
+                }
             }
         }
 
@@ -683,7 +742,7 @@ namespace ir {
                 const auto& type = compiler.get_type(pc.type_id);
                 const auto size = compiler.get_declared_struct_size(type);
                 auto* last = push_constant_info.empty() ? nullptr : &push_constant_info.back();
-                if (push_constant_info.empty() || (last && last->size < size)) {
+                if (push_constant_info.empty() || (last && last->size != size)) {
                     push_constant_info.emplace_back(VkPushConstantRange {
                         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
                         .offset = 0,

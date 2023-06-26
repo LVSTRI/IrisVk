@@ -108,7 +108,7 @@ namespace ir {
         return *this;
     }
 
-    auto descriptor_set_builder_t::bind_storage_image(uint32 binding, const image_view_t& view) noexcept -> descriptor_set_builder_t::self& {
+    auto descriptor_set_builder_t::bind_storage_image(uint32 binding, const image_view_t& view) noexcept -> self& {
         IR_PROFILE_SCOPED();
         _binding.bindings.emplace_back(descriptor_content_t {
             .binding = binding,

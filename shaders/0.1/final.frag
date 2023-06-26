@@ -10,8 +10,6 @@
 
 #include "common.glsl"
 
-#define M_GOLDEN_CONJ 0.6180339887498948482045868343656
-
 struct partial_derivatives_t {
     vec3 lambda;
     vec3 ddx;
@@ -26,7 +24,7 @@ layout (set = 0, binding = 0) uniform u_camera_block {
     camera_data_t data;
 } u_camera;
 
-layout (r64ui, set = 0, binding = 1) uniform u64image2D u_visbuffer;
+layout (r64ui, set = 0, binding = 1) restrict readonly uniform u64image2D u_visbuffer;
 
 layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_buffer {
     meshlet_glsl_t[] data;
@@ -55,29 +53,6 @@ layout (push_constant) uniform pc_address_block {
     uint64_t primitive_address;
     uint64_t transforms_address;
 };
-
-vec3 hsv_to_rgb(in vec3 hsv) {
-    const vec3 rgb = clamp(abs(mod(hsv.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
-    return hsv.z * mix(vec3(1.0), rgb, hsv.y);
-}
-
-vec3 unproject_depth(in float depth, in vec2 uv) {
-    const vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
-    const vec4 world = inverse(u_camera.data.pv) * ndc;
-    return world.xyz / world.w;
-}
-
-vec2 vec2_from_float(in float[2] v) {
-    return vec2(v[0], v[1]);
-}
-
-vec3 vec3_from_float(in float[3] v) {
-    return vec3(v[0], v[1], v[2]);
-}
-
-vec4 vec4_from_float(in float[4] v) {
-    return vec4(v[0], v[1], v[2], v[3]);
-}
 
 partial_derivatives_t compute_derivatives(in vec4[3] clip_position, in vec2 ndc_uv, in vec2 resolution) {
     partial_derivatives_t result;
@@ -142,10 +117,11 @@ vec4 interpolate_attributes(in partial_derivatives_t derivatives, in vec4[3] att
 void main() {
     const uvec2 resolution = imageSize(u_visbuffer).xy;
     const uint64_t payload = imageLoad(u_visbuffer, ivec2(gl_FragCoord.xy)).x;
-    const float depth = uintBitsToFloat(uint((payload >> 34) & 0x3fffffff));
-    if (depth == 0) {
+    const uint depth_bits = uint((payload >> 34) & 0x3fffffff);
+    if (depth_bits == 0) {
         discard;
     }
+    const float depth = uintBitsToFloat(depth_bits);
     const uint meshlet_id = uint((payload >> 7) & 0x07ffffff);
     const uint primitive_id = uint(payload & 0x7f);
 
@@ -179,6 +155,7 @@ void main() {
         u_camera.data.pv * transform * vec4(vec3_from_float(vertices[0].position), 1.0),
         u_camera.data.pv * transform * vec4(vec3_from_float(vertices[1].position), 1.0),
         u_camera.data.pv * transform * vec4(vec3_from_float(vertices[2].position), 1.0));
+    const vec3 position = unproject_depth(u_camera.data.pv, depth, i_uv);
 
     const partial_derivatives_t derivatives = compute_derivatives(clip_position, i_uv * 2.0 - 1.0, vec2(resolution));
 
@@ -188,8 +165,15 @@ void main() {
         vec3_from_float(vertices[2].normal));
     const vec3 normal = normalize(mat3(transform) * normalize(interpolate_attributes(derivatives, normals)));
 
-    const vec3 position = unproject_depth(depth, i_uv);
-    o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
-    o_pixel = vec4(position, 1.0);
+    const vec2[] uvs = vec2[](
+        vec2_from_float(vertices[0].uv),
+        vec2_from_float(vertices[1].uv),
+        vec2_from_float(vertices[2].uv));
+    const vec3[] interp_uv = vec3[](
+        interpolate_attributes(derivatives, float[](uvs[0].x, uvs[1].x, uvs[2].x)),
+        interpolate_attributes(derivatives, float[](uvs[0].y, uvs[1].y, uvs[2].y)));
+
+    const vec3 light_direction = normalize(vec3(0.23, 1.0, 0.52));
     o_pixel = vec4(normal, 1.0);
+    o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
 }

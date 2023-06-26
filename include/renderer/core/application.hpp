@@ -17,6 +17,7 @@ namespace app {
         glm::mat4 view = {};
         glm::mat4 pv = {};
         glm::vec4 position = {};
+        frustum_t frustum = {};
     };
 
     struct meshlet_glsl_t {
@@ -26,6 +27,7 @@ namespace app {
         uint32 index_count = 0;
         uint32 primitive_count = 0;
         uint32 group_id = 0;
+        alignas(alignof(float32)) aabb_t aabb = {};
     };
 
     struct main_pass_t {

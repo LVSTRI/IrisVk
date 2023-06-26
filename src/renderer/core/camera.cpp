@@ -4,13 +4,14 @@
 #include <iris/wsi/input.hpp>
 
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 namespace app {
-    IR_NODISCARD static auto plane_from_points(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) noexcept -> plane_t {
+    IR_NODISCARD static auto plane_from_points(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) noexcept -> glm::vec4 {
         IR_PROFILE_SCOPED();
-        auto plane = plane_t();
-        plane.normal = glm::normalize(glm::cross(c - a, b - a));
-        plane.distance = glm::dot(plane.normal, a);
+        auto plane = glm::vec4();
+        plane = glm::make_vec4(glm::normalize(glm::cross(c - a, b - a)));
+        plane.w = glm::dot(glm::vec3(plane), a);
         return plane;
     }
 
@@ -161,8 +162,8 @@ namespace app {
 
         for (auto i = 0_u32; i < 6; ++i) {
             const auto& plane = glm::normalize(planes[i]);
-            frustum.planes[i].normal = glm::vec3(plane);
-            frustum.planes[i].distance = -plane.w;
+            frustum.planes[i] = glm::make_vec4(plane);
+            frustum.planes[i].w = -plane.w;
         }
         return frustum;
     }

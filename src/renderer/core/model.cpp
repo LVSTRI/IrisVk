@@ -205,8 +205,8 @@ namespace app {
                     }
                     // meshlet build
                     {
-                        constexpr static auto max_indices = 64_u32;
-                        constexpr static auto max_primitives = 124_u32;
+                        constexpr static auto max_indices = 40_u32;
+                        constexpr static auto max_primitives = 84_u32;
                         constexpr static auto cone_weight = 0.0f;
                         const auto max_meshlets = meshopt_buildMeshletsBound(optimized_indices.size(), max_indices, max_primitives);
                         auto meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
@@ -241,6 +241,18 @@ namespace app {
                                 meshlet.index_count = meshlets[k].vertex_count;
                                 meshlet.primitive_offset = primitive_offset + meshlets[k].triangle_offset;
                                 meshlet.primitive_count = meshlets[k].triangle_count;
+
+                                auto aabb = aabb_t();
+                                aabb.min = glm::vec3(std::numeric_limits<float32>::max());
+                                aabb.max = glm::vec3(std::numeric_limits<float32>::lowest());
+                                for (auto z = 0_u32; z < meshlet.primitive_count * 3; ++z) {
+                                    const auto offset = meshlet_indices[meshlets[k].vertex_offset +
+                                        meshlet_primitives[meshlets[k].triangle_offset + z]];
+                                    const auto& vertex = optimized_vertices[offset];
+                                    aabb.min = glm::min(aabb.min, vertex.position);
+                                    aabb.max = glm::max(aabb.max, vertex.position);
+                                }
+                                meshlet.aabb = aabb;
                             }
                         }
                         total_meshlets += meshlet_count;

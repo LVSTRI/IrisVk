@@ -22,6 +22,8 @@
 #include <glm/gtc/type_ptr.hpp>
 
 namespace app {
+    constexpr static auto task_workgroup_size = 32;
+
     application_t::application_t() noexcept
         : _camera(_platform) {
         IR_PROFILE_SCOPED();
@@ -59,6 +61,7 @@ namespace app {
             .view = ir::default_image_view_info,
         });
         _main_pass.pipeline = ir::pipeline_t::make(*_device, *_main_pass.framebuffer, {
+            .task = "../shaders/0.1/main.task.glsl",
             .mesh = "../shaders/0.1/main.mesh.glsl",
             .fragment = "../shaders/0.1/main.frag",
             .blend = {
@@ -68,10 +71,6 @@ namespace app {
                 ir::dynamic_state_t::e_viewport,
                 ir::dynamic_state_t::e_scissor
             },
-            .depth_flags =
-                ir::depth_state_flag_t::e_enable_test |
-                ir::depth_state_flag_t::e_enable_write,
-            .depth_compare_op = ir::compare_op_t::e_greater,
             .cull_mode = ir::cull_mode_t::e_back,
         });
         _main_pass.camera_buffer = ir::buffer_t<camera_data_t>::make(*_device, frames_in_flight, {
@@ -163,6 +162,7 @@ namespace app {
                         .index_count = meshlet.index_count,
                         .primitive_count = meshlet.primitive_count,
                         .group_id = group_id,
+                        .aabb = meshlet.aabb
                     });
                 }
                 group_id++;
@@ -272,25 +272,33 @@ namespace app {
         command_buffer().pool().reset();
         const auto image_index = swapchain().acquire_next_image(image_available());
 
-        camera_buffer().insert({
+        static auto freeze_frustum = false;
+        static auto last_frustum = frustum_t();
+
+        if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f)) {
+            freeze_frustum = !freeze_frustum;
+        }
+
+        if (!freeze_frustum) {
+            last_frustum = make_perspective_frustum(_camera.projection() * _camera.view());
+        }
+
+        auto camera_data = camera_data_t {
             .projection = _camera.projection(),
             .view = _camera.view(),
             .pv = _camera.projection() * _camera.view(),
             .position = glm::make_vec4(_camera.position()),
-        });
+            .frustum = last_frustum
+        };
+
+        camera_buffer().insert(camera_data);
 
         auto main_set = ir::descriptor_set_builder_t(*_main_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
             .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
             .build();
 
-        auto constants = std::to_array({
-            _main_pass.meshlets.as_const_ref().address(),
-            _main_pass.vertices.as_const_ref().address(),
-            _main_pass.indices.as_const_ref().address(),
-            _main_pass.primitives.as_const_ref().address(),
-            _main_pass.transforms.as_const_ref().address(),
-        });
+        const auto meshlet_count = _main_pass.meshlets.as_const_ref().size();
 
         command_buffer().begin();
         command_buffer().image_barrier({
@@ -323,8 +331,25 @@ namespace app {
             .height = swapchain().height(),
         });
         command_buffer().bind_descriptor_set(*main_set);
-        command_buffer().push_constants(ir::shader_stage_t::e_mesh, 0, ir::size_bytes(constants), constants.data());
-        command_buffer().draw_mesh_tasks(_main_pass.meshlets.as_const_ref().size());
+        {
+            struct {
+                uint64 meshlet_address;
+                uint64 vertex_address;
+                uint64 index_address;
+                uint64 primitive_address;
+                uint64 transform_address;
+                uint32 meshlet_count;
+            } constants = {
+                _main_pass.meshlets.as_const_ref().address(),
+                _main_pass.vertices.as_const_ref().address(),
+                _main_pass.indices.as_const_ref().address(),
+                _main_pass.primitives.as_const_ref().address(),
+                _main_pass.transforms.as_const_ref().address(),
+                static_cast<uint32>(meshlet_count),
+            };
+            command_buffer().push_constants(ir::shader_stage_t::e_task | ir::shader_stage_t::e_mesh, 0, ir::size_bytes(constants), &constants);
+        }
+        command_buffer().draw_mesh_tasks((meshlet_count + task_workgroup_size - 1) / task_workgroup_size);
         command_buffer().end_render_pass();
 
         command_buffer().image_barrier({
@@ -353,7 +378,22 @@ namespace app {
             .height = swapchain().height(),
         });
         command_buffer().bind_descriptor_set(*final_set);
-        command_buffer().push_constants(ir::shader_stage_t::e_fragment, 0, ir::size_bytes(constants), constants.data());
+        {
+            struct {
+                uint64 meshlet_address;
+                uint64 vertex_address;
+                uint64 index_address;
+                uint64 primitive_address;
+                uint64 transform_address;
+            } constants = {
+                _main_pass.meshlets.as_const_ref().address(),
+                _main_pass.vertices.as_const_ref().address(),
+                _main_pass.indices.as_const_ref().address(),
+                _main_pass.primitives.as_const_ref().address(),
+                _main_pass.transforms.as_const_ref().address(),
+            };
+            command_buffer().push_constants(ir::shader_stage_t::e_fragment, 0, ir::size_bytes(constants), &constants);
+        }
         command_buffer().draw(3, 1, 0, 0);
         command_buffer().end_render_pass();
         command_buffer().image_barrier({

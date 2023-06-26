@@ -11,18 +11,8 @@
 #include <glm/vec3.hpp>
 
 namespace app {
-    struct alignas(16) plane_t {
-        plane_t() noexcept = default;
-        plane_t(const glm::vec3& n, const glm::vec3& p) noexcept
-            : normal(glm::normalize(n)),
-              distance(glm::dot(normal, p)) {}
-
-        glm::vec3 normal = {};
-        float32 distance = 0;
-    };
-
     struct frustum_t {
-        plane_t planes[6] = {};
+        glm::vec4 planes[6] = {};
     };
 
     class camera_t {
