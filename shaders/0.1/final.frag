@@ -78,11 +78,9 @@ partial_derivatives_t compute_derivatives(in vec4[3] clip_position, in vec2 ndc_
         interp_w * (delta_v.x * result.ddx.z + delta_v.y * result.ddy.z));
 
     result.ddx *= 2.0 / resolution.x;
-    result.ddy *= 2.0 / resolution.y;
+    result.ddy *= -2.0 / resolution.y;
     ddx_sum *= 2.0 / resolution.x;
-    ddy_sum *= 2.0 / resolution.y;
-    result.ddy *= -1.0;
-    ddy_sum *= -1.0;
+    ddy_sum *= -2.0 / resolution.y;
 
     const float interp_w_ddx = 1.0 / (interp_inv_w.x + ddx_sum);
     const float interp_w_ddy = 1.0 / (interp_inv_w.x + ddy_sum);
@@ -138,7 +136,7 @@ void main() {
     const uint primitive_offset = meshlet.primitive_offset;
     const uint index_count = meshlet.index_count;
     const uint primitive_count = meshlet.primitive_count;
-    const uint group_id = meshlet.group_id;
+    const uint instance_id = meshlet.instance_id;
 
     // fetch vertex data
     const restrict uint[] primitive_index = uint[](
@@ -149,7 +147,7 @@ void main() {
         vertex_ptr.data[vertex_offset + index_ptr.data[index_offset + primitive_index[0]]],
         vertex_ptr.data[vertex_offset + index_ptr.data[index_offset + primitive_index[1]]],
         vertex_ptr.data[vertex_offset + index_ptr.data[index_offset + primitive_index[2]]]);
-    const restrict mat4 transform = transform_ptr.data[group_id];
+    const restrict mat4 transform = transform_ptr.data[instance_id];
 
     const vec4[] clip_position = vec4[](
         u_camera.data.pv * transform * vec4(vec3_from_float(vertices[0].position), 1.0),
@@ -175,5 +173,5 @@ void main() {
 
     const vec3 light_direction = normalize(vec3(0.23, 1.0, 0.52));
     o_pixel = vec4(normal, 1.0);
-    o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
+    o_pixel = vec4(hsv_to_rgb(vec3(float(instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
 }

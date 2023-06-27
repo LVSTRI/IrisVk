@@ -20,7 +20,7 @@ struct meshlet_glsl_t {
     uint primitive_offset;
     uint index_count;
     uint primitive_count;
-    uint group_id;
+    uint instance_id;
     aabb_t aabb;
 };
 

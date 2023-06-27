@@ -31,7 +31,6 @@ layout (push_constant) uniform pc_data_block {
     uint64_t primitive_address;
     uint64_t transforms_address;
     uint meshlet_count;
-    uint _pad;
 };
 
 taskPayloadSharedEXT task_payload_t payload;
@@ -46,8 +45,8 @@ bool is_meshlet_visible(in uint meshlet_id) {
     restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
     restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
     const aabb_t aabb = meshlet_ptr.data[meshlet_id].aabb;
-    const uint group_id = meshlet_ptr.data[meshlet_id].group_id;
-    const mat4 model = transform_ptr.data[group_id];
+    const uint instance_id = meshlet_ptr.data[meshlet_id].instance_id;
+    const mat4 model = transform_ptr.data[instance_id];
 
     const vec3 aabb_min = vec3_from_float(aabb.min);
     const vec3 aabb_max = vec3_from_float(aabb.max);

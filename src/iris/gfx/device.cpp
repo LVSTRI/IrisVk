@@ -39,6 +39,7 @@ namespace ir {
         IR_PROFILE_SCOPED();
         auto device = arc_ptr<self>(new self());
         auto logger = spdlog::stdout_color_mt("device");
+        spdlog::create<spdlog::sinks::stdout_color_sink_mt>("cache");
 
         auto properties2 = VkPhysicalDeviceProperties2();
         properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;

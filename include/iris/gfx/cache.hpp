@@ -7,6 +7,8 @@
 #include <iris/core/enums.hpp>
 #include <iris/core/types.hpp>
 
+#include <spdlog/sinks/stdout_color_sinks.h>
+
 #include <utility>
 #include <vector>
 
@@ -69,7 +71,7 @@ namespace ir {
             if constexpr (!_is_persistent) {
                 std::erase_if(_map, [](auto& entry) {
                     if (entry.second.ttl-- == 0) {
-                        IR_LOG_INFO(spdlog::get("device"), "cache_t: TTL expired for object {}", fmt::ptr(&entry.second.value));
+                        IR_LOG_INFO(spdlog::get("cache"), "cache_t: TTL expired for object {}", fmt::ptr(&entry.second.value));
                         return true;
                     }
                     return false;

@@ -32,9 +32,7 @@ namespace app {
 
     struct meshlet_group_t {
         uint32 vertex_offset = 0;
-        uint32 vertex_count = 0;
-        uint32 index_count = 0;
-
+        uint32 instance_id = 0;
         std::vector<meshlet_t> meshlets;
     };
 

@@ -150,7 +150,7 @@ namespace app {
         });
 
         {
-            const auto model = meshlet_model_t::make("../models/compressed/bistro/bistro.glb");
+            const auto model = meshlet_model_t::make("../models/compressed/trees/trees.glb");
             auto meshlets = std::vector<meshlet_glsl_t>();
             meshlets.reserve(model.meshlet_count());
             for (auto group_id = 0_u32; const auto& group : model.meshlet_groups()) {
@@ -161,7 +161,7 @@ namespace app {
                         .primitive_offset = meshlet.primitive_offset,
                         .index_count = meshlet.index_count,
                         .primitive_count = meshlet.primitive_count,
-                        .group_id = group_id,
+                        .instance_id = group.instance_id,
                         .aabb = meshlet.aabb
                     });
                 }
@@ -332,7 +332,8 @@ namespace app {
         });
         command_buffer().bind_descriptor_set(*main_set);
         {
-            struct {
+#pragma pack(push, 1)
+            struct x {
                 uint64 meshlet_address;
                 uint64 vertex_address;
                 uint64 index_address;
@@ -347,6 +348,7 @@ namespace app {
                 _main_pass.transforms.as_const_ref().address(),
                 static_cast<uint32>(meshlet_count),
             };
+#pragma pack(pop)
             command_buffer().push_constants(ir::shader_stage_t::e_task | ir::shader_stage_t::e_mesh, 0, ir::size_bytes(constants), &constants);
         }
         command_buffer().draw_mesh_tasks((meshlet_count + task_workgroup_size - 1) / task_workgroup_size);

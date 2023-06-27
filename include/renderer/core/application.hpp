@@ -26,7 +26,7 @@ namespace app {
         uint32 primitive_offset = 0;
         uint32 index_count = 0;
         uint32 primitive_count = 0;
-        uint32 group_id = 0;
+        uint32 instance_id = 0;
         alignas(alignof(float32)) aabb_t aabb = {};
     };
 
