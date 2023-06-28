@@ -8,6 +8,7 @@
 
 #include "common.glsl"
 
+#define TASK_WORKGROUP_SIZE 32
 #define WORKGROUP_SIZE 32
 #define MAX_VERTICES 64
 #define MAX_PRIMITIVES 124
@@ -30,6 +31,10 @@ layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_buffer {
     meshlet_glsl_t[] data;
 };
 
+layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_instance_buffer {
+    meshlet_instance_t[] data;
+};
+
 layout (scalar, buffer_reference) restrict readonly buffer b_vertex_buffer {
     vertex_format_t[] data;
 };
@@ -46,8 +51,9 @@ layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
     mat4[] data;
 };
 
-layout (push_constant) uniform pc_address_block {
+layout (push_constant) uniform pc_data_block {
     uint64_t meshlet_address;
+    uint64_t meshlet_instance_address;
     uint64_t vertex_address;
     uint64_t index_address;
     uint64_t primitive_address;
@@ -55,10 +61,19 @@ layout (push_constant) uniform pc_address_block {
     uint meshlet_count;
 };
 
+struct task_payload_t {
+    uint base_id;
+    uint8_t offset[TASK_WORKGROUP_SIZE];
+};
+
 taskPayloadSharedEXT task_payload_t payload;
 
 void main() {
-    const uint meshlet_id = payload.base_meshlet_id + payload.meshlet_offset[gl_WorkGroupID.x];
+    const uint meshlet_instance_id = payload.base_id + uint(payload.offset[gl_WorkGroupID.x]);
+    restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
+    const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
+    const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
+
     const uint thread_index = gl_LocalInvocationID.x;
 
     restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
@@ -73,7 +88,6 @@ void main() {
     const uint primitive_offset = meshlet.primitive_offset;
     const uint index_count = meshlet.index_count;
     const uint primitive_count = meshlet.primitive_count;
-    const uint instance_id = meshlet.instance_id;
 
     if (thread_index == 0) {
         SetMeshOutputsEXT(index_count, primitive_count);
@@ -87,7 +101,7 @@ void main() {
         const mat4 transform = transform_ptr.data[instance_id];
 
         gl_MeshVerticesEXT[index].gl_Position = u_camera.data.pv * transform * vec4(position, 1.0);
-        o_vertex_data[index].meshlet_id = meshlet_id;
+        o_vertex_data[index].meshlet_id = meshlet_instance_id;
     }
 
     // gl_PrimitiveTriangleIndicesEXT

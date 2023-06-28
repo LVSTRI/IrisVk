@@ -1,5 +1,4 @@
 #define M_GOLDEN_CONJ 0.6180339887498948482045868343656
-#define TASK_WORKGROUP_SIZE 32
 
 struct camera_data_t {
     mat4 projection;
@@ -20,8 +19,12 @@ struct meshlet_glsl_t {
     uint primitive_offset;
     uint index_count;
     uint primitive_count;
-    uint instance_id;
     aabb_t aabb;
+};
+
+struct meshlet_instance_t {
+    uint meshlet_id;
+    uint instance_id;
 };
 
 struct vertex_format_t {
@@ -29,11 +32,6 @@ struct vertex_format_t {
     float[3] normal;
     float[2] uv;
     float[4] tangent;
-};
-
-struct task_payload_t {
-    uint base_meshlet_id;
-    uint8_t meshlet_offset[TASK_WORKGROUP_SIZE];
 };
 
 vec3 hsv_to_rgb(in vec3 hsv) {

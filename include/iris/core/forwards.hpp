@@ -41,6 +41,11 @@ namespace ir {
     enum class command_pool_flag_t;
     enum class compare_op_t;
     enum class index_type_t;
+    enum class sampler_filter_t;
+    enum class sampler_mipmap_mode_t;
+    enum class sampler_address_mode_t;
+    enum class sampler_border_color_t;
+    enum class sampler_reduction_mode_t;
 
     enum class queue_type_t;
     struct queue_family_t;
@@ -84,6 +89,10 @@ namespace ir {
     enum class keyboard_t;
     struct cursor_position_t;
 
+    struct sampler_filter_combo_t;
+    struct sampler_address_mode_combo_t;
+    struct sampler_create_info_t;
+
     class instance_t;
     class device_t;
     class queue_t;
@@ -108,6 +117,7 @@ namespace ir {
     class deletion_queue_t;
     template <typename>
     class cache_t;
+    class sampler_t;
 
     class wsi_platform_t;
     class input_t;

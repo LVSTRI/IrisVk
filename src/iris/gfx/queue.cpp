@@ -138,6 +138,21 @@ namespace ir {
         IR_VULKAN_CHECK(_device.get().logger(), vkQueueSubmit2(_handle, 1, &submit_info, fence ? fence->handle() : nullptr));
     }
 
+    auto queue_t::submit(std::function<void(command_buffer_t&)> record) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto command_buffer = command_buffer_t::make(transient_pool(0), {});
+        auto fence = fence_t::make(device(), false);
+        command_buffer.as_ref().begin();
+        record(*command_buffer);
+        command_buffer.as_ref().end();
+        submit({
+            .command_buffers = { std::cref(*command_buffer) },
+            .wait_semaphores = {},
+            .signal_semaphores = {},
+        }, fence.get());
+        fence.as_const_ref().wait();
+    }
+
     auto queue_t::present(const queue_present_info_t& info) noexcept -> void {
         IR_PROFILE_SCOPED();
         auto wait_semaphore_info = std::vector<VkSemaphore>();

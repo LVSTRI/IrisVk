@@ -42,6 +42,11 @@ namespace ir {
         e_vec4 = sizeof(float32[4]),
     };
 
+    struct compute_pipeline_create_info_t {
+        fs::path compute;
+        // TODO
+    };
+
     struct graphics_pipeline_create_info_t {
         fs::path vertex;
         fs::path fragment;
@@ -73,6 +78,7 @@ namespace ir {
         pipeline_t() noexcept;
         ~pipeline_t() noexcept;
 
+        IR_NODISCARD static auto make(device_t& device, const compute_pipeline_create_info_t& info) noexcept -> arc_ptr<self>;
         IR_NODISCARD static auto make(device_t& device, const framebuffer_t& framebuffer, const graphics_pipeline_create_info_t& info) noexcept -> arc_ptr<self>;
         IR_NODISCARD static auto make(device_t& device, const framebuffer_t& framebuffer, const mesh_shading_pipeline_create_info_t& info) noexcept -> arc_ptr<self>;
 
@@ -83,6 +89,7 @@ namespace ir {
         IR_NODISCARD auto descriptor_binding(const descriptor_reference& reference) const noexcept -> const descriptor_binding_t&;
 
         IR_NODISCARD auto type() const noexcept -> pipeline_type_t;
+        IR_NODISCARD auto compute_info() const noexcept -> const compute_pipeline_create_info_t&;
         IR_NODISCARD auto graphics_info() const noexcept -> const graphics_pipeline_create_info_t&;
         IR_NODISCARD auto mesh_info() const noexcept -> const mesh_shading_pipeline_create_info_t&;
         IR_NODISCARD auto device() noexcept -> device_t&;
@@ -96,6 +103,7 @@ namespace ir {
         pipeline_type_t _type = {};
 
         std::variant<
+            compute_pipeline_create_info_t,
             graphics_pipeline_create_info_t,
             mesh_shading_pipeline_create_info_t> _info = {};
         arc_ptr<device_t> _device;

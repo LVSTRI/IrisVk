@@ -130,6 +130,7 @@ set(IRIS_MAIN_HEADERS
     include/iris/gfx/image.hpp
     include/iris/gfx/queue.hpp
     include/iris/gfx/render_pass.hpp
+    include/iris/gfx/sampler.hpp
     include/iris/gfx/semaphore.hpp
     include/iris/gfx/swapchain.hpp
 
@@ -153,6 +154,7 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/pipeline.cpp
     src/iris/gfx/queue.cpp
     src/iris/gfx/render_pass.cpp
+    src/iris/gfx/sampler.cpp
     src/iris/gfx/semaphore.cpp
     src/iris/gfx/swapchain.cpp
 

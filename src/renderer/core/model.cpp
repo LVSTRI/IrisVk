@@ -14,6 +14,7 @@
 
 namespace app {
     static auto decode_texture_path(const fs::path& base, const cgltf_image& image) noexcept {
+        IR_PROFILE_SCOPED();
         if (image.uri) {
             return (base / image.uri).generic_string();
         }
@@ -30,6 +31,7 @@ namespace app {
     }
 
     static auto is_texture_valid(const cgltf_texture* texture) noexcept {
+        IR_PROFILE_SCOPED();
         if (texture) {
             if (texture->image) {
                 return
@@ -44,6 +46,7 @@ namespace app {
     }
 
     auto meshlet_model_t::make(const fs::path& path) noexcept -> self {
+        IR_PROFILE_SCOPED();
         auto model = self();
         auto options = cgltf_options();
         auto* gltf = (cgltf_data*)(nullptr);
@@ -51,15 +54,16 @@ namespace app {
         cgltf_parse_file(&options, s_path.c_str(), &gltf);
         cgltf_load_buffers(&options, gltf, s_path.c_str());
 
+        auto meshlet_id = 0_u32;
         auto vertex_offset = 0_u32;
         auto index_offset = 0_u32;
         auto primitive_offset = 0_u32;
-        auto mesh_cache = ir::akl::fast_hash_map<const cgltf_primitive*, meshlet_group_t>();
+        auto meshlet_cache = ir::akl::fast_hash_map<const cgltf_primitive*, std::vector<meshlet_t>>();
         for (auto i = 0_u32; i < gltf->meshes_count; ++i) {
             const auto& mesh = gltf->meshes[i];
             for (auto j = 0_u32; j < mesh.primitives_count; ++j) {
                 const auto& primitive = mesh.primitives[j];
-                if (mesh_cache.contains(&primitive)) {
+                if (meshlet_cache.contains(&primitive)) {
                     continue;
                 }
                 const auto* position_ptr = (glm::vec3*)(nullptr);
@@ -147,9 +151,7 @@ namespace app {
                 }
 
                 // optimization
-                auto& optimized_indices = indices;
-                auto& optimized_vertices = vertices;
-                /*auto optimized_indices = std::vector<uint32>();
+                auto optimized_indices = std::vector<uint32>();
                 auto optimized_vertices = std::vector<meshlet_vertex_format_t>();
                 {
                     const auto index_count = indices.size();
@@ -194,7 +196,7 @@ namespace app {
                         optimized_vertices.data(),
                         optimized_vertices.size(),
                         sizeof(meshlet_vertex_format_t));
-                }*/
+                }
                 // meshlet build
                 {
                     constexpr static auto max_indices = 64_u32;
@@ -221,12 +223,13 @@ namespace app {
                     meshlet_primitives.resize(last_meshlet.triangle_offset + ((last_meshlet.triangle_count * 3 + 3) & ~3));
                     meshlets.resize(meshlet_count);
 
-                    auto meshlet_group = meshlet_group_t();
+                    auto meshlet_group = std::vector<meshlet_t>();
                     {
-                        meshlet_group.vertex_offset = vertex_offset;
-                        meshlet_group.meshlets.reserve(meshlet_count);
+                        meshlet_group.reserve(meshlet_count);
                         for (auto k = 0_u32; k < meshlet_count; ++k) {
-                            auto& meshlet = meshlet_group.meshlets.emplace_back();
+                            auto& meshlet = meshlet_group.emplace_back();
+                            meshlet.id = meshlet_id++;
+                            meshlet.vertex_offset = vertex_offset;
                             meshlet.index_offset = index_offset + meshlets[k].vertex_offset;
                             meshlet.index_count = meshlets[k].vertex_count;
                             meshlet.primitive_offset = primitive_offset + meshlets[k].triangle_offset;
@@ -252,10 +255,13 @@ namespace app {
                     model._vertices.insert(model._vertices.end(), optimized_vertices.begin(), optimized_vertices.end());
                     model._indices.insert(model._indices.end(), meshlet_indices.begin(), meshlet_indices.end());
                     model._primitives.insert(model._primitives.end(), meshlet_primitives.begin(), meshlet_primitives.end());
-                    mesh_cache[&primitive] = std::move(meshlet_group);
+                    model._meshlets.insert(model._meshlets.end(), meshlet_group.begin(), meshlet_group.end());
+                    meshlet_cache[&primitive] = std::move(meshlet_group);
                 }
             }
         }
+        auto meshlet_instances = std::vector<meshlet_instance_t>();
+        meshlet_instances.reserve(meshlet_id);
         for (auto i = 0_u32; i < gltf->scene->nodes_count; ++i) {
             auto nodes = std::queue<const cgltf_node*>();
             nodes.push(gltf->scene->nodes[i]);
@@ -272,43 +278,52 @@ namespace app {
                 cgltf_node_transform_world(&node, glm::value_ptr(transform));
                 const auto& mesh = *node.mesh;
                 for (auto j = 0_u32; j < mesh.primitives_count; ++j) {
-                    if (!mesh_cache.contains(mesh.primitives + j)) {
-                        continue;
+                    const auto transform_id = model._transforms.size();
+                    for (const auto& each : meshlet_cache[mesh.primitives + j]) {
+                        meshlet_instances.push_back({
+                            each.id,
+                            static_cast<uint32>(transform_id)
+                        });
                     }
-                    auto cached = mesh_cache[mesh.primitives + j];
-                    cached.instance_id = model._transforms.size();
-                    model._meshlet_groups.emplace_back(std::move(cached));
                     model._transforms.emplace_back(transform);
                 }
             }
         }
-        for (const auto& group : model._meshlet_groups) {
-            model._meshlet_count += group.meshlets.size();
-        }
+        model._meshlet_instances = std::move(meshlet_instances);
         return model;
     }
 
-    auto meshlet_model_t::meshlet_groups() const noexcept -> std::span<const meshlet_group_t> {
-        return _meshlet_groups;
+    auto meshlet_model_t::meshlets() const noexcept -> std::span<const meshlet_t> {
+        IR_PROFILE_SCOPED();
+        return _meshlets;
+    }
+
+    auto meshlet_model_t::meshlet_instances() const noexcept -> std::span<const meshlet_instance_t> {
+        IR_PROFILE_SCOPED();
+        return _meshlet_instances;
     }
 
     auto meshlet_model_t::vertices() const noexcept -> std::span<const meshlet_vertex_format_t> {
+        IR_PROFILE_SCOPED();
         return _vertices;
     }
 
     auto meshlet_model_t::indices() const noexcept -> std::span<const uint32> {
+        IR_PROFILE_SCOPED();
         return _indices;
     }
 
     auto meshlet_model_t::primitives() const noexcept -> std::span<const uint8> {
+        IR_PROFILE_SCOPED();
         return _primitives;
     }
 
     auto meshlet_model_t::transforms() const noexcept -> std::span<const glm::mat4> {
+        IR_PROFILE_SCOPED();
         return _transforms;
     }
 
     auto meshlet_model_t::meshlet_count() const noexcept -> uint32 {
-        return _meshlet_count;
+        return _meshlets.size();
     }
 }

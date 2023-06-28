@@ -23,6 +23,8 @@ namespace app {
     };
 
     struct meshlet_t {
+        uint32 id = 0;
+        uint32 vertex_offset = 0;
         uint32 index_offset = 0;
         uint32 index_count = 0;
         uint32 primitive_offset = 0;
@@ -30,10 +32,9 @@ namespace app {
         aabb_t aabb = {};
     };
 
-    struct meshlet_group_t {
-        uint32 vertex_offset = 0;
+    struct meshlet_instance_t {
+        uint32 meshlet_id = 0;
         uint32 instance_id = 0;
-        std::vector<meshlet_t> meshlets;
     };
 
     class meshlet_model_t {
@@ -42,7 +43,8 @@ namespace app {
 
         IR_NODISCARD static auto make(const fs::path& path) noexcept -> self;
 
-        IR_NODISCARD auto meshlet_groups() const noexcept -> std::span<const meshlet_group_t>;
+        IR_NODISCARD auto meshlets() const noexcept -> std::span<const meshlet_t>;
+        IR_NODISCARD auto meshlet_instances() const noexcept -> std::span<const meshlet_instance_t>;
         IR_NODISCARD auto vertices() const noexcept -> std::span<const meshlet_vertex_format_t>;
         IR_NODISCARD auto indices() const noexcept -> std::span<const uint32>;
         IR_NODISCARD auto primitives() const noexcept -> std::span<const uint8>;
@@ -50,7 +52,8 @@ namespace app {
         IR_NODISCARD auto meshlet_count() const noexcept -> uint32;
 
     private:
-        std::vector<meshlet_group_t> _meshlet_groups;
+        std::vector<meshlet_t> _meshlets;
+        std::vector<meshlet_instance_t> _meshlet_instances;
         std::vector<meshlet_vertex_format_t> _vertices;
         std::vector<uint32> _indices;
         std::vector<uint8> _primitives;

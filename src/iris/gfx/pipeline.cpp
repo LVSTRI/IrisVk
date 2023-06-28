@@ -156,6 +156,133 @@ namespace ir {
         vkDestroyPipelineLayout(device().handle(), _layout, nullptr);
     }
 
+    auto pipeline_t::make(device_t& device, const compute_pipeline_create_info_t& info) noexcept -> arc_ptr<pipeline_t::self> {
+        auto pipeline = arc_ptr<self>(new self());
+        IR_ASSERT(!info.compute.empty(), "compute shader must be specified");
+
+        auto shader_stages = std::vector<VkPipelineShaderStageCreateInfo>();
+        auto desc_bindings = descriptor_bindings();
+        auto push_constant_info = std::vector<VkPushConstantRange>();
+        const auto binary = compile_shader(info.compute, shaderc_glsl_compute_shader, device.logger());
+        const auto compiler = spvc::CompilerGLSL(binary.data(), binary.size());
+        const auto resources = compiler.get_shader_resources();
+
+        auto compute_stage_info = VkPipelineShaderStageCreateInfo();
+        compute_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        compute_stage_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        compute_stage_info.pName = "main";
+
+        auto module_info = VkShaderModuleCreateInfo();
+        module_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        module_info.codeSize = size_bytes(binary);
+        module_info.pCode = binary.data();
+        IR_VULKAN_CHECK(device.logger(), vkCreateShaderModule(device.handle(), &module_info, nullptr, &compute_stage_info.module));
+        shader_stages.emplace_back(compute_stage_info);
+
+        process_resource(
+            compiler,
+            resources.uniform_buffers,
+            descriptor_type_t::e_uniform_buffer,
+            shader_stage_t::e_compute,
+            desc_bindings);
+        process_resource(
+            compiler,
+            resources.storage_buffers,
+            descriptor_type_t::e_storage_buffer,
+            shader_stage_t::e_compute,
+            desc_bindings);
+        process_resource(
+            compiler,
+            resources.storage_images,
+            descriptor_type_t::e_storage_image,
+            shader_stage_t::e_compute,
+            desc_bindings);
+        process_resource(
+            compiler,
+            resources.sampled_images,
+            descriptor_type_t::e_combined_image_sampler,
+            shader_stage_t::e_compute,
+            desc_bindings);
+
+        if (!resources.push_constant_buffers.empty()) {
+            const auto& pc = resources.push_constant_buffers.front();
+            const auto& type = compiler.get_type(pc.type_id);
+            push_constant_info.emplace_back(VkPushConstantRange {
+                .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+                .offset = 0,
+                .size = static_cast<uint32>(compiler.get_declared_struct_size(type))
+            });
+        }
+
+        auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
+        descriptor_layout.reserve(desc_bindings.size());
+        for (const auto& [set, layout] : desc_bindings) {
+            const auto& pair_bindings = layout.values();
+            auto bindings = std::vector<descriptor_binding_t>();
+            bindings.reserve(pair_bindings.size());
+            std::transform(
+                pair_bindings.begin(),
+                pair_bindings.end(),
+                std::back_inserter(bindings),
+                [](const auto& pair) {
+                    return pair.second;
+                });
+            if (set >= descriptor_layout.size()) {
+                descriptor_layout.resize(set + 1);
+            }
+            descriptor_layout[set] = device.make_descriptor_layout(bindings);
+        }
+        descriptor_layout.erase(
+            std::remove_if(
+                descriptor_layout.begin(),
+                descriptor_layout.end(),
+                [](const auto& layout) {
+                    return !layout;
+                }),
+            descriptor_layout.end());
+
+        auto descriptor_layout_handles = std::vector<VkDescriptorSetLayout>();
+        descriptor_layout_handles.reserve(descriptor_layout.size());
+        std::transform(
+            descriptor_layout.begin(),
+            descriptor_layout.end(),
+            std::back_inserter(descriptor_layout_handles),
+            [](const auto& layout) {
+                return layout.as_const_ref().handle();
+            });
+
+        auto pipeline_layout_info = VkPipelineLayoutCreateInfo();
+        pipeline_layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipeline_layout_info.pNext = nullptr;
+        pipeline_layout_info.flags = 0;
+        pipeline_layout_info.setLayoutCount = descriptor_layout_handles.size();
+        pipeline_layout_info.pSetLayouts = descriptor_layout_handles.data();
+        pipeline_layout_info.pushConstantRangeCount = push_constant_info.size();
+        pipeline_layout_info.pPushConstantRanges = push_constant_info.data();
+        IR_VULKAN_CHECK(device.logger(), vkCreatePipelineLayout(device.handle(), &pipeline_layout_info, nullptr, &pipeline->_layout));
+
+        auto pipeline_info = VkComputePipelineCreateInfo();
+        pipeline_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        pipeline_info.pNext = nullptr;
+        pipeline_info.flags = 0;
+        pipeline_info.stage = compute_stage_info;
+        pipeline_info.layout = pipeline->_layout;
+        pipeline_info.basePipelineHandle = {};
+        pipeline_info.basePipelineIndex = 0;
+        IR_VULKAN_CHECK(device.logger(), vkCreateComputePipelines(device.handle(), {}, 1, &pipeline_info, nullptr, &pipeline->_handle));
+        IR_LOG_INFO(device.logger(), "compiled compute pipeline: ({})", info.compute.generic_string());
+
+        for (const auto& stage : shader_stages) {
+            vkDestroyShaderModule(device.handle(), stage.module, nullptr);
+        }
+
+        pipeline->_descriptor_layout = std::move(descriptor_layout);
+        pipeline->_type = pipeline_type_t::e_compute;
+        pipeline->_info = info;
+        pipeline->_device = device.as_intrusive_ptr();
+        return pipeline;
+    }
+
     auto pipeline_t::make(
         device_t& device,
         const framebuffer_t& framebuffer,
@@ -912,7 +1039,7 @@ namespace ir {
         pipeline_info.layout = pipeline->_layout;
         pipeline_info.renderPass = framebuffer.render_pass().handle();
         pipeline_info.subpass = info.subpass;
-        pipeline_info.basePipelineHandle = nullptr;
+        pipeline_info.basePipelineHandle = {};
         pipeline_info.basePipelineIndex = 0;
         IR_VULKAN_CHECK(device.logger(), vkCreateGraphicsPipelines(device.handle(), nullptr, 1, &pipeline_info, nullptr, &pipeline->_handle));
         IR_LOG_INFO(
@@ -964,14 +1091,18 @@ namespace ir {
         return _type;
     }
 
+    auto pipeline_t::compute_info() const noexcept -> const compute_pipeline_create_info_t& {
+        return std::get<0>(_info);
+    }
+
     auto pipeline_t::graphics_info() const noexcept -> const graphics_pipeline_create_info_t& {
         IR_PROFILE_SCOPED();
-        return std::get<0>(_info);
+        return std::get<1>(_info);
     }
 
     auto pipeline_t::mesh_info() const noexcept -> const mesh_shading_pipeline_create_info_t& {
         IR_PROFILE_SCOPED();
-        return std::get<1>(_info);
+        return std::get<2>(_info);
     }
 
     auto pipeline_t::device() noexcept -> device_t& {

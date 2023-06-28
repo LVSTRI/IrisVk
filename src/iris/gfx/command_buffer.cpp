@@ -214,6 +214,11 @@ namespace ir {
         vkCmdEndRenderPass(_handle);
     }
 
+    auto command_buffer_t::dispatch(uint32 x, uint32 y, uint32 z) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdDispatch(_handle, x, y, z);
+    }
+
     auto command_buffer_t::clear_image(const image_t& image, const clear_value_t& clear, const image_subresource_t& subresource) const noexcept -> void {
         IR_PROFILE_SCOPED();
         IR_ASSERT(clear.type() == clear_value_type_t::e_color, "clear_image: color only");

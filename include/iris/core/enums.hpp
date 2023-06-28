@@ -53,6 +53,11 @@ namespace ir {
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(command_pool_flag_t, VkCommandPoolCreateFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(compare_op_t, VkCompareOp);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(index_type_t, VkIndexType);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sampler_filter_t, VkFilter);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sampler_mipmap_mode_t, VkSamplerMipmapMode);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sampler_address_mode_t, VkSamplerAddressMode);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sampler_border_color_t, VkBorderColor);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sampler_reduction_mode_t, VkSamplerReductionMode);
 
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSampleCountFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageUsageFlagBits);
@@ -73,6 +78,11 @@ namespace ir {
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCommandPoolCreateFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCompareOp);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkIndexType);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkFilter);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSamplerMipmapMode);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSamplerAddressMode);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkBorderColor);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSamplerReductionMode);
 
 #undef IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION
 #undef IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION
@@ -95,18 +105,18 @@ namespace ir {
     }
 
     template <typename E>
-    concept is_native_enum = requires (E e) {
-        { det::native_enum_string_func_t<E>()(e) };
+    concept is_custom_enum = requires (E e) {
+        { det::native_enum_string_func_t<E>()(e) } -> std::same_as<std::nullptr_t>;
     };
 
     template <typename E>
-        requires (!is_native_enum<E>)
+        requires (is_custom_enum<E>)
     constexpr auto as_string(E e) noexcept -> auto {
-        return det::native_enum_string_func_t<det::native_enum_counterpart_type<E>>()(e);
+        return det::native_enum_string_func_t<det::native_enum_counterpart_type<E>>()(as_enum_counterpart(e));
     }
 
     template <typename E>
-        requires (is_native_enum<E>)
+        requires (!is_custom_enum<E>)
     constexpr auto as_string(E e) noexcept -> auto {
         return det::native_enum_string_func_t<E>()(e);
     }
@@ -811,6 +821,43 @@ namespace ir {
         e_uint8 = VK_INDEX_TYPE_UINT8_EXT,
     };
 
+    enum class sampler_filter_t : std::underlying_type_t<VkFilter> {
+        e_nearest = VK_FILTER_NEAREST,
+        e_linear = VK_FILTER_LINEAR,
+        e_cubic = VK_FILTER_CUBIC_EXT,
+        e_cubic_img = VK_FILTER_CUBIC_IMG,
+    };
+
+    enum class sampler_mipmap_mode_t : std::underlying_type_t<VkSamplerMipmapMode> {
+        e_nearest = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        e_linear = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+    };
+
+    enum class sampler_address_mode_t : std::underlying_type_t<VkSamplerAddressMode> {
+        e_repeat = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+        e_mirrored_repeat = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+        e_clamp_to_edge = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        e_clamp_to_border = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+        e_mirror_clamp_to_edge = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+    };
+
+    enum class sampler_border_color_t : std::underlying_type_t<VkBorderColor> {
+        e_float_transparent_black = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+        e_int_transparent_black = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK,
+        e_float_opaque_black = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+        e_int_opaque_black = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        e_float_opaque_white = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+        e_int_opaque_white = VK_BORDER_COLOR_INT_OPAQUE_WHITE,
+        e_float_custom = VK_BORDER_COLOR_FLOAT_CUSTOM_EXT,
+        e_int_custom = VK_BORDER_COLOR_INT_CUSTOM_EXT,
+    };
+
+    enum class sampler_reduction_mode_t : std::underlying_type_t<VkSamplerReductionMode> {
+        e_weighted_average = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT,
+        e_min = VK_SAMPLER_REDUCTION_MODE_MIN_EXT,
+        e_max = VK_SAMPLER_REDUCTION_MODE_MAX_EXT,
+    };
+
     // constants
     constexpr static auto external_subpass = VK_SUBPASS_EXTERNAL;
     constexpr static auto lod_clamp_none = VK_LOD_CLAMP_NONE;
@@ -823,5 +870,4 @@ namespace ir {
     constexpr static auto remaining_levels = VK_REMAINING_MIP_LEVELS;
     constexpr static auto layer_ignored = -1_u32;
     constexpr static auto remaining_layers = VK_REMAINING_ARRAY_LAYERS;
-    constexpr static auto max_ttl = 4_u32;
 }

@@ -26,7 +26,6 @@ namespace app {
         uint32 primitive_offset = 0;
         uint32 index_count = 0;
         uint32 primitive_count = 0;
-        uint32 instance_id = 0;
         alignas(alignof(float32)) aabb_t aabb = {};
     };
 
@@ -39,11 +38,21 @@ namespace app {
 
         ir::arc_ptr<ir::buffer_t<meshlet_glsl_t>> meshlets;
         ir::arc_ptr<ir::buffer_t<meshlet_vertex_format_t>> vertices;
+        ir::arc_ptr<ir::buffer_t<meshlet_instance_t>> meshlet_instances;
         ir::arc_ptr<ir::buffer_t<uint32>> indices;
         ir::arc_ptr<ir::buffer_t<uint8>> primitives;
         ir::arc_ptr<ir::buffer_t<glm::mat4>> transforms;
 
         std::vector<ir::arc_ptr<ir::buffer_t<camera_data_t>>> camera_buffer;
+    };
+
+    struct hiz_pass_t {
+        ir::arc_ptr<ir::image_t> hiz;
+        std::vector<ir::arc_ptr<ir::image_view_t>> views;
+        ir::arc_ptr<ir::sampler_t> reduction_sampler;
+
+        ir::arc_ptr<ir::pipeline_t> copy;
+        ir::arc_ptr<ir::pipeline_t> reduce;
     };
 
     struct final_pass_t {
@@ -93,6 +102,7 @@ namespace app {
 
         camera_t _camera;
         main_pass_t _main_pass;
+        hiz_pass_t _hiz_pass;
         final_pass_t _final_pass;
 
         ch::steady_clock::time_point _last_time = {};

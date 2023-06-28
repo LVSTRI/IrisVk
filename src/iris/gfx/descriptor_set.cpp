@@ -6,6 +6,7 @@
 #include <iris/gfx/descriptor_set.hpp>
 #include <iris/gfx/descriptor_pool.hpp>
 #include <iris/gfx/descriptor_layout.hpp>
+#include <iris/gfx/sampler.hpp>
 
 namespace ir {
     descriptor_set_t::descriptor_set_t(device_t& device) noexcept
@@ -118,6 +119,22 @@ namespace ir {
                     .view = view.handle(),
                     .layout = image_layout_t::e_general
                 }
+            }
+        });
+        return *this;
+    }
+
+    auto descriptor_set_builder_t::bind_combined_image_sampler(uint32 binding, const image_view_t& view, const sampler_t& sampler) noexcept -> self& {
+        IR_PROFILE_SCOPED();
+        _binding.bindings.emplace_back(descriptor_content_t {
+            .binding = binding,
+            .type = descriptor_type_t::e_combined_image_sampler,
+            .contents = {
+                image_info_t {
+                    .sampler = sampler.handle(),
+                    .view = view.handle(),
+                    .layout = image_layout_t::e_shader_read_only_optimal,
+                },
             }
         });
         return *this;

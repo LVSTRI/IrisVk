@@ -94,7 +94,6 @@ namespace ir {
         ~image_view_t() noexcept;
 
         IR_NODISCARD static auto make(
-            const device_t& device,
             const image_t& image,
             const image_view_create_info_t& info
         ) noexcept -> arc_ptr<self>;

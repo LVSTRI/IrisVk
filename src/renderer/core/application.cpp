@@ -2,6 +2,7 @@
 #include <iris/gfx/instance.hpp>
 #include <iris/gfx/image.hpp>
 #include <iris/gfx/command_pool.hpp>
+#include <iris/gfx/sampler.hpp>
 #include <iris/gfx/command_buffer.hpp>
 #include <iris/gfx/framebuffer.hpp>
 #include <iris/gfx/pipeline.hpp>
@@ -23,6 +24,8 @@
 
 namespace app {
     constexpr static auto task_workgroup_size = 32;
+    constexpr static auto depth_copy_workgroup_size = 32;
+    constexpr static auto depth_reduce_workgroup_size = 32;
 
     application_t::application_t() noexcept
         : _camera(_platform) {
@@ -79,6 +82,36 @@ namespace app {
             .capacity = 1,
         });
 
+        const auto hiz_mips = 1 + glm::floor(glm::log2(static_cast<float32>(glm::max(swapchain().width(), swapchain().height()))));
+        _hiz_pass.hiz = ir::image_t::make(*_device, {
+            .width = swapchain().width(),
+            .height = swapchain().height(),
+            .levels = static_cast<uint32>(hiz_mips),
+            .usage = ir::image_usage_t::e_storage | ir::image_usage_t::e_sampled,
+            .format = ir::resource_format_t::e_r32_sfloat,
+            .view = ir::default_image_view_info,
+        });
+        for (auto i = 0_u32; i < hiz_mips; ++i) {
+            _hiz_pass.views.emplace_back(ir::image_view_t::make(*_hiz_pass.hiz, {
+                .subresource {
+                    .level = i,
+                    .level_count = 1,
+                }
+            }));
+        }
+        _hiz_pass.reduction_sampler = ir::sampler_t::make(*_device, {
+            .filter = { ir::sampler_filter_t::e_linear },
+            .mip_mode = ir::sampler_mipmap_mode_t::e_nearest,
+            .address_mode = { ir::sampler_address_mode_t::e_clamp_to_edge },
+            .reduction_mode = ir::sampler_reduction_mode_t::e_min,
+        });
+        _hiz_pass.copy = ir::pipeline_t::make(*_device, {
+            .compute = "../shaders/0.1/depth_copy.comp",
+        });
+        _hiz_pass.reduce = ir::pipeline_t::make(*_device, {
+            .compute = "../shaders/0.1/depth_reduce.comp",
+        });
+
         _final_pass.description = ir::render_pass_t::make(*_device, {
             .attachments = {
                 {
@@ -99,21 +132,16 @@ namespace app {
                 {
                     .source = ir::external_subpass,
                     .dest = 0,
-                    .source_stage =
-                        ir::pipeline_stage_t::e_color_attachment_output,
-                    .dest_stage =
-                        ir::pipeline_stage_t::e_color_attachment_output,
+                    .source_stage = ir::pipeline_stage_t::e_color_attachment_output,
+                    .dest_stage = ir::pipeline_stage_t::e_color_attachment_output,
                     .source_access = ir::resource_access_t::e_none,
-                    .dest_access =
-                        ir::resource_access_t::e_color_attachment_write
+                    .dest_access = ir::resource_access_t::e_color_attachment_write
                 }, {
                     .source = 0,
                     .dest = ir::external_subpass,
-                    .source_stage =
-                        ir::pipeline_stage_t::e_color_attachment_output,
+                    .source_stage = ir::pipeline_stage_t::e_color_attachment_output,
                     .dest_stage = ir::pipeline_stage_t::e_transfer,
-                    .source_access =
-                        ir::resource_access_t::e_color_attachment_write,
+                    .source_access = ir::resource_access_t::e_color_attachment_write,
                     .dest_access = ir::resource_access_t::e_transfer_read
                 }
             }
@@ -150,25 +178,22 @@ namespace app {
         });
 
         {
-            const auto model = meshlet_model_t::make("../models/compressed/trees/trees.glb");
+            const auto model = meshlet_model_t::make("../models/compressed/bistro/bistro.glb");
             auto meshlets = std::vector<meshlet_glsl_t>();
             meshlets.reserve(model.meshlet_count());
-            for (auto group_id = 0_u32; const auto& group : model.meshlet_groups()) {
-                for (const auto& meshlet : group.meshlets) {
-                    meshlets.emplace_back(meshlet_glsl_t {
-                        .vertex_offset = group.vertex_offset,
-                        .index_offset = meshlet.index_offset,
-                        .primitive_offset = meshlet.primitive_offset,
-                        .index_count = meshlet.index_count,
-                        .primitive_count = meshlet.primitive_count,
-                        .instance_id = group.instance_id,
-                        .aabb = meshlet.aabb
-                    });
-                }
-                group_id++;
+            for (const auto& meshlet : model.meshlets()) {
+                meshlets.emplace_back(meshlet_glsl_t {
+                    .vertex_offset = meshlet.vertex_offset,
+                    .index_offset = meshlet.index_offset,
+                    .primitive_offset = meshlet.primitive_offset,
+                    .index_count = meshlet.index_count,
+                    .primitive_count = meshlet.primitive_count,
+                    .aabb = meshlet.aabb
+                });
             }
 
             _main_pass.meshlets = ir::upload_buffer(*_device, std::span<const meshlet_glsl_t>(meshlets), {});
+            _main_pass.meshlet_instances = ir::upload_buffer(*_device, model.meshlet_instances(), {});
             _main_pass.vertices = ir::upload_buffer(*_device, model.vertices(), {});
             _main_pass.indices = ir::upload_buffer(*_device, model.indices(), {});
             _main_pass.primitives = ir::upload_buffer(*_device, model.primitives(), {});
@@ -185,6 +210,20 @@ namespace app {
         _image_available = ir::semaphore_t::make(*_device, frames_in_flight);
         _render_done = ir::semaphore_t::make(*_device, frames_in_flight);
         _frame_fence = ir::fence_t::make(*_device, frames_in_flight);
+
+        // initial transitions
+        device().graphics_queue().submit([this](ir::command_buffer_t& cmd) {
+            IR_PROFILE_SCOPED();
+            cmd.image_barrier({
+                .image = std::cref(*_hiz_pass.hiz),
+                .source_stage = ir::pipeline_stage_t::e_none,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader | ir::pipeline_stage_t::e_task_shader,
+                .source_access = ir::resource_access_t::e_none,
+                .dest_access = ir::resource_access_t::e_shader_read,
+                .old_layout = ir::image_layout_t::e_undefined,
+                .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+            });
+        });
     }
 
     application_t::~application_t() noexcept {
@@ -273,14 +312,10 @@ namespace app {
         const auto image_index = swapchain().acquire_next_image(image_available());
 
         static auto freeze_frustum = false;
-        static auto last_frustum = frustum_t();
+        static auto last_camera = camera_data_t();
 
         if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f)) {
             freeze_frustum = !freeze_frustum;
-        }
-
-        if (!freeze_frustum) {
-            last_frustum = make_perspective_frustum(_camera.projection() * _camera.view());
         }
 
         auto camera_data = camera_data_t {
@@ -288,22 +323,32 @@ namespace app {
             .view = _camera.view(),
             .pv = _camera.projection() * _camera.view(),
             .position = glm::make_vec4(_camera.position()),
-            .frustum = last_frustum
+            .frustum = make_perspective_frustum(_camera.projection() * _camera.view())
         };
 
-        camera_buffer().insert(camera_data);
+        last_camera.pv = _camera.projection() * _camera.view();
+        last_camera.position = glm::make_vec4(_camera.position());
+        if (!freeze_frustum) {
+            last_camera = camera_data;
+        }
+
+        camera_buffer().insert(last_camera);
 
         auto main_set = ir::descriptor_set_builder_t(*_main_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
-            .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
+            .bind_combined_image_sampler(
+                1,
+                _hiz_pass.hiz.as_const_ref().view(),
+                _hiz_pass.reduction_sampler.as_const_ref())
+            .bind_storage_image(2, _main_pass.visbuffer.as_const_ref().view())
             .build();
 
-        const auto meshlet_count = _main_pass.meshlets.as_const_ref().size();
+        const auto meshlet_count = _main_pass.meshlet_instances.as_const_ref().size();
 
         command_buffer().begin();
         command_buffer().image_barrier({
             .image = std::cref(*_main_pass.visbuffer),
-            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .source_stage = ir::pipeline_stage_t::e_none,
             .dest_stage = ir::pipeline_stage_t::e_transfer,
             .source_access = ir::resource_access_t::e_none,
             .dest_access = ir::resource_access_t::e_transfer_write,
@@ -333,8 +378,9 @@ namespace app {
         command_buffer().bind_descriptor_set(*main_set);
         {
 #pragma pack(push, 1)
-            struct x {
+            struct {
                 uint64 meshlet_address;
+                uint64 meshlet_instance_address;
                 uint64 vertex_address;
                 uint64 index_address;
                 uint64 primitive_address;
@@ -342,6 +388,7 @@ namespace app {
                 uint32 meshlet_count;
             } constants = {
                 _main_pass.meshlets.as_const_ref().address(),
+                _main_pass.meshlet_instances.as_const_ref().address(),
                 _main_pass.vertices.as_const_ref().address(),
                 _main_pass.indices.as_const_ref().address(),
                 _main_pass.primitives.as_const_ref().address(),
@@ -357,12 +404,78 @@ namespace app {
         command_buffer().image_barrier({
             .image = std::cref(*_main_pass.visbuffer),
             .source_stage = ir::pipeline_stage_t::e_fragment_shader,
-            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .dest_stage =
+                ir::pipeline_stage_t::e_fragment_shader |
+                ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_shader_storage_write,
             .dest_access = ir::resource_access_t::e_shader_storage_read,
             .old_layout = ir::image_layout_t::e_general,
             .new_layout = ir::image_layout_t::e_general,
         });
+
+        if (!freeze_frustum) {
+            {
+                auto depth_copy_set = ir::descriptor_set_builder_t(*_hiz_pass.copy, 0)
+                    .bind_storage_image(0, _main_pass.visbuffer.as_const_ref().view())
+                    .bind_storage_image(1, _hiz_pass.views[0].as_const_ref())
+                    .build();
+                command_buffer().image_barrier({
+                    .image = std::cref(*_hiz_pass.hiz),
+                    .source_stage = ir::pipeline_stage_t::e_compute_shader | ir::pipeline_stage_t::e_task_shader,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .source_access = ir::resource_access_t::e_none,
+                    .dest_access = ir::resource_access_t::e_shader_storage_write,
+                    .old_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                    .new_layout = ir::image_layout_t::e_general,
+                });
+                command_buffer().bind_pipeline(*_hiz_pass.copy);
+                command_buffer().bind_descriptor_set(*depth_copy_set);
+                command_buffer().dispatch(
+                    (_hiz_pass.hiz.as_const_ref().width() + depth_copy_workgroup_size - 1) / depth_copy_workgroup_size,
+                    (_hiz_pass.hiz.as_const_ref().height() + depth_copy_workgroup_size - 1) / depth_copy_workgroup_size);
+            }
+
+            for (auto i = 0_u32; i < _hiz_pass.views.size() - 1; ++i) {
+                auto depth_reduce_set = ir::descriptor_set_builder_t(*_hiz_pass.reduce, 0)
+                    .bind_combined_image_sampler(0, _hiz_pass.views[i].as_const_ref(), _hiz_pass.reduction_sampler.as_const_ref())
+                    .bind_storage_image(1, _hiz_pass.views[i + 1].as_const_ref())
+                    .build();
+                command_buffer().image_barrier({
+                    .image = std::cref(*_hiz_pass.hiz),
+                    .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader | ir::pipeline_stage_t::e_task_shader,
+                    .source_access = ir::resource_access_t::e_shader_storage_write,
+                    .dest_access = ir::resource_access_t::e_shader_read,
+                    .old_layout = ir::image_layout_t::e_general,
+                    .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                    .subresource = {
+                        .level = i,
+                        .level_count = 1
+                    },
+                });
+                const auto width = std::max(1_u32, _hiz_pass.hiz.as_const_ref().width() >> (i + 1));
+                const auto height = std::max(1_u32, _hiz_pass.hiz.as_const_ref().height() >> (i + 1));
+                command_buffer().bind_pipeline(*_hiz_pass.reduce);
+                command_buffer().bind_descriptor_set(*depth_reduce_set);
+                command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, sizeof(glm::uvec2), glm::value_ptr(glm::uvec2(width, height)));
+                command_buffer().dispatch(
+                    (width + depth_reduce_workgroup_size - 1) / depth_reduce_workgroup_size,
+                    (height + depth_reduce_workgroup_size - 1) / depth_reduce_workgroup_size);
+            }
+            command_buffer().image_barrier({
+                .image = std::cref(*_hiz_pass.hiz),
+                .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader | ir::pipeline_stage_t::e_task_shader,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_shader_read,
+                .old_layout = ir::image_layout_t::e_general,
+                .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                .subresource = {
+                    .level = static_cast<uint32>(_hiz_pass.views.size() - 1),
+                    .level_count = 1
+                },
+            });
+        }
 
         auto final_set = ir::descriptor_set_builder_t(*_final_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
@@ -383,12 +496,14 @@ namespace app {
         {
             struct {
                 uint64 meshlet_address;
+                uint64 meshlet_instance_address;
                 uint64 vertex_address;
                 uint64 index_address;
                 uint64 primitive_address;
                 uint64 transform_address;
             } constants = {
                 _main_pass.meshlets.as_const_ref().address(),
+                _main_pass.meshlet_instances.as_const_ref().address(),
                 _main_pass.vertices.as_const_ref().address(),
                 _main_pass.indices.as_const_ref().address(),
                 _main_pass.primitives.as_const_ref().address(),
@@ -400,7 +515,7 @@ namespace app {
         command_buffer().end_render_pass();
         command_buffer().image_barrier({
             .image = std::cref(swapchain().image(image_index)),
-            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .source_stage = ir::pipeline_stage_t::e_none,
             .dest_stage = ir::pipeline_stage_t::e_transfer,
             .source_access = ir::resource_access_t::e_none,
             .dest_access = ir::resource_access_t::e_transfer_write,
@@ -414,7 +529,7 @@ namespace app {
         command_buffer().image_barrier({
             .image = std::cref(swapchain().image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_transfer,
-            .dest_stage = ir::pipeline_stage_t::e_bottom_of_pipe,
+            .dest_stage = ir::pipeline_stage_t::e_none,
             .source_access = ir::resource_access_t::e_transfer_write,
             .dest_access = ir::resource_access_t::e_none,
             .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
@@ -428,7 +543,7 @@ namespace app {
                 { std::cref(image_available()), ir::pipeline_stage_t::e_transfer }
             },
             .signal_semaphores = {
-                { std::cref(render_done()), ir::pipeline_stage_t::e_bottom_of_pipe }
+                { std::cref(render_done()), ir::pipeline_stage_t::e_none }
             },
         }, &frame_fence());
 

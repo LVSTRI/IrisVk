@@ -30,6 +30,10 @@ layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_buffer {
     meshlet_glsl_t[] data;
 };
 
+layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_instance_buffer {
+    meshlet_instance_t[] data;
+};
+
 layout (scalar, buffer_reference) restrict readonly buffer b_vertex_buffer {
     vertex_format_t[] data;
 };
@@ -48,6 +52,7 @@ layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
 
 layout (push_constant) uniform pc_address_block {
     uint64_t meshlet_address;
+    uint64_t meshlet_instance_address;
     uint64_t vertex_address;
     uint64_t index_address;
     uint64_t primitive_address;
@@ -120,23 +125,26 @@ void main() {
         discard;
     }
     const float depth = uintBitsToFloat(depth_bits);
-    const uint meshlet_id = uint((payload >> 7) & 0x07ffffff);
+    const uint meshlet_instance_id = uint((payload >> 7) & 0x07ffffff);
     const uint primitive_id = uint(payload & 0x7f);
 
     restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
+    restrict b_meshlet_instance_buffer meshlet_instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
     restrict b_vertex_buffer vertex_ptr = b_vertex_buffer(vertex_address);
     restrict b_index_buffer index_ptr = b_index_buffer(index_address);
     restrict b_primitive_buffer primitive_ptr = b_primitive_buffer(primitive_address);
     restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
 
     // fetch meshlet data
+    const uint meshlet_id = meshlet_instance_ptr.data[meshlet_instance_id].meshlet_id;
+    const uint instance_id = meshlet_instance_ptr.data[meshlet_instance_id].instance_id;
+
     const meshlet_glsl_t meshlet = meshlet_ptr.data[meshlet_id];
     const uint vertex_offset = meshlet.vertex_offset;
     const uint index_offset = meshlet.index_offset;
     const uint primitive_offset = meshlet.primitive_offset;
     const uint index_count = meshlet.index_count;
     const uint primitive_count = meshlet.primitive_count;
-    const uint instance_id = meshlet.instance_id;
 
     // fetch vertex data
     const restrict uint[] primitive_index = uint[](
@@ -173,5 +181,5 @@ void main() {
 
     const vec3 light_direction = normalize(vec3(0.23, 1.0, 0.52));
     o_pixel = vec4(normal, 1.0);
-    o_pixel = vec4(hsv_to_rgb(vec3(float(instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
+    o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
 }

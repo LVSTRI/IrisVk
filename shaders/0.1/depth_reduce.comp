@@ -1,0 +1,18 @@
+#version 460
+//#extension GL_EXT_debug_printf : enable
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout (set = 0, binding = 0) uniform sampler2D i_hiz;
+layout (r32f, set = 0, binding = 1) uniform writeonly image2D o_hiz;
+
+layout (push_constant) uniform pc_data_block {
+    uvec2 size;
+};
+
+void main() {
+    const uvec2 position = gl_GlobalInvocationID.xy;
+    const float depth = texture(i_hiz, (vec2(position) + 0.5) / vec2(size)).r;
+    imageStore(o_hiz, ivec2(position), vec4(depth));
+}

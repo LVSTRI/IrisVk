@@ -33,7 +33,6 @@ namespace ir {
     }
 
     auto image_view_t::make(
-        const device_t& device,
         const image_t& image,
         const image_view_create_info_t& info
     ) noexcept -> arc_ptr<self> {
@@ -70,12 +69,12 @@ namespace ir {
             image_view_info.subresourceRange.baseArrayLayer = info.subresource.layer;
             image_view_info.subresourceRange.layerCount = info.subresource.layer_count;
         }
-        IR_VULKAN_CHECK(device.logger(), vkCreateImageView(device.handle(), &image_view_info, nullptr, &image_view->_handle));
-        IR_LOG_INFO(device.logger(), "image view {} for image {} created", fmt::ptr(image_view->_handle), fmt::ptr(image.handle()));
+        IR_VULKAN_CHECK(image.device().logger(), vkCreateImageView(image.device().handle(), &image_view_info, nullptr, &image_view->_handle));
+        IR_LOG_INFO(image.device().logger(), "image view {} for image {} created", fmt::ptr(image_view->_handle), fmt::ptr(image.handle()));
 
         image_view->_aspect = aspect;
         image_view->_info = info;
-        image_view->_device = device.as_intrusive_ptr();
+        image_view->_device = image.device().as_intrusive_ptr();
         return image_view;
     }
 
@@ -170,14 +169,10 @@ namespace ir {
                 &image->_allocation,
                 nullptr));
         image->_info = info;
-        if (info.view) {
-            image->_view = image_view_t::make(
-                device,
-                *image,
-                *info.view);
-        }
-
         image->_device = device.as_intrusive_ptr();
+        if (info.view) {
+            image->_view = image_view_t::make(*image, *info.view);
+        }
         return image;
     }
 
@@ -213,7 +208,6 @@ namespace ir {
             image->_device = device.as_intrusive_ptr();
             if (info.view) {
                 image->_view = image_view_t::make(
-                    device,
                     *image,
                     *info.view);
             }

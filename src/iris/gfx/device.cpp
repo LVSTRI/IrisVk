@@ -330,7 +330,7 @@ namespace ir {
         device->_instance = instance.as_intrusive_ptr();
         device->_logger = std::move(logger);
 
-        device->_descriptor_pool = descriptor_pool_t::make(device.as_ref(), 1);
+        device->_descriptor_pool = descriptor_pool_t::make(device.as_ref(), 128);
 
         return device;
     }

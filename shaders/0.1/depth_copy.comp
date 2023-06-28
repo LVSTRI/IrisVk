@@ -1,0 +1,17 @@
+#version 460
+//#extension GL_EXT_debug_printf : enable
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
+#extension GL_EXT_shader_image_int64 : enable
+#extension GL_ARB_separate_shader_objects : enable
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+layout (r64ui, set = 0, binding = 0) uniform readonly u64image2D u_in_depth;
+layout (r32f, set = 0, binding = 1) uniform writeonly image2D o_out_hiz;
+
+void main() {
+    const uvec2 position = gl_GlobalInvocationID.xy;
+    const uint64_t payload = imageLoad(u_in_depth, ivec2(position)).r;
+    const float depth = uintBitsToFloat(uint(payload >> 34));
+    imageStore(o_out_hiz, ivec2(position), vec4(depth));
+}

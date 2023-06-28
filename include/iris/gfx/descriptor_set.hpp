@@ -92,6 +92,7 @@ namespace ir {
         auto bind_uniform_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self&;
         auto bind_storage_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self&;
         auto bind_storage_image(uint32 binding, const image_view_t& view) noexcept -> self&;
+        auto bind_combined_image_sampler(uint32 binding, const image_view_t& view, const sampler_t& sampler) noexcept -> self&;
 
         auto build() const noexcept -> arc_ptr<descriptor_set_t>;
 
