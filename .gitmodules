@@ -40,3 +40,6 @@
 [submodule "deps/meshoptimizer"]
 	path = deps/meshoptimizer
 	url = https://github.com/zeux/meshoptimizer
+[submodule "deps/mio"]
+	path = deps/mio
+	url = https://github.com/mandreyel/mio

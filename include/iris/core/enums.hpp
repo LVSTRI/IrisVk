@@ -58,6 +58,7 @@ namespace ir {
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sampler_address_mode_t, VkSamplerAddressMode);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sampler_border_color_t, VkBorderColor);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(sampler_reduction_mode_t, VkSamplerReductionMode);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(primitive_topology_t, VkPrimitiveTopology);
 
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSampleCountFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageUsageFlagBits);
@@ -83,6 +84,7 @@ namespace ir {
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSamplerAddressMode);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkBorderColor);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkSamplerReductionMode);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkPrimitiveTopology);
 
 #undef IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION
 #undef IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION
@@ -143,7 +145,7 @@ namespace ir {
     };
 
     // VkImageUsageFlagBits
-    enum class image_usage_t {
+    enum class image_usage_t : std::underlying_type_t<VkImageUsageFlagBits> {
         e_transfer_src = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         e_transfer_dst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         e_sampled = VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -525,7 +527,7 @@ namespace ir {
         e_cluster_culling_shader_huawei = VK_PIPELINE_STAGE_2_CLUSTER_CULLING_SHADER_BIT_HUAWEI,
         e_optical_flow_nv = VK_PIPELINE_STAGE_2_OPTICAL_FLOW_BIT_NV,
     };
-    
+
     // VkAccessFlagBits2
     enum class resource_access_t : VkAccessFlagBits2 {
         e_none = VK_ACCESS_2_NONE,
@@ -856,6 +858,20 @@ namespace ir {
         e_weighted_average = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT,
         e_min = VK_SAMPLER_REDUCTION_MODE_MIN_EXT,
         e_max = VK_SAMPLER_REDUCTION_MODE_MAX_EXT,
+    };
+
+    enum class primitive_topology_t : std::underlying_type_t<VkPrimitiveTopology> {
+        e_point_list = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+        e_line_list = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+        e_line_strip = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,
+        e_triangle_list = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        e_triangle_strip = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+        e_triangle_fan = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
+        e_line_list_with_adjacency = VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,
+        e_line_strip_with_adjacency = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,
+        e_triangle_list_with_adjacency = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,
+        e_triangle_strip_with_adjacency = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY,
+        e_patch_list = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST,
     };
 
     // constants

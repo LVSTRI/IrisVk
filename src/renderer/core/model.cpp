@@ -5,6 +5,7 @@
 
 #include <meshoptimizer.h>
 
+#include <unordered_set>
 #include <filesystem>
 #include <cstring>
 #include <queue>
@@ -246,6 +247,18 @@ namespace app {
                                 aabb.max = glm::max(aabb.max, vertex.position);
                             }
                             meshlet.aabb = aabb;
+                            const auto bounds = meshopt_computeMeshletBounds(
+                                &meshlet_indices[meshlets[k].vertex_offset],
+                                &meshlet_primitives[meshlets[k].triangle_offset],
+                                meshlets[k].triangle_count,
+                                reinterpret_cast<float32*>(optimized_vertices.data()),
+                                optimized_vertices.size(),
+                                sizeof(meshlet_vertex_format_t));
+                            meshlet.sphere = glm::vec4(
+                                bounds.center[0],
+                                bounds.center[1],
+                                bounds.center[2],
+                                bounds.radius);
                         }
                     }
                     vertex_offset += optimized_vertices.size();
@@ -260,14 +273,19 @@ namespace app {
                 }
             }
         }
+        auto node_cache = std::unordered_set<const cgltf_node*>();
         auto meshlet_instances = std::vector<meshlet_instance_t>();
         meshlet_instances.reserve(meshlet_id);
-        for (auto i = 0_u32; i < gltf->scene->nodes_count; ++i) {
+        for (auto i = 0_u32; i < gltf->nodes_count; ++i) {
             auto nodes = std::queue<const cgltf_node*>();
-            nodes.push(gltf->scene->nodes[i]);
+            nodes.push(&gltf->nodes[i]);
             while (!nodes.empty()) {
                 const auto& node = *nodes.front();
                 nodes.pop();
+                if (node_cache.contains(&node)) {
+                    continue;
+                }
+                node_cache.insert(&node);
                 for (auto j = 0_u32; j < node.children_count; ++j) {
                     nodes.push(node.children[j]);
                 }

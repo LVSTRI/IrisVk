@@ -25,6 +25,7 @@ namespace ir {
         e_shared = 0x1,
         e_mapped = 0x2,
         e_random_access = 0x4,
+        e_resized = 0x8,
     };
 
     struct memory_properties_t {
@@ -130,10 +131,9 @@ namespace ir {
         auto upload = buffer_t<T>::make(device, {
             .usage = buffer_usage_t::e_transfer_dst | info.usage,
             .memory = info.memory,
-            .flags = info.flags,
+            .flags = info.flags | buffer_flag_t::e_resized,
             .capacity = data.size(),
         });
-        upload.as_ref().resize(data.size());
         staging.as_ref().insert(data);
         const auto& pool = device.transfer_queue().transient_pool(0);
         auto command_buffer = command_buffer_t::make(pool, {});
@@ -411,6 +411,7 @@ namespace ir {
         const auto is_shared = (info.flags & buffer_flag_t::e_shared) == buffer_flag_t::e_shared;
         const auto is_mapped = (info.flags & buffer_flag_t::e_mapped) == buffer_flag_t::e_mapped;
         const auto is_random_access = (info.flags & buffer_flag_t::e_random_access) == buffer_flag_t::e_random_access;
+        const auto is_resized = (info.flags & buffer_flag_t::e_resized) == buffer_flag_t::e_resized;
         auto buffer_usage = info.usage;
         if (is_bda_supported) {
             buffer_usage |= buffer_usage_t::e_shader_device_address;
@@ -487,6 +488,9 @@ namespace ir {
         buffer->_alignment = memory_requirements.alignment;
         buffer->_capacity = info.capacity;
         buffer->_size = 0;
+        if (is_resized) {
+            buffer->_size = info.capacity;
+        }
         if (is_bda_supported) {
             auto bda_info = VkBufferDeviceAddressInfo();
             bda_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;

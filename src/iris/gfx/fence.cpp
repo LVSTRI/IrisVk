@@ -16,7 +16,7 @@ namespace ir {
         auto fence_info = VkFenceCreateInfo();
         fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fence_info.pNext = nullptr;
-        fence_info.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : 0_u32;
+        fence_info.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : VkFenceCreateFlagBits();
         IR_VULKAN_CHECK(device.logger(), vkCreateFence(device.handle(), &fence_info, nullptr, &fence->_handle));
         IR_LOG_INFO(device.logger(), "fence {} created", fmt::ptr(fence->_handle));
 

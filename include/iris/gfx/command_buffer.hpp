@@ -30,6 +30,14 @@ namespace ir {
         resource_access_t dest_access = resource_access_t::e_none;
     };
 
+    struct buffer_memory_barrier_t {
+        buffer_info_t buffer = {};
+        pipeline_stage_t source_stage = pipeline_stage_t::e_none;
+        pipeline_stage_t dest_stage = pipeline_stage_t::e_none;
+        resource_access_t source_access = resource_access_t::e_none;
+        resource_access_t dest_access = resource_access_t::e_none;
+    };
+
     struct image_memory_barrier_t {
         std::reference_wrapper<const image_t> image;
         pipeline_stage_t source_stage = pipeline_stage_t::e_none;
@@ -91,6 +99,8 @@ namespace ir {
         IR_NODISCARD auto pool() const noexcept -> const command_pool_t&;
 
         auto begin() noexcept -> void;
+        auto begin_debug_marker(const std::string& name) noexcept -> void;
+        auto end_debug_marker() noexcept -> void;
         auto begin_render_pass(const framebuffer_t& framebuffer, const std::vector<clear_value_t>& clears) noexcept -> void;
         auto set_viewport(const viewport_t& viewport) const noexcept -> void;
         auto set_scissor(const scissor_t& scissor) const noexcept -> void;
@@ -104,10 +114,12 @@ namespace ir {
         auto draw_mesh_tasks(uint32 x = 1, uint32 y = 1, uint32 z = 1) const noexcept -> void;
         auto end_render_pass() noexcept -> void;
         auto dispatch(uint32 x = 1, uint32 y = 1, uint32 z = 1) const noexcept -> void;
+        auto fill_buffer(const buffer_info_t& buffer, uint32 data) const noexcept -> void;
         auto clear_image(const image_t& image, const clear_value_t& clear, const image_subresource_t& subresource) const noexcept -> void;
         auto copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void;
         auto copy_buffer(const buffer_info_t& source, const buffer_info_t& dest, const buffer_copy_t& copy) const noexcept -> void;
         auto memory_barrier(const memory_barrier_t& barrier) const noexcept -> void;
+        auto buffer_barrier(const buffer_memory_barrier_t& barrier) const noexcept -> void;
         auto image_barrier(const image_memory_barrier_t& barrier) const noexcept -> void;
 
         auto end() const noexcept -> void;

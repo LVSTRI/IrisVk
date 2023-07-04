@@ -4,7 +4,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_buffer_reference : enable
-#extension GL_EXT_debug_printf : enable
+//#extension GL_EXT_debug_printf : enable
 #extension GL_GOOGLE_include_directive : enable
 #extension GL_EXT_shader_explicit_arithmetic_types : enable
 
@@ -72,29 +72,22 @@ bool is_meshlet_occluded(in aabb_t aabb, in mat4 model) {
     vec2 min_xy = vec2(1.0);
     vec2 max_xy = vec2(0.0);
     for (uint i = 0; i < 8; ++i) {
-        vec4 clip_pos = u_camera.data.projection * u_camera.data.view * model * vec4(corners[i], 1.0);
-        clip_pos.z = max(clip_pos.z, 1.0);
+        vec4 clip_pos = u_camera.data.old_pv * model * vec4(corners[i], 1.0);
+        clip_pos.z = max(clip_pos.z, 0.0);
         clip_pos /= clip_pos.w;
         clip_pos.xy = clamp(clip_pos.xy, -1.0, 1.0);
         clip_pos.xy = clip_pos.xy * vec2(0.5, -0.5) + 0.5;
         min_xy = min(min_xy, clip_pos.xy);
         max_xy = max(max_xy, clip_pos.xy);
-        max_z = max(max_z, clip_pos.z);
+        max_z = clamp(max(max_z, clip_pos.z), 0.0, 1.0);
     }
-
     const vec4 box_uvs = vec4(min_xy, max_xy);
-    const vec2 hiz_size = vec2(textureSize(u_hiz, 0));
-    const float max_mip = 1 + floor(log2(max(hiz_size.x, hiz_size.y)));
-    float mip = clamp(ceil(log2(max(hiz_size.x, hiz_size.y))), 0, max_mip);
-
-    const float lower_level = max(mip - 1, 0);
-    const vec2 scale = vec2(exp2(-lower_level));
-    const vec2 footprint = ceil(box_uvs.zw * scale) - floor(box_uvs.xy * scale);
-    if (all(lessThan(footprint, vec2(2.0)))) {
-        mip = lower_level;
-    }
-
-    const float depth = textureLod(u_hiz, box_uvs.xy, mip).r;
+    const vec2 hiz_size = textureSize(u_hiz, 0);
+    const float width = (box_uvs.z - box_uvs.x) * hiz_size.x;
+    const float height = (box_uvs.w - box_uvs.y) * hiz_size.y;
+    const float level = floor(log2(max(width, height)));
+    // min reduction
+    const float depth = textureLod(u_hiz, (box_uvs.xy + box_uvs.zw) / 2.0, level).r;
     return max_z > depth;
 }
 

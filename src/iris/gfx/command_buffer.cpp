@@ -90,6 +90,24 @@ namespace ir {
         IR_VULKAN_CHECK(pool().device().logger(), vkBeginCommandBuffer(_handle, &command_buffer_begin_info));
     }
 
+    auto command_buffer_t::begin_debug_marker(const std::string& name) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto debug_label_info = VkDebugUtilsLabelEXT();
+        debug_label_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT;
+        debug_label_info.pNext = nullptr;
+        debug_label_info.pLabelName = name.c_str();
+        debug_label_info.color[0] = 0.23f;
+        debug_label_info.color[1] = 0.11f;
+        debug_label_info.color[2] = 0.86f;
+        debug_label_info.color[3] = 1.0f;
+        vkCmdBeginDebugUtilsLabelEXT(_handle, &debug_label_info);
+    }
+
+    auto command_buffer_t::end_debug_marker() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdEndDebugUtilsLabelEXT(_handle);
+    }
+
     auto command_buffer_t::begin_render_pass(const framebuffer_t& framebuffer, const std::vector<clear_value_t>& clears) noexcept -> void {
         IR_PROFILE_SCOPED();
         _state.framebuffer = &framebuffer;
@@ -153,6 +171,7 @@ namespace ir {
                 case pipeline_type_t::e_compute: return VK_PIPELINE_BIND_POINT_COMPUTE;
                 case pipeline_type_t::e_ray_tracing: return VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
             }
+            IR_UNREACHABLE();
         }();
         vkCmdBindPipeline(_handle, bind_point, pipeline.handle());
     }
@@ -165,6 +184,7 @@ namespace ir {
                 case pipeline_type_t::e_compute: return VK_PIPELINE_BIND_POINT_COMPUTE;
                 case pipeline_type_t::e_ray_tracing: return VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
             }
+            IR_UNREACHABLE();
         }();
         const auto handle = set.handle();
         vkCmdBindDescriptorSets(
@@ -217,6 +237,11 @@ namespace ir {
     auto command_buffer_t::dispatch(uint32 x, uint32 y, uint32 z) const noexcept -> void {
         IR_PROFILE_SCOPED();
         vkCmdDispatch(_handle, x, y, z);
+    }
+
+    auto command_buffer_t::fill_buffer(const buffer_info_t& buffer, uint32 data) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdFillBuffer(_handle, buffer.handle, buffer.offset, buffer.size, data);
     }
 
     auto command_buffer_t::clear_image(const image_t& image, const clear_value_t& clear, const image_subresource_t& subresource) const noexcept -> void {
@@ -350,6 +375,30 @@ namespace ir {
         dependency_info.dependencyFlags = {};
         dependency_info.memoryBarrierCount = 1;
         dependency_info.pMemoryBarriers = &memory_barrier;
+        vkCmdPipelineBarrier2(_handle, &dependency_info);
+    }
+
+    auto command_buffer_t::buffer_barrier(const buffer_memory_barrier_t& barrier) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto buffer_barrier = VkBufferMemoryBarrier2();
+        buffer_barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+        buffer_barrier.pNext = nullptr;
+        buffer_barrier.srcStageMask = as_enum_counterpart(barrier.source_stage);
+        buffer_barrier.srcAccessMask = as_enum_counterpart(barrier.source_access);
+        buffer_barrier.dstStageMask = as_enum_counterpart(barrier.dest_stage);
+        buffer_barrier.dstAccessMask = as_enum_counterpart(barrier.dest_access);
+        buffer_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        buffer_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        buffer_barrier.buffer = barrier.buffer.handle;
+        buffer_barrier.offset = barrier.buffer.offset;
+        buffer_barrier.size = barrier.buffer.size;
+
+        auto dependency_info = VkDependencyInfo();
+        dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependency_info.pNext = nullptr;
+        dependency_info.dependencyFlags = {};
+        dependency_info.bufferMemoryBarrierCount = 1;
+        dependency_info.pBufferMemoryBarriers = &buffer_barrier;
         vkCmdPipelineBarrier2(_handle, &dependency_info);
     }
 

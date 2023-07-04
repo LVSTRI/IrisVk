@@ -101,6 +101,9 @@ add_subdirectory(deps/meshoptimizer)
 # unordered_dense setup
 add_subdirectory(deps/unordered_dense)
 
+# mio setup
+add_subdirectory(deps/mio)
+
 set(CMAKE_CXX_STANDARD 23)
 
 set(IRIS_MAIN_HEADERS
@@ -179,7 +182,7 @@ target_compile_definitions(IrisVk PUBLIC
     IRIS_DEBUG_LOGGER
     #IRIS_DEBUG_PROFILER
 
-    VK_ENABLE_BETA_EXTENSIONS
+    #VK_ENABLE_BETA_EXTENSIONS
     VK_NO_PROTOTYPES
 
     $<$<BOOL:${WIN32}>:IRIS_PLATFORM_WIN32>
@@ -191,6 +194,7 @@ target_compile_definitions(IrisVk PUBLIC
 target_link_libraries(IrisVk PUBLIC
     glm
     vma
+    mio
     volk
     glfw
     spdlog
@@ -215,9 +219,7 @@ set(IRIS_VECTOR_COMPILER_OPTIONS
     -mavx
     -mavx2
     -msha
-    -maes
-    -mprefetchi
-    -mraoint)
+    -maes)
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(IrisVk PUBLIC
         ${IRIS_VECTOR_COMPILER_OPTIONS}

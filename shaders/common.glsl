@@ -3,6 +3,7 @@
 struct camera_data_t {
     mat4 projection;
     mat4 view;
+    mat4 old_pv;
     mat4 pv;
     vec4 position;
     vec4[6] frustum;
@@ -20,6 +21,7 @@ struct meshlet_glsl_t {
     uint index_count;
     uint primitive_count;
     aabb_t aabb;
+    float[4] sphere;
 };
 
 struct meshlet_instance_t {
@@ -56,4 +58,3 @@ vec3 vec3_from_float(in float[3] v) {
 vec4 vec4_from_float(in float[4] v) {
     return vec4(v[0], v[1], v[2], v[3]);
 }
-

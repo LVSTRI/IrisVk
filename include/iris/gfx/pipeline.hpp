@@ -50,6 +50,7 @@ namespace ir {
     struct graphics_pipeline_create_info_t {
         fs::path vertex;
         fs::path fragment;
+        primitive_topology_t primitive_type = primitive_topology_t::e_triangle_list;
         std::vector<attachment_blend_t> blend;
         std::vector<dynamic_state_t> dynamic_states;
         std::vector<vertex_attribute_t> vertex_attributes;

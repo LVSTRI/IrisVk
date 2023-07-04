@@ -180,6 +180,6 @@ void main() {
         interpolate_attributes(derivatives, float[](uvs[0].y, uvs[1].y, uvs[2].y)));
 
     const vec3 light_direction = normalize(vec3(0.23, 1.0, 0.52));
-    o_pixel = vec4(normal, 1.0);
+    o_pixel = vec4(vec3(dot(normal, light_direction)), 1.0);
     o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
 }

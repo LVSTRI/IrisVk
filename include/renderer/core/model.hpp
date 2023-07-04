@@ -30,6 +30,7 @@ namespace app {
         uint32 primitive_offset = 0;
         uint32 primitive_count = 0;
         aabb_t aabb = {};
+        glm::vec4 sphere = {};
     };
 
     struct meshlet_instance_t {

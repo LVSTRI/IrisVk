@@ -12,6 +12,8 @@
 #include <spirv_glsl.hpp>
 #include <spirv.hpp>
 
+#include <mio/mmap.hpp>
+
 #include <volk.h>
 
 #include <algorithm>
@@ -24,16 +26,6 @@ namespace ir {
     namespace shc = shaderc;
 
     using descriptor_bindings = akl::fast_hash_map<uint32, akl::fast_hash_map<uint32, descriptor_binding_t>>;
-
-    IR_NODISCARD static auto whole_file(const fs::path& path, bool is_binary = false) noexcept -> std::vector<uint8> {
-        IR_PROFILE_SCOPED();
-        auto file = std::ifstream(path, std::ios::ate | (is_binary ? std::ios::binary : 0));
-        auto size = file.tellg();
-        auto data = std::vector<uint8>(size);
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(data.data()), size);
-        return data;
-    }
 
     template <typename R>
     static auto process_resource(
@@ -82,7 +74,8 @@ namespace ir {
         auto GetInclude(const char* requested, shaderc_include_type, const char*, size_t) noexcept -> shaderc_include_result* override {
             IR_PROFILE_SCOPED();
             auto path = _root / requested;
-            auto file = whole_file(path);
+            auto ec = std::error_code();
+            auto file = mio::make_mmap_source(path.generic_string(), ec);
             auto content = std::string(reinterpret_cast<const char*>(file.data()), file.size());
             return new _include_result_t(std::move(content), path.filename().generic_string());
         }
@@ -126,7 +119,8 @@ namespace ir {
         spdlog::logger& logger
     ) noexcept -> std::vector<uint32> {
         IR_PROFILE_SCOPED();
-        const auto file = whole_file(path);
+        auto ec = std::error_code();
+        const auto file = mio::make_mmap_source(path.generic_string(), ec);
         auto compiler = shc::Compiler();
         auto include_path = path.parent_path();
         while (include_path.filename().generic_string() != "shaders") {
@@ -139,7 +133,7 @@ namespace ir {
         options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
         options.SetTargetSpirv(shaderc_spirv_version_1_6);
         options.SetIncluder(std::make_unique<shader_includer_t>(std::move(include_path)));
-        auto spirv = compiler.CompileGlslToSpv(reinterpret_cast<const char*>(file.data()), file.size(), kind, path.string().c_str(), options);
+        auto spirv = compiler.CompileGlslToSpv(file.data(), file.size(), kind, path.string().c_str(), options);
         if (spirv.GetCompilationStatus() != shaderc_compilation_status_success) {
             logger.error("shader compile failed:\n\"{}\"", spirv.GetErrorMessage());
             logger.flush();
@@ -156,7 +150,7 @@ namespace ir {
         vkDestroyPipelineLayout(device().handle(), _layout, nullptr);
     }
 
-    auto pipeline_t::make(device_t& device, const compute_pipeline_create_info_t& info) noexcept -> arc_ptr<pipeline_t::self> {
+    auto pipeline_t::make(device_t& device, const compute_pipeline_create_info_t& info) noexcept -> arc_ptr<self> {
         auto pipeline = arc_ptr<self>(new self());
         IR_ASSERT(!info.compute.empty(), "compute shader must be specified");
 
@@ -481,7 +475,7 @@ namespace ir {
         input_assembly_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
         input_assembly_info.pNext = nullptr;
         input_assembly_info.flags = 0;
-        input_assembly_info.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        input_assembly_info.topology = as_enum_counterpart(info.primitive_type);
         input_assembly_info.primitiveRestartEnable = false;
 
         auto viewport = VkViewport();

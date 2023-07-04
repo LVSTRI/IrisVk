@@ -32,7 +32,7 @@ namespace ir {
     template <typename T>
     class intrusive_atomic_ptr_t {
     public:
-        using self = intrusive_atomic_ptr_t;
+        using self = intrusive_atomic_ptr_t<T>;
 
         intrusive_atomic_ptr_t() noexcept;
         intrusive_atomic_ptr_t(std::nullptr_t) noexcept;
@@ -179,10 +179,16 @@ namespace ir {
     auto intrusive_atomic_ptr_t<T>::operator !=(const self& other) const noexcept -> bool = default;
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<T>::operator ==(std::nullptr_t) const noexcept -> bool = default;
+    auto intrusive_atomic_ptr_t<T>::operator ==(std::nullptr_t) const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        return !_ptr;
+    }
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<T>::operator !=(std::nullptr_t) const noexcept -> bool = default;
+    auto intrusive_atomic_ptr_t<T>::operator !=(std::nullptr_t) const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        return _ptr;
+    }
 
     template <typename T>
     auto intrusive_atomic_ptr_t<T>::operator !() const noexcept -> bool {
@@ -206,7 +212,7 @@ namespace ir {
     template <typename T>
     class intrusive_atomic_ptr_t<const T> {
     public:
-        using self = intrusive_atomic_ptr_t;
+        using self = intrusive_atomic_ptr_t<const T>;
 
         intrusive_atomic_ptr_t() noexcept;
         intrusive_atomic_ptr_t(std::nullptr_t) noexcept;
@@ -392,10 +398,16 @@ namespace ir {
     auto intrusive_atomic_ptr_t<const T>::operator !=(const self& other) const noexcept -> bool = default;
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<const T>::operator ==(std::nullptr_t) const noexcept -> bool = default;
+    auto intrusive_atomic_ptr_t<const T>::operator ==(std::nullptr_t) const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        return !_ptr;
+    }
 
     template <typename T>
-    auto intrusive_atomic_ptr_t<const T>::operator !=(std::nullptr_t) const noexcept -> bool = default;
+    auto intrusive_atomic_ptr_t<const T>::operator !=(std::nullptr_t) const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        return _ptr;
+    }
 
     template <typename T>
     auto intrusive_atomic_ptr_t<const T>::operator !() const noexcept -> bool {

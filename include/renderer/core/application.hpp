@@ -15,6 +15,7 @@ namespace app {
     struct camera_data_t {
         glm::mat4 projection = {};
         glm::mat4 view = {};
+        glm::mat4 old_pv = {};
         glm::mat4 pv = {};
         glm::vec4 position = {};
         frustum_t frustum = {};
@@ -27,6 +28,7 @@ namespace app {
         uint32 index_count = 0;
         uint32 primitive_count = 0;
         alignas(alignof(float32)) aabb_t aabb = {};
+        alignas(alignof(float32)) glm::vec4 sphere = {};
     };
 
     struct main_pass_t {
@@ -47,9 +49,9 @@ namespace app {
     };
 
     struct hiz_pass_t {
-        ir::arc_ptr<ir::image_t> hiz;
+        ir::arc_ptr<ir::image_t> depth;
         std::vector<ir::arc_ptr<ir::image_view_t>> views;
-        ir::arc_ptr<ir::sampler_t> reduction_sampler;
+        ir::arc_ptr<ir::sampler_t> sampler;
 
         ir::arc_ptr<ir::pipeline_t> copy;
         ir::arc_ptr<ir::pipeline_t> reduce;
