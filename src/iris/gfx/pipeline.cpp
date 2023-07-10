@@ -210,21 +210,28 @@ namespace ir {
 
         auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
         descriptor_layout.reserve(desc_bindings.size());
-        for (const auto& [set, layout] : desc_bindings) {
-            const auto& pair_bindings = layout.values();
-            auto bindings = std::vector<descriptor_binding_t>();
-            bindings.reserve(pair_bindings.size());
-            std::transform(
-                pair_bindings.begin(),
-                pair_bindings.end(),
-                std::back_inserter(bindings),
-                [](const auto& pair) {
-                    return pair.second;
-                });
-            if (set >= descriptor_layout.size()) {
-                descriptor_layout.resize(set + 1);
+        {
+            auto& cache = device.cache<descriptor_layout_t>();
+            for (const auto& [set, layout] : desc_bindings) {
+                const auto& pair_bindings = layout.values();
+                auto bindings = std::vector<descriptor_binding_t>();
+                bindings.reserve(pair_bindings.size());
+                std::transform(
+                    pair_bindings.begin(),
+                    pair_bindings.end(),
+                    std::back_inserter(bindings),
+                    [](const auto& pair) {
+                        return pair.second;
+                    });
+                if (set >= descriptor_layout.size()) {
+                    descriptor_layout.resize(set + 1);
+                }
+                if (cache.contains(bindings)) {
+                    descriptor_layout[set] = cache.acquire(bindings);
+                } else {
+                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, bindings));
+                }
             }
-            descriptor_layout[set] = device.make_descriptor_layout(bindings);
         }
         descriptor_layout.erase(
             std::remove_if(
@@ -573,21 +580,28 @@ namespace ir {
 
         auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
         descriptor_layout.reserve(desc_bindings.size());
-        for (const auto& [set, layout] : desc_bindings) {
-            const auto& pair_bindings = layout.values();
-            auto bindings = std::vector<descriptor_binding_t>();
-            bindings.reserve(pair_bindings.size());
-            std::transform(
-                pair_bindings.begin(),
-                pair_bindings.end(),
-                std::back_inserter(bindings),
-                [](const auto& pair) {
-                    return pair.second;
-                });
-            if (set >= descriptor_layout.size()) {
-                descriptor_layout.resize(set + 1);
+        {
+            auto& cache = device.cache<descriptor_layout_t>();
+            for (const auto& [set, layout] : desc_bindings) {
+                const auto& pair_bindings = layout.values();
+                auto bindings = std::vector<descriptor_binding_t>();
+                bindings.reserve(pair_bindings.size());
+                std::transform(
+                    pair_bindings.begin(),
+                    pair_bindings.end(),
+                    std::back_inserter(bindings),
+                    [](const auto& pair) {
+                        return pair.second;
+                    });
+                if (set >= descriptor_layout.size()) {
+                    descriptor_layout.resize(set + 1);
+                }
+                if (cache.contains(bindings)) {
+                    descriptor_layout[set] = cache.acquire(bindings);
+                } else {
+                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, bindings));
+                }
             }
-            descriptor_layout[set] = device.make_descriptor_layout(bindings);
         }
         descriptor_layout.erase(
             std::remove_if(
@@ -970,21 +984,28 @@ namespace ir {
 
         auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
         descriptor_layout.reserve(desc_bindings.size());
-        for (const auto& [set, layout] : desc_bindings) {
-            const auto& pair_bindings = layout.values();
-            auto bindings = std::vector<descriptor_binding_t>();
-            bindings.reserve(pair_bindings.size());
-            std::transform(
-                pair_bindings.begin(),
-                pair_bindings.end(),
-                std::back_inserter(bindings),
-                [](const auto& pair) {
-                    return pair.second;
-                });
-            if (set >= descriptor_layout.size()) {
-                descriptor_layout.resize(set + 1);
+        {
+            auto& cache = device.cache<descriptor_layout_t>();
+            for (const auto& [set, layout] : desc_bindings) {
+                const auto& pair_bindings = layout.values();
+                auto bindings = std::vector<descriptor_binding_t>();
+                bindings.reserve(pair_bindings.size());
+                std::transform(
+                    pair_bindings.begin(),
+                    pair_bindings.end(),
+                    std::back_inserter(bindings),
+                    [](const auto& pair) {
+                        return pair.second;
+                    });
+                if (set >= descriptor_layout.size()) {
+                    descriptor_layout.resize(set + 1);
+                }
+                if (cache.contains(bindings)) {
+                    descriptor_layout[set] = cache.acquire(bindings);
+                } else {
+                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, bindings));
+                }
             }
-            descriptor_layout[set] = device.make_descriptor_layout(bindings);
         }
         descriptor_layout.erase(
             std::remove_if(

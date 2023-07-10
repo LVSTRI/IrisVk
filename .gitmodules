@@ -43,3 +43,6 @@
 [submodule "deps/mio"]
 	path = deps/mio
 	url = https://github.com/mandreyel/mio
+[submodule "deps/KTX-Software"]
+	path = deps/KTX-Software
+	url = https://github.com/KhronosGroup/KTX-Software

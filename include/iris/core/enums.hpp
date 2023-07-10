@@ -134,7 +134,7 @@ namespace ir {
     }
 
     // VkSampleCountFlagBits
-    enum class sample_count_t : std::underlying_type_t<VkSampleCountFlagBits> {
+    enum class sample_count_t : uint32 {
         e_1 = VK_SAMPLE_COUNT_1_BIT,
         e_2 = VK_SAMPLE_COUNT_2_BIT,
         e_4 = VK_SAMPLE_COUNT_4_BIT,
@@ -145,7 +145,7 @@ namespace ir {
     };
 
     // VkImageUsageFlagBits
-    enum class image_usage_t : std::underlying_type_t<VkImageUsageFlagBits> {
+    enum class image_usage_t : uint32 {
         e_transfer_src = VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         e_transfer_dst = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
         e_sampled = VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -172,7 +172,7 @@ namespace ir {
     };
     
     // VkFormat
-    enum class resource_format_t : std::underlying_type_t<VkFormat> {
+    enum class resource_format_t : uint32 {
         e_undefined = VK_FORMAT_UNDEFINED,
         e_r4g4_unorm_pack8 = VK_FORMAT_R4G4_UNORM_PACK8,
         e_r4g4b4a4_unorm_pack16 = VK_FORMAT_R4G4B4A4_UNORM_PACK16,
@@ -424,7 +424,7 @@ namespace ir {
     };
     
     // VkImageAspectFlagBits
-    enum class image_aspect_t : std::underlying_type_t<VkImageAspectFlagBits> {
+    enum class image_aspect_t : uint32 {
         e_color = VK_IMAGE_ASPECT_COLOR_BIT,
         e_depth = VK_IMAGE_ASPECT_DEPTH_BIT,
         e_stencil = VK_IMAGE_ASPECT_STENCIL_BIT,
@@ -440,7 +440,7 @@ namespace ir {
     };
     
     // VkImageLayout
-    enum class image_layout_t : std::underlying_type_t<VkImageLayout> {
+    enum class image_layout_t : uint32 {
         e_undefined = VK_IMAGE_LAYOUT_UNDEFINED,
         e_general = VK_IMAGE_LAYOUT_GENERAL,
         e_color_attachment_optimal = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -581,7 +581,7 @@ namespace ir {
     };
     
     // VkDescriptorType
-    enum class descriptor_type_t : std::underlying_type_t<VkDescriptorType> {
+    enum class descriptor_type_t : uint32 {
         e_sampler = VK_DESCRIPTOR_TYPE_SAMPLER,
         e_combined_image_sampler = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         e_sampled_image = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
@@ -603,7 +603,7 @@ namespace ir {
     };
     
     // VkShaderStageFlagBits
-    enum class shader_stage_t : std::underlying_type_t<VkShaderStageFlagBits> {
+    enum class shader_stage_t : uint32 {
         e_vertex = VK_SHADER_STAGE_VERTEX_BIT,
         e_tessellation_control = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
         e_tessellation_evaluation = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
@@ -633,7 +633,7 @@ namespace ir {
     };
     
     // VkDynamicState
-    enum class dynamic_state_t : std::underlying_type_t<VkDynamicState> {
+    enum class dynamic_state_t : uint32 {
         e_viewport = VK_DYNAMIC_STATE_VIEWPORT,
         e_scissor = VK_DYNAMIC_STATE_SCISSOR,
         e_line_width = VK_DYNAMIC_STATE_LINE_WIDTH,
@@ -709,7 +709,7 @@ namespace ir {
     };
     
     // VkCullModeFlagBits
-    enum class cull_mode_t : std::underlying_type_t<VkCullModeFlagBits> {
+    enum class cull_mode_t : uint32 {
         e_none = VK_CULL_MODE_NONE,
         e_front = VK_CULL_MODE_FRONT_BIT,
         e_back = VK_CULL_MODE_BACK_BIT,
@@ -717,7 +717,7 @@ namespace ir {
     };
     
     // VkBufferUsageFlagBits
-    enum class buffer_usage_t : std::underlying_type_t<VkBufferUsageFlagBits> {
+    enum class buffer_usage_t : uint32 {
         e_transfer_src = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         e_transfer_dst = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         e_uniform_texel_buffer = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT,
@@ -749,7 +749,7 @@ namespace ir {
     };
     
     // VkMemoryPropertyFlagBits
-    enum class memory_property_t : std::underlying_type_t<VkMemoryPropertyFlagBits> {
+    enum class memory_property_t : uint32 {
         e_device_local = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         e_host_visible = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         e_host_coherent = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -762,7 +762,7 @@ namespace ir {
     };
 
     // VkComponentSwizzle
-    enum class component_swizzle_t : std::underlying_type_t<VkComponentSwizzle> {
+    enum class component_swizzle_t : uint32 {
         e_identity = VK_COMPONENT_SWIZZLE_IDENTITY,
         e_zero = VK_COMPONENT_SWIZZLE_ZERO,
         e_one = VK_COMPONENT_SWIZZLE_ONE,
@@ -773,7 +773,7 @@ namespace ir {
     };
 
     // VkAttachmentLoadOp
-    enum class attachment_load_op_t : std::underlying_type_t<VkAttachmentLoadOp> {
+    enum class attachment_load_op_t : uint32 {
         e_load = VK_ATTACHMENT_LOAD_OP_LOAD,
         e_clear = VK_ATTACHMENT_LOAD_OP_CLEAR,
         e_dont_care = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -781,14 +781,14 @@ namespace ir {
     };
 
     // VkAttachmentStoreOp
-    enum class attachment_store_op_t : std::underlying_type_t<VkAttachmentStoreOp> {
+    enum class attachment_store_op_t : uint32 {
         e_store = VK_ATTACHMENT_STORE_OP_STORE,
         e_dont_care = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         e_none = VK_ATTACHMENT_STORE_OP_NONE,
     };
 
     // VkPipelineBindPoint
-    enum class pipeline_bind_point_t : std::underlying_type_t<VkPipelineBindPoint> {
+    enum class pipeline_bind_point_t : uint32 {
         e_graphics = VK_PIPELINE_BIND_POINT_GRAPHICS,
         e_compute = VK_PIPELINE_BIND_POINT_COMPUTE,
         e_ray_tracing = VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
@@ -797,14 +797,14 @@ namespace ir {
     };
 
     // VkCommandPoolCreateFlagBits
-    enum class command_pool_flag_t : std::underlying_type_t<VkCommandPoolCreateFlagBits> {
+    enum class command_pool_flag_t : uint32 {
         e_transient = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
         e_reset_command_buffer = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         e_protected = VK_COMMAND_POOL_CREATE_PROTECTED_BIT,
     };
 
     // VkCompareOp
-    enum class compare_op_t : std::underlying_type_t<VkCompareOp> {
+    enum class compare_op_t : uint32 {
         e_never = VK_COMPARE_OP_NEVER,
         e_less = VK_COMPARE_OP_LESS,
         e_equal = VK_COMPARE_OP_EQUAL,
@@ -816,26 +816,26 @@ namespace ir {
     };
 
     // VkIndexType
-    enum class index_type_t : std::underlying_type_t<VkIndexType> {
+    enum class index_type_t : uint32 {
         e_uint16 = VK_INDEX_TYPE_UINT16,
         e_uint32 = VK_INDEX_TYPE_UINT32,
         e_none_nv = VK_INDEX_TYPE_NONE_NV,
         e_uint8 = VK_INDEX_TYPE_UINT8_EXT,
     };
 
-    enum class sampler_filter_t : std::underlying_type_t<VkFilter> {
+    enum class sampler_filter_t : uint32 {
         e_nearest = VK_FILTER_NEAREST,
         e_linear = VK_FILTER_LINEAR,
         e_cubic = VK_FILTER_CUBIC_EXT,
         e_cubic_img = VK_FILTER_CUBIC_IMG,
     };
 
-    enum class sampler_mipmap_mode_t : std::underlying_type_t<VkSamplerMipmapMode> {
+    enum class sampler_mipmap_mode_t : uint32 {
         e_nearest = VK_SAMPLER_MIPMAP_MODE_NEAREST,
         e_linear = VK_SAMPLER_MIPMAP_MODE_LINEAR,
     };
 
-    enum class sampler_address_mode_t : std::underlying_type_t<VkSamplerAddressMode> {
+    enum class sampler_address_mode_t : uint32 {
         e_repeat = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         e_mirrored_repeat = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
         e_clamp_to_edge = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -843,7 +843,7 @@ namespace ir {
         e_mirror_clamp_to_edge = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
     };
 
-    enum class sampler_border_color_t : std::underlying_type_t<VkBorderColor> {
+    enum class sampler_border_color_t : uint32 {
         e_float_transparent_black = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
         e_int_transparent_black = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK,
         e_float_opaque_black = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
@@ -854,13 +854,13 @@ namespace ir {
         e_int_custom = VK_BORDER_COLOR_INT_CUSTOM_EXT,
     };
 
-    enum class sampler_reduction_mode_t : std::underlying_type_t<VkSamplerReductionMode> {
+    enum class sampler_reduction_mode_t : uint32 {
         e_weighted_average = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT,
         e_min = VK_SAMPLER_REDUCTION_MODE_MIN_EXT,
         e_max = VK_SAMPLER_REDUCTION_MODE_MAX_EXT,
     };
 
-    enum class primitive_topology_t : std::underlying_type_t<VkPrimitiveTopology> {
+    enum class primitive_topology_t : uint32 {
         e_point_list = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
         e_line_list = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
         e_line_strip = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP,

@@ -228,6 +228,11 @@ namespace ir {
         vkCmdDrawMeshTasksEXT(_handle, x, y, z);
     }
 
+    auto command_buffer_t::draw_mesh_tasks_indirect(const buffer_info_t& buffer, uint32 count) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdDrawMeshTasksIndirectEXT(_handle, buffer.handle, buffer.offset, count, 0);
+    }
+
     auto command_buffer_t::end_render_pass() noexcept -> void {
         IR_PROFILE_SCOPED();
         _state.framebuffer = nullptr;
@@ -342,8 +347,7 @@ namespace ir {
             dest.handle(),
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             1,
-            &copy_region
-        );
+            &copy_region);
     }
 
     auto command_buffer_t::copy_buffer(
@@ -357,6 +361,45 @@ namespace ir {
         copy_region.dstOffset = copy.dest_offset;
         copy_region.size = source.size;
         vkCmdCopyBuffer(_handle, source.handle, dest.handle, 1, &copy_region);
+    }
+
+    auto command_buffer_t::copy_buffer_to_image(
+        const buffer_info_t& source,
+        const image_t& dest,
+        const image_subresource_t& subresource
+    ) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto copy = VkBufferImageCopy();
+        copy.bufferOffset = source.offset;
+        copy.bufferRowLength = 0;
+        copy.bufferImageHeight = 0;
+        copy.imageSubresource.aspectMask = as_enum_counterpart(dest.view().aspect());
+        if (subresource.level != level_ignored) {
+            copy.imageSubresource.mipLevel = subresource.level;
+        } else {
+            copy.imageSubresource.mipLevel = 0;
+        }
+        if (subresource.layer != layer_ignored) {
+            copy.imageSubresource.baseArrayLayer = subresource.layer;
+            copy.imageSubresource.layerCount = subresource.layer_count;
+        } else {
+            copy.imageSubresource.baseArrayLayer = 0;
+            copy.imageSubresource.layerCount = dest.layers();
+        }
+        copy.imageOffset = { 0, 0, 0 };
+        copy.imageExtent = {
+            std::max(dest.width() >> subresource.level, 1_u32),
+            std::max(dest.height() >> subresource.level, 1_u32),
+            // TODO
+            1
+        };
+        vkCmdCopyBufferToImage(
+            _handle,
+            source.handle,
+            dest.handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &copy);
     }
 
     auto command_buffer_t::memory_barrier(const memory_barrier_t& barrier) const noexcept -> void {

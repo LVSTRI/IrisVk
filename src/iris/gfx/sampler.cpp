@@ -2,17 +2,24 @@
 #include <iris/gfx/sampler.hpp>
 
 namespace ir {
-    sampler_t::sampler_t() noexcept = default;
+    sampler_t::sampler_t(device_t& device) noexcept : _device(std::ref(device)) {
+        IR_PROFILE_SCOPED();
+    }
 
     sampler_t::~sampler_t() noexcept {
         IR_PROFILE_SCOPED();
-        vkDestroySampler(_device->handle(), _handle, nullptr);
-        IR_LOG_INFO(_device->logger(), "destroyed sampler {}", fmt::ptr(_handle));
+        vkDestroySampler(_device.get().handle(), _handle, nullptr);
+        IR_LOG_INFO(_device.get().logger(), "destroyed sampler {}", fmt::ptr(_handle));
     }
 
-    auto sampler_t::make(const device_t& device, const sampler_create_info_t& info) noexcept -> arc_ptr<self> {
+    auto sampler_t::make(device_t& device, const sampler_create_info_t& info) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
-        auto sampler = arc_ptr<self>(new self());
+        auto& cache = device.cache<self>();
+        if (cache.contains(info)) {
+            return cache.acquire(info);
+        }
+
+        auto sampler = arc_ptr<self>(new self(device));
         auto sampler_reduction_info = VkSamplerReductionModeCreateInfo();
         sampler_reduction_info.sType = VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO;
         sampler_reduction_info.pNext = nullptr;
@@ -49,10 +56,10 @@ namespace ir {
             as_string(info.filter.mag),
             as_string(info.mip_mode),
             as_string(info.address_mode.u));
-
         sampler->_info = info;
-        sampler->_device = device.as_intrusive_ptr();
-        return sampler;
+
+        IR_LOG_WARN(device.logger(), "sampler_t ({}): cache miss", fmt::ptr(sampler.as_const_ref().handle()));
+        return cache.insert(info, std::move(sampler));
     }
 
     auto sampler_t::handle() const noexcept -> VkSampler {
@@ -65,8 +72,7 @@ namespace ir {
         return _info;
     }
 
-    auto sampler_t::device() const noexcept -> arc_ptr<const device_t> {
+    auto sampler_t::device() const noexcept -> device_t& {
         IR_PROFILE_SCOPED();
-        return _device;
-    }
+        return _device.get();    }
 }

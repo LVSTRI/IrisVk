@@ -38,7 +38,7 @@ namespace ir {
 
     struct buffer_create_info_t {
         buffer_usage_t usage = {};
-        memory_properties_t memory = {};
+        memory_properties_t memory = infer_memory_properties;
         buffer_flag_t flags = {};
         uint64 capacity = 0;
     };

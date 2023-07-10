@@ -40,6 +40,7 @@ target_compile_definitions(cgltf PUBLIC
 )
 
 # VMA setup
+set(VMA_BUILD_SAMPLE ON CACHE BOOL "" FORCE)
 set(VMA_STATIC_VULKAN_FUNCTIONS OFF CACHE BOOL "" FORCE)
 set(VMA_DYNAMIC_VULKAN_FUNCTIONS ON CACHE BOOL "" FORCE)
 add_subdirectory(deps/VulkanMemoryAllocator)
@@ -95,6 +96,16 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_compile_options(shaderc_util PRIVATE -Wno-everything -std=c++20)
 endif()
 
+set(KTX_FEATURE_TESTS OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_VULKAN OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_GL_UPLOAD OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
+add_subdirectory(deps/KTX-Software)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set_property(TARGET ktx PROPERTY CXX_STANDARD 17)
+endif()
+target_compile_definitions(ktx PUBLIC KHRONOS_STATIC)
+
 # meshoptimizer setup
 add_subdirectory(deps/meshoptimizer)
 
@@ -136,6 +147,7 @@ set(IRIS_MAIN_HEADERS
     include/iris/gfx/sampler.hpp
     include/iris/gfx/semaphore.hpp
     include/iris/gfx/swapchain.hpp
+    include/iris/gfx/texture.hpp
 
     include/iris/wsi/input.hpp
     include/iris/wsi/wsi_platform.hpp
@@ -160,6 +172,7 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/sampler.cpp
     src/iris/gfx/semaphore.cpp
     src/iris/gfx/swapchain.cpp
+    src/iris/gfx/texture.cpp
 
     src/iris/wsi/input.cpp
     src/iris/wsi/wsi_platform.cpp
@@ -195,6 +208,7 @@ target_link_libraries(IrisVk PUBLIC
     glm
     vma
     mio
+    ktx
     volk
     glfw
     spdlog

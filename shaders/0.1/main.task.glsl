@@ -67,7 +67,7 @@ bool is_meshlet_occluded(in aabb_t aabb, in mat4 model) {
         aabb_min + vec3(aabb_size.xy, 0.0),
         aabb_min + vec3(0.0, aabb_size.yz),
         aabb_min + vec3(aabb_size.x, 0.0, aabb_size.z),
-        aabb_max);
+        aabb_min + aabb_size);
     float max_z = 0.0;
     vec2 min_xy = vec2(1.0);
     vec2 max_xy = vec2(0.0);
@@ -132,9 +132,13 @@ bool is_meshlet_visible(in uint meshlet_id, in uint instance_id) {
 void main() {
     const uint meshlet_instance_id = gl_GlobalInvocationID.x;
     restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
-    const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
-    const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
-    const bool is_visible = meshlet_instance_id < meshlet_count && is_meshlet_visible(meshlet_id, instance_id);
+    restrict b_cluster_classification cluster_class_ptr = b_cluster_classification(cluster_class_address);
+    bool is_visible =
+        meshlet_instance_id < meshlet_count &&
+        cluster_class_ptr.data[meshlet_instance_id] == CLUSTER_CLASS_HW_RASTER;
+    uint meshlet_id = is_visible ? instance_ptr.data[meshlet_instance_id].meshlet_id : -1;
+    uint instance_id = is_visible ? instance_ptr.data[meshlet_instance_id].instance_id : -1;
+    //is_visible = is_visible && is_meshlet_visible(meshlet_id, instance_id);
     const uvec4 vote = subgroupBallot(is_visible);
     const uint surviving = subgroupBallotBitCount(vote);
     const uint offset_index = subgroupBallotExclusiveBitCount(vote);

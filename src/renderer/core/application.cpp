@@ -10,6 +10,7 @@
 #include <iris/gfx/pipeline.hpp>
 #include <iris/gfx/fence.hpp>
 #include <iris/gfx/buffer.hpp>
+#include <iris/gfx/texture.hpp>
 #include <iris/gfx/descriptor_set.hpp>
 #include <iris/gfx/descriptor_pool.hpp>
 #include <iris/gfx/descriptor_layout.hpp>
@@ -27,7 +28,7 @@
 namespace app {
     static auto previous_power_2(uint32 x) noexcept {
         auto r = 1_u32;
-        while ((r << 1) < x){
+        while ((r << 1) < x) {
             r <<= 1;
         }
         return r;
@@ -77,7 +78,7 @@ namespace app {
                 ir::dynamic_state_t::e_viewport,
                 ir::dynamic_state_t::e_scissor
             },
-            .cull_mode = ir::cull_mode_t::e_back,
+            .cull_mode = ir::cull_mode_t::e_none,
         });
         _main_pass.camera_buffer = ir::buffer_t<camera_data_t>::make(*_device, frames_in_flight, {
             .usage = ir::buffer_usage_t::e_uniform_buffer,
@@ -183,7 +184,7 @@ namespace app {
         });
 
         {
-            const auto model = meshlet_model_t::make("../models/compressed/bistro/bistro.glb");
+            const auto model = meshlet_model_t::make("../models/compressed/intel_sponza/intel_sponza.glb");
             auto meshlets = std::vector<meshlet_glsl_t>();
             meshlets.reserve(model.meshlet_count());
             for (const auto& meshlet : model.meshlets()) {
@@ -194,8 +195,32 @@ namespace app {
                     .index_count = meshlet.index_count,
                     .primitive_count = meshlet.primitive_count,
                     .aabb = meshlet.aabb,
-                    .sphere = meshlet.sphere
+                    .material = {
+                        .base_color_texture = meshlet.material.base_color_texture,
+                        .normal_texture = meshlet.material.normal_texture
+                    }
                 });
+            }
+
+            for (const auto& [_, type, file] : model.textures()) {
+                _main_pass.textures.emplace_back(ir::texture_t::make(*_device, file, {
+                    .format = [type = type]() {
+                        switch (type) {
+                            case texture_type_t::e_base_color:
+                                return ir::texture_format_t::e_ttf_bc7_rgba;
+                            case texture_type_t::e_normal:
+                            case texture_type_t::e_specular:
+                                return ir::texture_format_t::e_ttf_bc1_rgb;
+                        }
+                        IR_UNREACHABLE();
+                    }(),
+                    .sampler = {
+                        .filter = { ir::sampler_filter_t::e_linear },
+                        .mip_mode = ir::sampler_mipmap_mode_t::e_linear,
+                        .address_mode = { ir::sampler_address_mode_t::e_repeat },
+                        .anisotropy = 16.0f,
+                    }
+                }));
             }
 
             _main_pass.meshlets = ir::upload_buffer(*_device, std::span<const meshlet_glsl_t>(meshlets), {});
@@ -205,6 +230,24 @@ namespace app {
             _main_pass.primitives = ir::upload_buffer(*_device, model.primitives(), {});
             _main_pass.transforms = ir::upload_buffer(*_device, model.transforms(), {});
         }
+        _main_pass.atomics = ir::buffer_t<uint32>::make(*_device, {
+            .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_transfer_dst,
+            .flags = ir::buffer_flag_t::e_resized,
+            .capacity = 1024,
+        });
+
+        _cluster_pass.pipeline = ir::pipeline_t::make(*_device, {
+            .compute = "../shaders/0.1/cluster_area.comp",
+        });
+        _cluster_pass.cluster_class = ir::buffer_t<uint8>::make(*_device, {
+            .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_transfer_dst,
+            .flags = ir::buffer_flag_t::e_resized,
+            .capacity = _main_pass.meshlet_instances.as_const_ref().size(),
+        });
+
+        _compute_rast_pass.pipeline = ir::pipeline_t::make(*_device, {
+            .compute = "../shaders/0.1/rasterizer.comp",
+        });
 
         _command_pools = ir::command_pool_t::make(*_device, frames_in_flight, {
             .queue = ir::queue_type_t::e_graphics,
@@ -307,6 +350,16 @@ namespace app {
             wsi_platform().release_cursor();
         }
         _camera.update(_delta_time);
+
+        if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f1)) {
+            _state.view_mode = 0;
+        }
+        if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f2)) {
+            _state.view_mode = 1;
+        }
+        if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f3)) {
+            _state.view_mode = 2;
+        }
     }
 
     auto application_t::_render() noexcept -> void {
@@ -350,9 +403,46 @@ namespace app {
             .bind_storage_image(2, _main_pass.visbuffer.as_const_ref().view())
             .build();
 
+        auto cluster_area_set = ir::descriptor_set_builder_t(*_cluster_pass.pipeline, 0)
+            .bind_uniform_buffer(0, camera_buffer().slice())
+            .build();
+
         const auto meshlet_count = _main_pass.meshlet_instances.as_const_ref().size();
 
         command_buffer().begin();
+        command_buffer().begin_debug_marker("cluster_classification");
+        command_buffer().bind_pipeline(*_cluster_pass.pipeline);
+        command_buffer().bind_descriptor_set(*cluster_area_set);
+        {
+#pragma pack(push, 1)
+            struct {
+                uint64 meshlet_address;
+                uint64 transforms_address;
+                uint64 meshlet_instance_address;
+                uint64 cluster_class_address;
+                uint32 meshlet_count;
+            } constants = {
+                _main_pass.meshlets.as_const_ref().address(),
+                _main_pass.transforms.as_const_ref().address(),
+                _main_pass.meshlet_instances.as_const_ref().address(),
+                _cluster_pass.cluster_class.as_const_ref().address(),
+                static_cast<uint32>(meshlet_count),
+            };
+#pragma pack(pop)
+            command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, ir::size_bytes(constants), &constants);
+        }
+        command_buffer().dispatch((meshlet_count + 256 - 1) / 256);
+        command_buffer().buffer_barrier({
+            .buffer = _cluster_pass.cluster_class.as_const_ref().slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage =
+                ir::pipeline_stage_t::e_task_shader |
+                ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_shader_write,
+            .dest_access = ir::resource_access_t::e_shader_read,
+        });
+        command_buffer().end_debug_marker();
+
         command_buffer().begin_debug_marker("meshlet_cull_and_draw");
         command_buffer().image_barrier({
             .image = std::cref(*_main_pass.visbuffer),
@@ -393,6 +483,7 @@ namespace app {
                 uint64 index_address;
                 uint64 primitive_address;
                 uint64 transform_address;
+                uint64 cluster_class_address;
                 uint32 meshlet_count;
             } constants = {
                 _main_pass.meshlets.as_const_ref().address(),
@@ -401,6 +492,7 @@ namespace app {
                 _main_pass.indices.as_const_ref().address(),
                 _main_pass.primitives.as_const_ref().address(),
                 _main_pass.transforms.as_const_ref().address(),
+                _cluster_pass.cluster_class.as_const_ref().address(),
                 static_cast<uint32>(meshlet_count),
             };
 #pragma pack(pop)
@@ -415,6 +507,51 @@ namespace app {
                 ir::pipeline_stage_t::e_fragment_shader |
                 ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access =
+                ir::resource_access_t::e_shader_storage_read |
+                ir::resource_access_t::e_shader_storage_write,
+            .old_layout = ir::image_layout_t::e_general,
+            .new_layout = ir::image_layout_t::e_general,
+        });
+        command_buffer().end_debug_marker();
+
+        auto compute_raster_set = ir::descriptor_set_builder_t(*_compute_rast_pass.pipeline, 0)
+            .bind_uniform_buffer(0, camera_buffer().slice())
+            .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
+            .build();
+        command_buffer().begin_debug_marker("compute_rasterizer");
+        command_buffer().bind_pipeline(*_compute_rast_pass.pipeline);
+        command_buffer().bind_descriptor_set(*compute_raster_set);
+        {
+#pragma pack(push, 1)
+            struct {
+                uint64 meshlet_address;
+                uint64 meshlet_instance_address;
+                uint64 vertex_address;
+                uint64 index_address;
+                uint64 primitive_address;
+                uint64 transform_address;
+                uint64 cluster_class_address;
+                uint32 meshlet_count;
+            } constants = {
+                _main_pass.meshlets.as_const_ref().address(),
+                _main_pass.meshlet_instances.as_const_ref().address(),
+                _main_pass.vertices.as_const_ref().address(),
+                _main_pass.indices.as_const_ref().address(),
+                _main_pass.primitives.as_const_ref().address(),
+                _main_pass.transforms.as_const_ref().address(),
+                _cluster_pass.cluster_class.as_const_ref().address(),
+                static_cast<uint32>(meshlet_count),
+            };
+#pragma pack(pop)
+            command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, ir::size_bytes(constants), &constants);
+        }
+        command_buffer().dispatch(meshlet_count, 1, 1);
+        command_buffer().image_barrier({
+            .image = std::cref(*_main_pass.visbuffer),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
             .dest_access = ir::resource_access_t::e_shader_storage_read,
             .old_layout = ir::image_layout_t::e_general,
             .new_layout = ir::image_layout_t::e_general,
@@ -424,6 +561,7 @@ namespace app {
         auto final_set = ir::descriptor_set_builder_t(*_final_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
             .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
+            .bind_textures(2, _main_pass.textures)
             .build();
 
         command_buffer().begin_debug_marker("rasterize_final");
@@ -439,6 +577,7 @@ namespace app {
         });
         command_buffer().bind_descriptor_set(*final_set);
         {
+#pragma pack(push, 1)
             struct {
                 uint64 meshlet_address;
                 uint64 meshlet_instance_address;
@@ -446,6 +585,8 @@ namespace app {
                 uint64 index_address;
                 uint64 primitive_address;
                 uint64 transform_address;
+                uint64 cluster_area_address;
+                uint32 view_mode;
             } constants = {
                 _main_pass.meshlets.as_const_ref().address(),
                 _main_pass.meshlet_instances.as_const_ref().address(),
@@ -453,7 +594,10 @@ namespace app {
                 _main_pass.indices.as_const_ref().address(),
                 _main_pass.primitives.as_const_ref().address(),
                 _main_pass.transforms.as_const_ref().address(),
+                _cluster_pass.cluster_class.as_const_ref().address(),
+                _state.view_mode,
             };
+#pragma pack(pop)
             command_buffer().push_constants(ir::shader_stage_t::e_fragment, 0, ir::size_bytes(constants), &constants);
         }
         command_buffer().draw(3, 1, 0, 0);

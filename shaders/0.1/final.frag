@@ -16,6 +16,12 @@ struct partial_derivatives_t {
     vec3 ddy;
 };
 
+struct uv_grad_t {
+    vec2 uv;
+    vec2 ddx;
+    vec2 ddy;
+};
+
 layout (location = 0) in vec2 i_uv;
 
 layout (location = 0) out vec4 o_pixel;
@@ -25,6 +31,8 @@ layout (set = 0, binding = 0) uniform u_camera_block {
 } u_camera;
 
 layout (r64ui, set = 0, binding = 1) restrict readonly uniform u64image2D u_visbuffer;
+
+layout (set = 0, binding = 2) uniform sampler2D[] u_textures;
 
 layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_buffer {
     meshlet_glsl_t[] data;
@@ -50,6 +58,10 @@ layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
     mat4[] data;
 };
 
+layout (scalar, buffer_reference) restrict readonly buffer b_cluster_classification {
+    uint8_t[] data;
+};
+
 layout (push_constant) uniform pc_address_block {
     uint64_t meshlet_address;
     uint64_t meshlet_instance_address;
@@ -57,6 +69,8 @@ layout (push_constant) uniform pc_address_block {
     uint64_t index_address;
     uint64_t primitive_address;
     uint64_t transforms_address;
+    uint64_t cluster_area_address;
+    uint view_mode;
 };
 
 partial_derivatives_t compute_derivatives(in vec4[3] clip_position, in vec2 ndc_uv, in vec2 resolution) {
@@ -134,6 +148,7 @@ void main() {
     restrict b_index_buffer index_ptr = b_index_buffer(index_address);
     restrict b_primitive_buffer primitive_ptr = b_primitive_buffer(primitive_address);
     restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
+    restrict b_cluster_classification cluster_area_ptr = b_cluster_classification(cluster_area_address);
 
     // fetch meshlet data
     const uint meshlet_id = meshlet_instance_ptr.data[meshlet_instance_id].meshlet_id;
@@ -145,6 +160,7 @@ void main() {
     const uint primitive_offset = meshlet.primitive_offset;
     const uint index_count = meshlet.index_count;
     const uint primitive_count = meshlet.primitive_count;
+    const meshlet_material_glsl_t material = meshlet.material;
 
     // fetch vertex data
     const restrict uint[] primitive_index = uint[](
@@ -169,7 +185,7 @@ void main() {
         vec3_from_float(vertices[0].normal),
         vec3_from_float(vertices[1].normal),
         vec3_from_float(vertices[2].normal));
-    const vec3 normal = normalize(mat3(transform) * normalize(interpolate_attributes(derivatives, normals)));
+    const vec3 normal = normalize(mat3(transpose(inverse(transform))) * normalize(interpolate_attributes(derivatives, normals)));
 
     const vec2[] uvs = vec2[](
         vec2_from_float(vertices[0].uv),
@@ -178,8 +194,35 @@ void main() {
     const vec3[] interp_uv = vec3[](
         interpolate_attributes(derivatives, float[](uvs[0].x, uvs[1].x, uvs[2].x)),
         interpolate_attributes(derivatives, float[](uvs[0].y, uvs[1].y, uvs[2].y)));
+    const uv_grad_t uv_grad = uv_grad_t(
+        vec2(interp_uv[0].x, interp_uv[1].x),
+        vec2(interp_uv[0].y, interp_uv[1].y),
+        vec2(interp_uv[0].z, interp_uv[1].z));
 
-    const vec3 light_direction = normalize(vec3(0.23, 1.0, 0.52));
-    o_pixel = vec4(vec3(dot(normal, light_direction)), 1.0);
-    o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
+    switch (view_mode) {
+        case 0: {
+            if (material.base_color_texture != -1) {
+                o_pixel = vec4(textureGrad(u_textures[material.base_color_texture], uv_grad.uv, uv_grad.ddx, uv_grad.ddy).rgb, 1.0);
+            } else {
+                o_pixel = vec4(vec3(0.0), 1.0);
+            }
+            break;
+        }
+
+        case 1: {
+            const uint kind = uint(cluster_area_ptr.data[meshlet_id]);
+            if (kind == uint(CLUSTER_CLASS_SW_RASTER)) {
+                o_pixel = vec4(0.05, 0.085, 0.95, 1.0);
+            } else {
+                o_pixel = vec4(0.95, 0.05, 0.085, 1.0);
+            }
+            break;
+        }
+
+        case 2: {
+            o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
+            break;
+        }
+    }
+    //o_pixel = vec4(normal * 0.5 + 0.5, 1.0);
 }

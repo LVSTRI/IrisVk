@@ -123,7 +123,7 @@ namespace ir {
                delete _ptr;
             }
         }
-        _ptr = nullptr;
+        //_ptr = nullptr;
     }
 
     template <typename T>

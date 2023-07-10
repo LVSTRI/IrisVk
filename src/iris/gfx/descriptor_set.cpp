@@ -4,6 +4,7 @@
 #include <iris/gfx/image.hpp>
 #include <iris/gfx/pipeline.hpp>
 #include <iris/gfx/descriptor_set.hpp>
+#include <iris/gfx/texture.hpp>
 #include <iris/gfx/descriptor_pool.hpp>
 #include <iris/gfx/descriptor_layout.hpp>
 #include <iris/gfx/sampler.hpp>
@@ -28,9 +29,24 @@ namespace ir {
         auto set = arc_ptr<self>(new self(device));
         const auto* pool = &device.descriptor_pool();
         const auto layout_handle = layout.handle();
+        auto dynamic_count = 0_u32;
+        auto variable_count_info = VkDescriptorSetVariableDescriptorCountAllocateInfo();
+        variable_count_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+        variable_count_info.pNext = nullptr;
+
         auto allocate_info = VkDescriptorSetAllocateInfo();
+        if (layout.is_dynamic()) {
+            for (const auto& binding : layout.bindings()) {
+                if (binding.dynamic) {
+                    dynamic_count = binding.count;
+                    break;
+                }
+            }
+            variable_count_info.descriptorSetCount = 1;
+            variable_count_info.pDescriptorCounts = &dynamic_count;
+            allocate_info.pNext = &variable_count_info;
+        }
         allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocate_info.pNext = nullptr;
         allocate_info.descriptorPool = pool->handle();
         allocate_info.descriptorSetCount = 1;
         allocate_info.pSetLayouts = &layout_handle;
@@ -124,6 +140,31 @@ namespace ir {
         return *this;
     }
 
+    auto descriptor_set_builder_t::bind_texture(uint32 binding, const texture_t& texture) noexcept -> self& {
+        IR_PROFILE_SCOPED();
+        _binding.bindings.emplace_back(descriptor_content_t {
+            .binding = binding,
+            .type = descriptor_type_t::e_combined_image_sampler,
+            .contents = { texture.info() }
+        });
+        return *this;
+    }
+
+    auto descriptor_set_builder_t::bind_textures(uint32 binding, const std::vector<arc_ptr<texture_t>>& textures) noexcept -> self& {
+        IR_PROFILE_SCOPED();
+        auto infos = std::vector<std::variant<image_info_t, buffer_info_t>>();
+        infos.reserve(textures.size());
+        for (const auto& texture : textures) {
+            infos.emplace_back(texture.as_const_ref().info());
+        }
+        _binding.bindings.emplace_back(descriptor_content_t {
+            .binding = binding,
+            .type = descriptor_type_t::e_combined_image_sampler,
+            .contents = { std::move(infos) }
+        });
+        return *this;
+    }
+
     auto descriptor_set_builder_t::bind_combined_image_sampler(uint32 binding, const image_view_t& view, const sampler_t& sampler) noexcept -> self& {
         IR_PROFILE_SCOPED();
         _binding.bindings.emplace_back(descriptor_content_t {
@@ -143,10 +184,11 @@ namespace ir {
     auto descriptor_set_builder_t::build() const noexcept -> arc_ptr<descriptor_set_t> {
         IR_PROFILE_SCOPED();
         auto& device = _layout.get().device();
-        if (auto set = device.acquire_descriptor_set(_binding)) {
-            return set;
+        auto& cache = device.cache<descriptor_set_t>();
+        if (cache.contains(_binding)) {
+            return cache.acquire(_binding);
         }
-        auto set = device.register_descriptor_set(_binding, descriptor_set_t::make(_layout.get().device(), _layout.get()));
+        auto set = cache.insert(_binding, descriptor_set_t::make(device, _layout.get()));
         auto buffer_infos = std::vector<std::vector<VkDescriptorBufferInfo>>();
         auto image_infos = std::vector<std::vector<VkDescriptorImageInfo>>();
         auto writes = std::vector<VkWriteDescriptorSet>();
@@ -206,6 +248,7 @@ namespace ir {
             }
             writes.emplace_back(write);
         }
+        IR_LOG_WARN(device.logger(), "descriptor_set_t ({}): cache miss", fmt::ptr(set.as_const_ref().handle()));
         vkUpdateDescriptorSets(device.handle(), writes.size(), writes.data(), 0, nullptr);
         return set;
     }

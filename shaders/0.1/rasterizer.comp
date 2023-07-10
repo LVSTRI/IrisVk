@@ -1,0 +1,274 @@
+#version 460
+#extension GL_EXT_buffer_reference : enable
+#extension GL_EXT_scalar_block_layout : enable
+//#extension GL_EXT_debug_printf : enable
+#extension GL_KHR_shader_subgroup_vote : enable
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_shader_image_int64 : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "common.glsl"
+
+#define SUBPIXEL_BITS 8
+#define SUBPIXEL_SAMPLES (1 << SUBPIXEL_BITS)
+#define SUBPIXEL_MASK (SUBPIXEL_SAMPLES - 1)
+#define SUBPIXEL_DILATE 0
+
+layout (local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout (set = 0, binding = 0) uniform u_camera_block {
+    camera_data_t data;
+} u_camera;
+
+layout (r64ui, set = 0, binding = 1) uniform restrict u64image2D u_visbuffer;
+
+layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_buffer {
+    meshlet_glsl_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_instance_buffer {
+    meshlet_instance_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_vertex_buffer {
+    vertex_format_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_index_buffer {
+    uint[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_primitive_buffer {
+    uint8_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
+    mat4[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_cluster_classification {
+    uint8_t[] data;
+};
+
+layout (push_constant) uniform pc_data_block {
+    uint64_t meshlet_address;
+    uint64_t meshlet_instance_address;
+    uint64_t vertex_address;
+    uint64_t index_address;
+    uint64_t primitive_address;
+    uint64_t transforms_address;
+    uint64_t cluster_class_address;
+    uint meshlet_count;
+};
+
+shared uint vertex_offset;
+shared uint index_offset;
+shared uint primitive_offset;
+shared uint index_count;
+shared uint primitive_count;
+shared mat4 pvm;
+shared vec3[64] vertices;
+
+void rasterize(in vec3[3] triangle, in ivec2 viewport_size, in uint64_t payload) {
+    const vec3 v01 = triangle[1] - triangle[0];
+    const vec3 v02 = triangle[2] - triangle[0];
+    const float det_xy = v01.x * v02.y - v01.y * v02.x;
+    if (det_xy >= 0.0) {
+        return;
+    }
+
+    const float inv_det = 1.0 / det_xy;
+    vec2 grad_z = vec2(
+        (v01.z * v02.y - v01.y * v02.z) * inv_det,
+        (v01.x * v02.z - v01.z * v02.x) * inv_det);
+
+    vec2 vert_0 = triangle[0].xy;
+    vec2 vert_1 = triangle[1].xy;
+    vec2 vert_2 = triangle[2].xy;
+
+    const vec2 min_subpixel = min(min(vert_0, vert_1), vert_2);
+    const vec2 max_subpixel = max(max(vert_0, vert_1), vert_2);
+
+    ivec2 min_pixel = ivec2(floor((min_subpixel + (SUBPIXEL_SAMPLES / 2) - 1) * (1.0 / float(SUBPIXEL_SAMPLES))));
+    ivec2 max_pixel = ivec2(floor((max_subpixel - (SUBPIXEL_SAMPLES / 2) - 1) * (1.0 / float(SUBPIXEL_SAMPLES))));
+
+    min_pixel = max(min_pixel, ivec2(0));
+    max_pixel = min(max_pixel, viewport_size.xy - 1);
+    if (any(greaterThan(min_pixel, max_pixel))) {
+        return;
+    }
+
+    max_pixel = min(max_pixel, min_pixel + 127);
+
+    const vec2 edge_01 = -v01.xy;
+    const vec2 edge_12 = vert_1 - vert_2;
+    const vec2 edge_20 = v02.xy;
+
+    const vec2 base_subpixel = vec2(min_pixel) * SUBPIXEL_SAMPLES + (SUBPIXEL_SAMPLES / 2);
+    vert_0 -= base_subpixel;
+    vert_1 -= base_subpixel;
+    vert_2 -= base_subpixel;
+
+    float hec_0 = edge_01.y * vert_0.x - edge_01.x * vert_0.y;
+    float hec_1 = edge_12.y * vert_1.x - edge_12.x * vert_1.y;
+    float hec_2 = edge_20.y * vert_2.x - edge_20.x * vert_2.y;
+
+    hec_0 -= saturate(edge_01.y + saturate(1.0 - edge_01.x));
+    hec_1 -= saturate(edge_12.y + saturate(1.0 - edge_12.x));
+    hec_2 -= saturate(edge_20.y + saturate(1.0 - edge_20.x));
+
+    const float z_0 = triangle[0].z - (grad_z.x * vert_0.x + grad_z.y * vert_0.y);
+    grad_z *= SUBPIXEL_SAMPLES;
+
+    float hec_y_0 = hec_0 * (1.0 / float(SUBPIXEL_SAMPLES));
+    float hec_y_1 = hec_1 * (1.0 / float(SUBPIXEL_SAMPLES));
+    float hec_y_2 = hec_2 * (1.0 / float(SUBPIXEL_SAMPLES));
+    float z_y = z_0;
+
+    if (subgroupAny(max_pixel.x - min_pixel.x > 4)) {
+        const vec3 edge_012 = vec3(edge_01.y, edge_12.y, edge_20.y);
+        const bvec3 is_open_edge = lessThan(edge_012, vec3(0.0));
+        const vec3 inv_edge_012 = vec3(
+            edge_012.x == 0 ? 1e8 : (1.0 / edge_012.x),
+            edge_012.y == 0 ? 1e8 : (1.0 / edge_012.y),
+            edge_012.z == 0 ? 1e8 : (1.0 / edge_012.z));
+        int y = min_pixel.y;
+        while (true) {
+            const vec3 cross_x = vec3(hec_y_0, hec_y_1, hec_y_2) * inv_edge_012;
+            const vec3 min_x = vec3(
+                is_open_edge.x ? cross_x.x : 0.0,
+                is_open_edge.y ? cross_x.y : 0.0,
+                is_open_edge.z ? cross_x.z : 0.0);
+            const vec3 max_x = vec3(
+                is_open_edge.x ? max_pixel.x - min_pixel.x : cross_x.x,
+                is_open_edge.y ? max_pixel.x - min_pixel.x : cross_x.y,
+                is_open_edge.z ? max_pixel.x - min_pixel.x : cross_x.z);
+            float x_0 = ceil(max(max(min_x.x, min_x.y), min_x.z));
+            float x_1 = min(min(max_x.x, max_x.y), max_x.z);
+            float z_x = z_y + grad_z.x * x_0;
+
+            x_0 += min_pixel.x;
+            x_1 += min_pixel.x;
+            for (float x = x_0; x <= x_1; ++x) {
+                imageAtomicMax(u_visbuffer, ivec2(x, y), payload | (uint64_t(floatBitsToUint(z_x)) << 34));
+                z_x += grad_z.x;
+            }
+
+            if (y >= max_pixel.y) {
+                break;
+            }
+            hec_y_0 += edge_01.x;
+            hec_y_1 += edge_12.x;
+            hec_y_2 += edge_20.x;
+            z_y += grad_z.y;
+            ++y;
+        }
+    } else {
+        int y = min_pixel.y;
+        while (true) {
+            int x = min_pixel.x;
+            if (min(min(hec_y_0, hec_y_1), hec_y_2) >= 0.0) {
+                imageAtomicMax(u_visbuffer, ivec2(x, y), payload | (uint64_t(floatBitsToUint(z_y)) << 34));
+            }
+
+            if (x < max_pixel.x) {
+                float hec_x_0 = hec_y_0 - edge_01.y;
+                float hec_x_1 = hec_y_1 - edge_12.y;
+                float hec_x_2 = hec_y_2 - edge_20.y;
+                float z_x = z_y + grad_z.x;
+                ++x;
+
+                while (true) {
+                    if (min(min(hec_x_0, hec_x_1), hec_x_2) >= 0.0) {
+                        imageAtomicMax(u_visbuffer, ivec2(x, y), payload | (uint64_t(floatBitsToUint(z_x)) << 34));
+                    }
+
+                    if (x >= max_pixel.x) {
+                        break;
+                    }
+
+                    hec_x_0 -= edge_01.y;
+                    hec_x_1 -= edge_12.y;
+                    hec_x_2 -= edge_20.y;
+                    z_x += grad_z.x;
+                    ++x;
+                }
+            }
+
+            if (y >= max_pixel.y) {
+                break;
+            }
+
+            hec_y_0 += edge_01.x;
+            hec_y_1 += edge_12.x;
+            hec_y_2 += edge_20.x;
+            z_y += grad_z.y;
+            ++y;
+        }
+    }
+}
+
+void main() {
+    restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
+    restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
+    restrict b_vertex_buffer vertex_ptr = b_vertex_buffer(vertex_address);
+    restrict b_index_buffer index_ptr = b_index_buffer(index_address);
+    restrict b_primitive_buffer primitive_ptr = b_primitive_buffer(primitive_address);
+    restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
+    restrict b_cluster_classification cluster_class_ptr = b_cluster_classification(cluster_class_address);
+
+    const uint meshlet_instance_id = gl_WorkGroupID.x;
+
+    const bool is_sw_rast = cluster_class_ptr.data[meshlet_instance_id] == CLUSTER_CLASS_SW_RASTER;
+
+    const ivec2 viewport_size = ivec2(imageSize(u_visbuffer));
+    if (is_sw_rast && gl_LocalInvocationID.x == 0) {
+        const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
+        const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
+        vertex_offset = meshlet_ptr.data[meshlet_id].vertex_offset;
+        index_offset = meshlet_ptr.data[meshlet_id].index_offset;
+        primitive_offset = meshlet_ptr.data[meshlet_id].primitive_offset;
+        index_count = meshlet_ptr.data[meshlet_id].index_count;
+        primitive_count = meshlet_ptr.data[meshlet_id].primitive_count;
+        pvm = u_camera.data.pv * transform_ptr.data[instance_id];
+
+        const vec2 scale = vec2(0.5, -0.5) * vec2(viewport_size.xy) * float(SUBPIXEL_SAMPLES);
+        const vec2 bias = (0.5 * vec2(viewport_size.xy)) * float(SUBPIXEL_SAMPLES) + 0.5;
+        pvm[0][0] = pvm[0][0] * scale.x + pvm[0][3] * bias.x;
+        pvm[1][0] = pvm[1][0] * scale.x + pvm[1][3] * bias.x;
+        pvm[2][0] = pvm[2][0] * scale.x + pvm[2][3] * bias.x;
+        pvm[3][0] = pvm[3][0] * scale.x + pvm[3][3] * bias.x;
+
+        pvm[0][1] = pvm[0][1] * scale.y + pvm[0][3] * bias.y;
+        pvm[1][1] = pvm[1][1] * scale.y + pvm[1][3] * bias.y;
+        pvm[2][1] = pvm[2][1] * scale.y + pvm[2][3] * bias.y;
+        pvm[3][1] = pvm[3][1] * scale.y + pvm[3][3] * bias.y;
+    }
+    barrier();
+
+    if (is_sw_rast && gl_LocalInvocationID.x < index_count) {
+        const uint index = index_ptr.data[index_offset + gl_LocalInvocationID.x];
+        const vec3 vertex = vec3_from_float(vertex_ptr.data[vertex_offset + index].position);
+        const vec4 position = pvm * vec4(vertex, 1.0);
+        const vec3 clip = position.xyz / position.w;
+        vertices[gl_LocalInvocationID.x] = vec3(floor(clip.xy), clip.z);
+    }
+    barrier();
+
+    const uint primitive_id = gl_LocalInvocationID.x;
+    if (is_sw_rast && primitive_id < primitive_count) {
+        const restrict uint[] primitives = uint[](
+            primitive_ptr.data[primitive_offset + primitive_id * 3 + 0],
+            primitive_ptr.data[primitive_offset + primitive_id * 3 + 1],
+            primitive_ptr.data[primitive_offset + primitive_id * 3 + 2]);
+
+        const vec3[] ndc_vertices = vec3[](
+            vertices[primitives[0]],
+            vertices[primitives[1]],
+            vertices[primitives[2]]);
+
+        const uint64_t payload = uint64_t(meshlet_instance_id) << 7 | uint64_t(primitive_id);
+        rasterize(ndc_vertices, viewport_size, payload);
+    }
+}

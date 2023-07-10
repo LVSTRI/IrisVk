@@ -8,9 +8,10 @@
 
 #include <iris/gfx/frame_counter.hpp>
 #include <iris/gfx/deletion_queue.hpp>
-#include <iris/gfx/cache.hpp>
+#include <iris/gfx/sampler.hpp>
 #include <iris/gfx/descriptor_layout.hpp>
 #include <iris/gfx/descriptor_set.hpp>
+#include <iris/gfx/cache.hpp>
 
 #include <volk.h>
 #include <vulkan/vulkan.h>
@@ -76,12 +77,8 @@ namespace ir {
 
         auto resize_descriptor_pool(const akl::fast_hash_map<descriptor_type_t, uint32>& size) noexcept -> void;
 
-        IR_NODISCARD auto make_descriptor_layout(const std::vector<descriptor_binding_t>& bindings) noexcept -> arc_ptr<descriptor_layout_t>;
-        IR_NODISCARD auto acquire_descriptor_set(const descriptor_set_binding_t& bindings) noexcept -> arc_ptr<descriptor_set_t>;
-        IR_NODISCARD auto register_descriptor_set(
-            const descriptor_set_binding_t& bindings,
-            arc_ptr<descriptor_set_t> set
-        ) noexcept -> arc_ptr<descriptor_set_t>;
+        template <typename T>
+        IR_NODISCARD auto cache() noexcept -> cache_t<T>&;
 
         IR_NODISCARD auto is_supported(device_feature_t feature) const noexcept -> bool;
 
@@ -110,6 +107,7 @@ namespace ir {
 
         cache_t<descriptor_layout_t> _descriptor_layouts;
         cache_t<descriptor_set_t> _descriptor_sets;
+        cache_t<sampler_t> _samplers;
 
         device_create_info_t _info = {};
         arc_ptr<const instance_t> _instance;

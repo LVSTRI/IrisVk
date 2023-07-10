@@ -1,4 +1,15 @@
 #define M_GOLDEN_CONJ 0.6180339887498948482045868343656
+#define MAX_VERTICES 64
+#define MAX_PRIMITIVES 64
+
+#define CLUSTER_CLASS_SW_RASTER uint8_t(0)
+#define CLUSTER_CLASS_HW_RASTER uint8_t(1)
+
+struct draw_mesh_tasks_indirect_command_t {
+    uint x;
+    uint y;
+    uint z;
+};
 
 struct camera_data_t {
     mat4 projection;
@@ -14,6 +25,11 @@ struct aabb_t {
     float[3] max;
 };
 
+struct meshlet_material_glsl_t {
+    uint base_color_texture;
+    uint normal_texture;
+};
+
 struct meshlet_glsl_t {
     uint vertex_offset;
     uint index_offset;
@@ -21,7 +37,7 @@ struct meshlet_glsl_t {
     uint index_count;
     uint primitive_count;
     aabb_t aabb;
-    float[4] sphere;
+    meshlet_material_glsl_t material;
 };
 
 struct meshlet_instance_t {
@@ -57,4 +73,8 @@ vec3 vec3_from_float(in float[3] v) {
 
 vec4 vec4_from_float(in float[4] v) {
     return vec4(v[0], v[1], v[2], v[3]);
+}
+
+float saturate(in float v) {
+    return clamp(v, 0.0, 1.0);
 }

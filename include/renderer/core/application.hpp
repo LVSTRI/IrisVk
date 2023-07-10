@@ -21,6 +21,15 @@ namespace app {
         frustum_t frustum = {};
     };
 
+    struct state_t {
+        uint32 view_mode = 0;
+    };
+
+    struct meshlet_material_glsl_t {
+        uint32 base_color_texture = -1;
+        uint32 normal_texture = -1;
+    };
+
     struct meshlet_glsl_t {
         uint32 vertex_offset = 0;
         uint32 index_offset = 0;
@@ -28,7 +37,7 @@ namespace app {
         uint32 index_count = 0;
         uint32 primitive_count = 0;
         alignas(alignof(float32)) aabb_t aabb = {};
-        alignas(alignof(float32)) glm::vec4 sphere = {};
+        alignas(alignof(uint32)) meshlet_material_glsl_t material = {};
     };
 
     struct main_pass_t {
@@ -44,8 +53,19 @@ namespace app {
         ir::arc_ptr<ir::buffer_t<uint32>> indices;
         ir::arc_ptr<ir::buffer_t<uint8>> primitives;
         ir::arc_ptr<ir::buffer_t<glm::mat4>> transforms;
+        std::vector<ir::arc_ptr<ir::texture_t>> textures;
 
+        ir::arc_ptr<ir::buffer_t<uint32>> atomics;
         std::vector<ir::arc_ptr<ir::buffer_t<camera_data_t>>> camera_buffer;
+    };
+
+    struct cluster_area_pass_t {
+        ir::arc_ptr<ir::pipeline_t> pipeline;
+        ir::arc_ptr<ir::buffer_t<uint8>> cluster_class;
+    };
+
+    struct computer_raster_pass_t {
+        ir::arc_ptr<ir::pipeline_t> pipeline;
     };
 
     struct hiz_pass_t {
@@ -104,8 +124,12 @@ namespace app {
 
         camera_t _camera;
         main_pass_t _main_pass;
+        cluster_area_pass_t _cluster_pass;
+        computer_raster_pass_t _compute_rast_pass;
         hiz_pass_t _hiz_pass;
         final_pass_t _final_pass;
+
+        state_t _state = {};
 
         ch::steady_clock::time_point _last_time = {};
         float32 _delta_time = 0.0_f32;

@@ -14,32 +14,11 @@
 #include <span>
 
 namespace app {
-    static auto decode_texture_path(const fs::path& base, const cgltf_image& image) noexcept {
-        IR_PROFILE_SCOPED();
-        if (image.uri) {
-            return (base / image.uri).generic_string();
-        }
-
-        auto path = base / image.name;
-        if (!path.has_extension()) {
-            if (std::strcmp(image.mime_type, "image/png")) {
-                path.replace_extension(".png");
-            } else if (std::strcmp(image.mime_type, "image/jpeg")) {
-                path.replace_extension(".jpg");
-            }
-        }
-        return path.generic_string();
-    }
-
-    static auto is_texture_valid(const cgltf_texture* texture) noexcept {
+    static auto is_basisu_texture_valid(const cgltf_texture* texture) noexcept {
         IR_PROFILE_SCOPED();
         if (texture) {
-            if (texture->image) {
-                return
-                    texture->image->buffer_view &&
-                    texture->image->buffer_view->buffer;
-            }
             return
+                texture->basisu_image &&
                 texture->basisu_image->buffer_view &&
                 texture->basisu_image->buffer_view->buffer;
         }
@@ -54,6 +33,46 @@ namespace app {
         const auto s_path = path.generic_string();
         cgltf_parse_file(&options, s_path.c_str(), &gltf);
         cgltf_load_buffers(&options, gltf, s_path.c_str());
+
+        auto texture_cache = ir::akl::fast_hash_map<const cgltf_texture*, uint32>();
+        auto textures = std::vector<texture_info_t>();
+        for (auto i = 0_u32; i < gltf->materials_count; ++i) {
+            const auto& material = gltf->materials[i];
+            if (is_basisu_texture_valid(material.pbr_metallic_roughness.base_color_texture.texture)) {
+                const auto& texture = *material.pbr_metallic_roughness.base_color_texture.texture;
+                const auto& image = *texture.basisu_image;
+                const auto& buffer_view = *image.buffer_view;
+                const auto& buffer = *buffer_view.buffer;
+                const auto* data = reinterpret_cast<const uint8*>(buffer.data) + buffer_view.offset;
+                auto raw = std::vector<uint8>(buffer_view.size);
+                std::memcpy(raw.data(), data, raw.size());
+                if (!texture_cache.contains(&texture)) {
+                    texture_cache[&texture] = textures.size();
+                    textures.push_back({
+                        .id = static_cast<uint32>(textures.size()),
+                        .type = texture_type_t::e_base_color,
+                        .data = std::move(raw)
+                    });
+                }
+            }
+            if (is_basisu_texture_valid(material.normal_texture.texture)) {
+                const auto& texture = *material.normal_texture.texture;
+                const auto& image = *texture.basisu_image;
+                const auto& buffer_view = *image.buffer_view;
+                const auto& buffer = *buffer_view.buffer;
+                const auto* data = reinterpret_cast<const uint8*>(buffer.data) + buffer_view.offset;
+                auto raw = std::vector<uint8>(buffer_view.size);
+                std::memcpy(raw.data(), data, raw.size());
+                if (!texture_cache.contains(&texture)) {
+                    texture_cache[&texture] = textures.size();
+                    textures.push_back({
+                        .id = static_cast<uint32>(textures.size()),
+                        .type = texture_type_t::e_normal,
+                        .data = std::move(raw)
+                    });
+                }
+            }
+        }
 
         auto meshlet_id = 0_u32;
         auto vertex_offset = 0_u32;
@@ -152,6 +171,8 @@ namespace app {
                 }
 
                 // optimization
+                /*auto& optimized_indices = indices;
+                auto& optimized_vertices = vertices;*/
                 auto optimized_indices = std::vector<uint32>();
                 auto optimized_vertices = std::vector<meshlet_vertex_format_t>();
                 {
@@ -201,7 +222,7 @@ namespace app {
                 // meshlet build
                 {
                     constexpr static auto max_indices = 64_u32;
-                    constexpr static auto max_primitives = 124_u32;
+                    constexpr static auto max_primitives = 64_u32;
                     constexpr static auto cone_weight = 0.0f;
                     const auto max_meshlets = meshopt_buildMeshletsBound(optimized_indices.size(), max_indices, max_primitives);
                     auto meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
@@ -239,26 +260,34 @@ namespace app {
                             auto aabb = aabb_t();
                             aabb.min = glm::vec3(std::numeric_limits<float32>::max());
                             aabb.max = glm::vec3(std::numeric_limits<float32>::lowest());
-                            for (auto z = 0_u32; z < meshlet.primitive_count * 3; ++z) {
-                                const auto offset = meshlet_indices[meshlets[k].vertex_offset +
-                                    meshlet_primitives[meshlets[k].triangle_offset + z]];
-                                const auto& vertex = optimized_vertices[offset];
+                            for (auto w = 0_u32; w < meshlets[k].triangle_count * 3; ++w) {
+                                const auto& vertex = optimized_vertices[
+                                    meshlet_indices[meshlets[k].vertex_offset +
+                                        meshlet_primitives[meshlets[k].triangle_offset + w]]];
                                 aabb.min = glm::min(aabb.min, vertex.position);
                                 aabb.max = glm::max(aabb.max, vertex.position);
                             }
                             meshlet.aabb = aabb;
-                            const auto bounds = meshopt_computeMeshletBounds(
-                                &meshlet_indices[meshlets[k].vertex_offset],
-                                &meshlet_primitives[meshlets[k].triangle_offset],
-                                meshlets[k].triangle_count,
-                                reinterpret_cast<float32*>(optimized_vertices.data()),
-                                optimized_vertices.size(),
-                                sizeof(meshlet_vertex_format_t));
-                            meshlet.sphere = glm::vec4(
-                                bounds.center[0],
-                                bounds.center[1],
-                                bounds.center[2],
-                                bounds.radius);
+
+                            if (primitive.material) {
+                                const auto& material = *primitive.material;
+                                {
+                                    const auto* base_color_texture = material.pbr_metallic_roughness.base_color_texture.texture;
+                                    if (is_basisu_texture_valid(base_color_texture)) {
+                                        if (texture_cache.contains(base_color_texture)) {
+                                            meshlet.material.base_color_texture = texture_cache[base_color_texture];
+                                        }
+                                    }
+                                }
+                                {
+                                    const auto* normal_texture = material.normal_texture.texture;
+                                    if (is_basisu_texture_valid(normal_texture)) {
+                                        if (texture_cache.contains(normal_texture)) {
+                                            meshlet.material.normal_texture = texture_cache[normal_texture];
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     vertex_offset += optimized_vertices.size();
@@ -297,7 +326,8 @@ namespace app {
                 const auto& mesh = *node.mesh;
                 for (auto j = 0_u32; j < mesh.primitives_count; ++j) {
                     const auto transform_id = model._transforms.size();
-                    for (const auto& each : meshlet_cache[mesh.primitives + j]) {
+                    const auto* primitive = mesh.primitives + j;
+                    for (const auto& each : meshlet_cache[primitive]) {
                         meshlet_instances.push_back({
                             each.id,
                             static_cast<uint32>(transform_id)
@@ -308,6 +338,7 @@ namespace app {
             }
         }
         model._meshlet_instances = std::move(meshlet_instances);
+        model._textures = std::move(textures);
         return model;
     }
 
@@ -341,7 +372,13 @@ namespace app {
         return _transforms;
     }
 
+    auto meshlet_model_t::textures() const noexcept -> std::span<const texture_info_t> {
+        IR_PROFILE_SCOPED();
+        return _textures;
+    }
+
     auto meshlet_model_t::meshlet_count() const noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
         return _meshlets.size();
     }
 }

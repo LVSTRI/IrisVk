@@ -19,7 +19,7 @@ namespace ir {
 
     device_t::~device_t() noexcept {
         IR_PROFILE_SCOPED();
-        wait_idle();
+        _samplers.clear();
         _descriptor_layouts.clear();
         _descriptor_sets.clear();
         _descriptor_pool.reset();
@@ -442,29 +442,19 @@ namespace ir {
         _descriptor_pool = descriptor_pool_t::make(*this, size);
     }
 
-    auto device_t::make_descriptor_layout(const std::vector<descriptor_binding_t>& bindings) noexcept -> arc_ptr<descriptor_layout_t> {
-        IR_PROFILE_SCOPED();
-        if (_descriptor_layouts.contains(bindings)) {
-            return _descriptor_layouts.acquire(bindings);
-        }
-        return _descriptor_layouts.insert(bindings, descriptor_layout_t::make(*this, bindings));
+    template <>
+    auto device_t::cache() noexcept -> cache_t<descriptor_layout_t>& {
+        return _descriptor_layouts;
     }
 
-    auto device_t::acquire_descriptor_set(const descriptor_set_binding_t& bindings) noexcept -> arc_ptr<descriptor_set_t> {
-        IR_PROFILE_SCOPED();
-        if (_descriptor_sets.contains(bindings)) {
-            return _descriptor_sets.acquire(bindings);
-        }
-        IR_LOG_WARN(logger(), "descriptor_set_t: cache miss");
-        return nullptr;
+    template <>
+    auto device_t::cache() noexcept -> cache_t<descriptor_set_t>& {
+        return _descriptor_sets;
     }
 
-    auto device_t::register_descriptor_set(
-        const descriptor_set_binding_t& bindings,
-        arc_ptr<descriptor_set_t> set
-    ) noexcept -> arc_ptr<descriptor_set_t> {
-        IR_PROFILE_SCOPED();
-        return _descriptor_sets.insert(bindings, std::move(set));
+    template <>
+    auto device_t::cache() noexcept -> cache_t<sampler_t>& {
+        return _samplers;
     }
 
     auto device_t::is_supported(device_feature_t feature) const noexcept -> bool {

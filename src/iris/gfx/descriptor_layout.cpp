@@ -24,7 +24,7 @@ namespace ir {
         auto bindings_info = std::vector<VkDescriptorSetLayoutBinding>();
         bindings_info.reserve(bindings.size());
         for (const auto& binding : bindings) {
-            bindings_info.push_back(VkDescriptorSetLayoutBinding{
+            bindings_info.push_back(VkDescriptorSetLayoutBinding {
                 .binding = binding.binding,
                 .descriptorType = as_enum_counterpart(binding.type),
                 .descriptorCount = binding.count,
@@ -41,6 +41,7 @@ namespace ir {
             if (binding.dynamic) {
                 flags =
                     VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
+                    VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
                     VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
             }
             binding_flags.emplace_back(flags);

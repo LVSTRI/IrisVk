@@ -51,7 +51,7 @@ namespace ir {
             IR_PROFILE_SCOPED();
             const auto [ptr, _0] = _map.try_emplace(key, cache_entry_type { value, _max_ttl });
             const auto& [_1, entry] = *ptr;
-            return entry;
+            return entry.value;
         }
 
         auto insert(const key_type& key, value_type&& value) noexcept -> const value_type& {

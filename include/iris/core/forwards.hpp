@@ -20,6 +20,9 @@ namespace ir {
     struct command_buffer_create_info_t;
     struct framebuffer_create_info_t;
     struct graphics_pipeline_create_info_t;
+    struct buffer_create_info_t;
+    struct sampler_create_info_t;
+    struct texture_create_info_t;
 
     enum class sample_count_t : uint32;
     enum class image_usage_t : uint32;
@@ -56,6 +59,7 @@ namespace ir {
     struct subpass_info_t;
     struct subpass_dependency_info_t;
 
+    struct draw_mesh_tasks_indirect_command_t;
     struct image_memory_barrier_t;
     struct buffer_memory_barrier_t;
     struct memory_barrier_t;
@@ -77,7 +81,6 @@ namespace ir {
 
     enum class buffer_flag_t;
     struct memory_properties_t;
-    struct buffer_create_info_t;
 
     struct image_info_t;
     struct buffer_info_t;
@@ -92,7 +95,8 @@ namespace ir {
 
     struct sampler_filter_combo_t;
     struct sampler_address_mode_combo_t;
-    struct sampler_create_info_t;
+
+    enum class texture_format_t;
 
     class instance_t;
     class device_t;
@@ -119,6 +123,7 @@ namespace ir {
     template <typename>
     class cache_t;
     class sampler_t;
+    class texture_t;
 
     class wsi_platform_t;
     class input_t;

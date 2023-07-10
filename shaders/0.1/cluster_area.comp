@@ -1,7 +1,87 @@
 #version 460
-layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference : enable
+//#extension GL_EXT_debug_printf : enable
+#extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
 
+#include "common.glsl"
+
+layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout (set = 0, binding = 0) uniform u_camera_block {
+    camera_data_t data;
+} u_camera;
+
+layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_buffer {
+    meshlet_glsl_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_instance_buffer {
+    meshlet_instance_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
+    mat4[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_cluster_classification {
+    uint8_t[] data;
+};
+
+layout (push_constant) uniform pc_data_block {
+    uint64_t meshlet_address;
+    uint64_t transforms_address;
+    uint64_t meshlet_instance_address;
+    uint64_t cluster_classify_address;
+    uint meshlet_count;
+};
 
 void main() {
+    restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
+    restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
+    restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
+    restrict b_cluster_classification cluster_classify_ptr = b_cluster_classification(cluster_classify_address);
 
+    const uint meshlet_instance_id = gl_GlobalInvocationID.x;
+    if (meshlet_instance_id < meshlet_count) {
+        const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
+        const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
+        const aabb_t aabb = meshlet_ptr.data[meshlet_id].aabb;
+        const mat4 model = transform_ptr.data[instance_id];
+        const vec3 aabb_min = vec3_from_float(aabb.min);
+        const vec3 aabb_max = vec3_from_float(aabb.max);
+        const vec3 aabb_size = aabb_max - aabb_min + 1.0;
+        const vec3[] corners = vec3[](
+            aabb_min,
+            aabb_min + vec3(aabb_size.x, 0.0, 0.0),
+            aabb_min + vec3(0.0, aabb_size.y, 0.0),
+            aabb_min + vec3(0.0, 0.0, aabb_size.z),
+            aabb_min + vec3(aabb_size.xy, 0.0),
+            aabb_min + vec3(0.0, aabb_size.yz),
+            aabb_min + vec3(aabb_size.x, 0.0, aabb_size.z),
+            aabb_min + aabb_size);
+        vec2 min_xy = vec2(3.402823466e+38);
+        vec2 max_xy = vec2(-3.402823466e+38);
+        float min_z = 3.402823466e+38;
+        bool clip = false;
+        for (uint i = 0; i < 8; ++i) {
+            const vec4 corner = u_camera.data.old_pv * model * vec4(corners[i], 1.0);
+            const vec3 ndc = corner.xyz / corner.w;
+            min_z = min(min_z, ndc.z);
+            if (ndc.x <= -1.0 || ndc.x >= 1.0 || ndc.y <= -1.0 || ndc.y >= 1.0 || min_z <= 0.0) {
+                clip = true;
+                break;
+            }
+            min_xy = min(min_xy, ndc.xy);
+            max_xy = max(max_xy, ndc.xy);
+        }
+        const float area = max((abs(max_xy.x - min_xy.x) * abs(max_xy.y - min_xy.y)) / 2.0, 0.0);
+        if (clip || area >= 0.125) {
+            cluster_classify_ptr.data[meshlet_instance_id] = CLUSTER_CLASS_HW_RASTER;
+        } else {
+            cluster_classify_ptr.data[meshlet_instance_id] = CLUSTER_CLASS_SW_RASTER;
+        }
+    }
 }

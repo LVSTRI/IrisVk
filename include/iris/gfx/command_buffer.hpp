@@ -23,6 +23,12 @@ namespace ir {
         bool primary = true;
     };
 
+    struct draw_mesh_tasks_indirect_command_t {
+        uint32 x = 0;
+        uint32 y = 0;
+        uint32 z = 0;
+    };
+
     struct memory_barrier_t {
         pipeline_stage_t source_stage = pipeline_stage_t::e_none;
         pipeline_stage_t dest_stage = pipeline_stage_t::e_none;
@@ -112,12 +118,14 @@ namespace ir {
         auto draw(uint32 vertices, uint32 instances, uint32 first_vertex, uint32 first_instance) const noexcept -> void;
         auto draw_indexed(uint32 indices, uint32 instances, uint32 first_index, int32 vertex_offset, uint32 first_instance) const noexcept -> void;
         auto draw_mesh_tasks(uint32 x = 1, uint32 y = 1, uint32 z = 1) const noexcept -> void;
+        auto draw_mesh_tasks_indirect(const buffer_info_t& buffer, uint32 count) const noexcept -> void;
         auto end_render_pass() noexcept -> void;
         auto dispatch(uint32 x = 1, uint32 y = 1, uint32 z = 1) const noexcept -> void;
         auto fill_buffer(const buffer_info_t& buffer, uint32 data) const noexcept -> void;
         auto clear_image(const image_t& image, const clear_value_t& clear, const image_subresource_t& subresource) const noexcept -> void;
         auto copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void;
         auto copy_buffer(const buffer_info_t& source, const buffer_info_t& dest, const buffer_copy_t& copy) const noexcept -> void;
+        auto copy_buffer_to_image(const buffer_info_t& source, const image_t& dest, const image_subresource_t& subresource) const noexcept -> void;
         auto memory_barrier(const memory_barrier_t& barrier) const noexcept -> void;
         auto buffer_barrier(const buffer_memory_barrier_t& barrier) const noexcept -> void;
         auto image_barrier(const image_memory_barrier_t& barrier) const noexcept -> void;

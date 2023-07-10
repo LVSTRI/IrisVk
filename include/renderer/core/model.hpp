@@ -22,6 +22,11 @@ namespace app {
         alignas(alignof(float32)) glm::vec3 max = {};
     };
 
+    struct meshlet_material_t {
+        uint32 base_color_texture = -1;
+        uint32 normal_texture = -1;
+    };
+
     struct meshlet_t {
         uint32 id = 0;
         uint32 vertex_offset = 0;
@@ -30,12 +35,24 @@ namespace app {
         uint32 primitive_offset = 0;
         uint32 primitive_count = 0;
         aabb_t aabb = {};
-        glm::vec4 sphere = {};
+        meshlet_material_t material = {};
     };
 
     struct meshlet_instance_t {
         uint32 meshlet_id = 0;
         uint32 instance_id = 0;
+    };
+
+    enum class texture_type_t {
+        e_base_color,
+        e_normal,
+        e_specular,
+    };
+
+    struct texture_info_t {
+        uint32 id = 0;
+        texture_type_t type = {};
+        std::vector<uint8> data;
     };
 
     class meshlet_model_t {
@@ -50,6 +67,7 @@ namespace app {
         IR_NODISCARD auto indices() const noexcept -> std::span<const uint32>;
         IR_NODISCARD auto primitives() const noexcept -> std::span<const uint8>;
         IR_NODISCARD auto transforms() const noexcept -> std::span<const glm::mat4>;
+        IR_NODISCARD auto textures() const noexcept -> std::span<const texture_info_t>;
         IR_NODISCARD auto meshlet_count() const noexcept -> uint32;
 
     private:
@@ -59,6 +77,7 @@ namespace app {
         std::vector<uint32> _indices;
         std::vector<uint8> _primitives;
 
+        std::vector<texture_info_t> _textures;
         std::vector<glm::mat4> _transforms;
         uint32 _meshlet_count = 0;
     };

@@ -10,8 +10,6 @@
 
 #define TASK_WORKGROUP_SIZE 32
 #define WORKGROUP_SIZE 32
-#define MAX_VERTICES 64
-#define MAX_PRIMITIVES 124
 #define MAX_INDICES_PER_THREAD ((MAX_VERTICES + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE)
 #define MAX_PRIMITIVES_PER_THREAD ((MAX_PRIMITIVES + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE)
 
@@ -58,6 +56,7 @@ layout (push_constant) uniform pc_data_block {
     uint64_t index_address;
     uint64_t primitive_address;
     uint64_t transforms_address;
+    uint64_t cluster_class_address;
     uint meshlet_count;
 };
 
@@ -68,39 +67,45 @@ struct task_payload_t {
 
 taskPayloadSharedEXT task_payload_t payload;
 
+shared uint vertex_offset;
+shared uint index_offset;
+shared uint primitive_offset;
+shared uint index_count;
+shared uint primitive_count;
+shared mat4 pvm;
+
 void main() {
     const uint meshlet_instance_id = payload.base_id + uint(payload.offset[gl_WorkGroupID.x]);
-    restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
-    const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
-    const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
-
     const uint thread_index = gl_LocalInvocationID.x;
 
-    restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
+    if (thread_index == 0) {
+        restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
+        restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
+        restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
+        const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
+        const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
+
+        const meshlet_glsl_t meshlet = meshlet_ptr.data[meshlet_id];
+        const mat4 transform = transform_ptr.data[instance_id];
+        vertex_offset = meshlet.vertex_offset;
+        index_offset = meshlet.index_offset;
+        primitive_offset = meshlet.primitive_offset;
+        index_count = meshlet.index_count;
+        primitive_count = meshlet.primitive_count;
+        pvm = u_camera.data.pv * transform;
+        SetMeshOutputsEXT(index_count, primitive_count);
+    }
+    barrier();
+
     restrict b_vertex_buffer vertex_ptr = b_vertex_buffer(vertex_address);
     restrict b_index_buffer index_ptr = b_index_buffer(index_address);
     restrict b_primitive_buffer primitive_ptr = b_primitive_buffer(primitive_address);
-    restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
-
-    const meshlet_glsl_t meshlet = meshlet_ptr.data[meshlet_id];
-    const uint vertex_offset = meshlet.vertex_offset;
-    const uint index_offset = meshlet.index_offset;
-    const uint primitive_offset = meshlet.primitive_offset;
-    const uint index_count = meshlet.index_count;
-    const uint primitive_count = meshlet.primitive_count;
-
-    if (thread_index == 0) {
-        SetMeshOutputsEXT(index_count, primitive_count);
-    }
-
     for (uint i = 0; i < MAX_INDICES_PER_THREAD; i++) {
         // avoid branching, get pipelined memory loads
         const uint index = min(thread_index + i * WORKGROUP_SIZE, index_count - 1);
-        const vertex_format_t vertex = vertex_ptr.data[vertex_offset + index_ptr.data[index_offset + index]];
-        const vec3 position = vec3_from_float(vertex.position);
-        const mat4 transform = transform_ptr.data[instance_id];
+        const vec3 position = vec3_from_float(vertex_ptr.data[vertex_offset + index_ptr.data[index_offset + index]].position);
 
-        gl_MeshVerticesEXT[index].gl_Position = u_camera.data.pv * transform * vec4(position, 1.0);
+        gl_MeshVerticesEXT[index].gl_Position = pvm * vec4(position, 1.0);
         o_vertex_data[index].meshlet_id = meshlet_instance_id;
     }
 
