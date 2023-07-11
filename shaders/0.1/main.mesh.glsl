@@ -8,7 +8,6 @@
 
 #include "common.glsl"
 
-#define TASK_WORKGROUP_SIZE 32
 #define WORKGROUP_SIZE 32
 #define MAX_INDICES_PER_THREAD ((MAX_VERTICES + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE)
 #define MAX_PRIMITIVES_PER_THREAD ((MAX_PRIMITIVES + WORKGROUP_SIZE - 1) / WORKGROUP_SIZE)
@@ -49,22 +48,20 @@ layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
     mat4[] data;
 };
 
+layout (scalar, buffer_reference) restrict readonly buffer b_hw_meshlet_offset {
+    uint count;
+    uint[] data;
+};
+
 layout (push_constant) uniform pc_data_block {
-    uint64_t meshlet_address;
-    uint64_t meshlet_instance_address;
-    uint64_t vertex_address;
-    uint64_t index_address;
-    uint64_t primitive_address;
-    uint64_t transforms_address;
-    uint meshlet_count;
+    restrict b_meshlet_buffer meshlet_ptr;
+    restrict b_meshlet_instance_buffer instance_ptr;
+    restrict b_vertex_buffer vertex_ptr;
+    restrict b_index_buffer index_ptr;
+    restrict b_primitive_buffer primitive_ptr;
+    restrict b_transform_buffer transform_ptr;
+    restrict b_hw_meshlet_offset hw_meshlet_offset_ptr;
 };
-
-struct task_payload_t {
-    uint base_id;
-    uint8_t offset[TASK_WORKGROUP_SIZE];
-};
-
-taskPayloadSharedEXT task_payload_t payload;
 
 shared uint vertex_offset;
 shared uint index_offset;
@@ -74,13 +71,10 @@ shared uint primitive_count;
 shared mat4 pvm;
 
 void main() {
-    const uint meshlet_instance_id = payload.base_id + uint(payload.offset[gl_WorkGroupID.x]);
+    const uint meshlet_instance_id = hw_meshlet_offset_ptr.data[gl_WorkGroupID.x];
     const uint thread_index = gl_LocalInvocationID.x;
 
     if (thread_index == 0) {
-        restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
-        restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
-        restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
         const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
         const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
 
@@ -96,9 +90,6 @@ void main() {
     }
     barrier();
 
-    restrict b_vertex_buffer vertex_ptr = b_vertex_buffer(vertex_address);
-    restrict b_index_buffer index_ptr = b_index_buffer(index_address);
-    restrict b_primitive_buffer primitive_ptr = b_primitive_buffer(primitive_address);
     for (uint i = 0; i < MAX_INDICES_PER_THREAD; i++) {
         // avoid branching, get pipelined memory loads
         const uint index = min(thread_index + i * WORKGROUP_SIZE, index_count - 1);

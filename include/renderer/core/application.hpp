@@ -23,6 +23,8 @@ namespace app {
 
     struct state_t {
         uint32 view_mode = 1;
+        bool enable_hw = true;
+        bool enable_sw = true;
     };
 
     struct meshlet_material_glsl_t {
@@ -64,7 +66,8 @@ namespace app {
 
         ir::arc_ptr<ir::buffer_t<uint32>> sw_rast;
         ir::arc_ptr<ir::buffer_t<uint32>> hw_rast;
-        ir::arc_ptr<ir::buffer_t<uint32>> meshlet_size;
+        ir::arc_ptr<ir::buffer_t<glm::uvec3>> sw_command;
+        ir::arc_ptr<ir::buffer_t<glm::uvec3>> hw_command;
     };
 
     struct computer_raster_pass_t {

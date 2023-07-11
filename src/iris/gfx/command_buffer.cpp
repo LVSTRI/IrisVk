@@ -244,6 +244,11 @@ namespace ir {
         vkCmdDispatch(_handle, x, y, z);
     }
 
+    auto command_buffer_t::dispatch_indirect(const buffer_info_t& buffer) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdDispatchIndirect(_handle, buffer.handle, buffer.offset);
+    }
+
     auto command_buffer_t::fill_buffer(const buffer_info_t& buffer, uint32 data) const noexcept -> void {
         IR_PROFILE_SCOPED();
         vkCmdFillBuffer(_handle, buffer.handle, buffer.offset, buffer.size, data);

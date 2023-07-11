@@ -55,7 +55,7 @@ namespace app {
                     });
                 }
             }
-            if (is_basisu_texture_valid(material.normal_texture.texture)) {
+            /*if (is_basisu_texture_valid(material.normal_texture.texture)) {
                 const auto& texture = *material.normal_texture.texture;
                 const auto& image = *texture.basisu_image;
                 const auto& buffer_view = *image.buffer_view;
@@ -71,7 +71,7 @@ namespace app {
                         .data = std::move(raw)
                     });
                 }
-            }
+            }*/
         }
 
         auto meshlet_id = 0_u32;

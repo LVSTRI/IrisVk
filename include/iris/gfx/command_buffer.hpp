@@ -121,6 +121,7 @@ namespace ir {
         auto draw_mesh_tasks_indirect(const buffer_info_t& buffer, uint32 count) const noexcept -> void;
         auto end_render_pass() noexcept -> void;
         auto dispatch(uint32 x = 1, uint32 y = 1, uint32 z = 1) const noexcept -> void;
+        auto dispatch_indirect(const buffer_info_t& buffer) const noexcept -> void;
         auto fill_buffer(const buffer_info_t& buffer, uint32 data) const noexcept -> void;
         auto clear_image(const image_t& image, const clear_value_t& clear, const image_subresource_t& subresource) const noexcept -> void;
         auto copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void;

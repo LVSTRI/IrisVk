@@ -51,7 +51,7 @@ namespace app {
             }
         });
         _swapchain = ir::swapchain_t::make(*_device, _platform, {
-            .vsync = true
+            .vsync = false
         });
         _main_pass.description = ir::render_pass_t::make(*_device, {
             .attachments = {},
@@ -71,14 +71,13 @@ namespace app {
             .view = ir::default_image_view_info,
         });
         _main_pass.pipeline = ir::pipeline_t::make(*_device, *_main_pass.framebuffer, {
-            .task = "../shaders/0.1/main.task.glsl",
             .mesh = "../shaders/0.1/main.mesh.glsl",
             .fragment = "../shaders/0.1/main.frag",
             .dynamic_states = {
                 ir::dynamic_state_t::e_viewport,
                 ir::dynamic_state_t::e_scissor
             },
-            .cull_mode = ir::cull_mode_t::e_none,
+            .cull_mode = ir::cull_mode_t::e_back,
         });
         _main_pass.camera_buffer = ir::buffer_t<camera_data_t>::make(*_device, frames_in_flight, {
             .usage = ir::buffer_usage_t::e_uniform_buffer,
@@ -241,17 +240,22 @@ namespace app {
         _cluster_pass.sw_rast = ir::buffer_t<uint32>::make(*_device, {
             .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_transfer_dst,
             .flags = ir::buffer_flag_t::e_resized,
-            .capacity = _main_pass.meshlet_instances.as_const_ref().size(),
+            .capacity = _main_pass.meshlet_instances.as_const_ref().size() + 1,
         });
         _cluster_pass.hw_rast = ir::buffer_t<uint32>::make(*_device, {
             .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_transfer_dst,
             .flags = ir::buffer_flag_t::e_resized,
-            .capacity = _main_pass.meshlet_instances.as_const_ref().size(),
+            .capacity = _main_pass.meshlet_instances.as_const_ref().size() + 1,
         });
-        _cluster_pass.meshlet_size = ir::buffer_t<uint32>::make(*_device, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+        _cluster_pass.sw_command = ir::buffer_t<glm::uvec3>::make(*_device, {
+            .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_indirect_buffer,
             .flags = ir::buffer_flag_t::e_resized,
-            .capacity = _main_pass.meshlet_instances.as_const_ref().size(),
+            .capacity = 1,
+        });
+        _cluster_pass.hw_command = ir::buffer_t<glm::uvec3>::make(*_device, {
+            .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_indirect_buffer,
+            .flags = ir::buffer_flag_t::e_resized,
+            .capacity = 1,
         });
 
         _compute_rast_pass.pipeline = ir::pipeline_t::make(*_device, {
@@ -369,6 +373,18 @@ namespace app {
         if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f3)) {
             _state.view_mode = 2;
         }
+        if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f4)) {
+            _state.enable_hw = true;
+            _state.enable_sw = false;
+        }
+        if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f5)) {
+            _state.enable_hw = false;
+            _state.enable_sw = true;
+        }
+        if (wsi_platform().input().is_pressed_once(ir::keyboard_t::e_f6)) {
+            _state.enable_hw = true;
+            _state.enable_sw = true;
+        }
     }
 
     auto application_t::_render() noexcept -> void {
@@ -405,11 +421,7 @@ namespace app {
 
         auto main_set = ir::descriptor_set_builder_t(*_main_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
-            .bind_combined_image_sampler(
-                1,
-                _hiz_pass.depth.as_const_ref().view(),
-                _hiz_pass.sampler.as_const_ref())
-            .bind_storage_image(2, _main_pass.visbuffer.as_const_ref().view())
+            .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
             .build();
 
         auto cluster_area_set = ir::descriptor_set_builder_t(*_cluster_pass.pipeline, 0)
@@ -420,8 +432,18 @@ namespace app {
 
         command_buffer().begin();
         command_buffer().begin_debug_marker("clear_buffers");
+        command_buffer().fill_buffer(_main_pass.atomics.as_const_ref().slice(), 0);
         command_buffer().fill_buffer(_cluster_pass.sw_rast.as_const_ref().slice(), 0);
         command_buffer().fill_buffer(_cluster_pass.hw_rast.as_const_ref().slice(), 0);
+        command_buffer().buffer_barrier({
+            .buffer = _main_pass.atomics.as_const_ref().slice(),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access =
+                ir::resource_access_t::e_shader_storage_read |
+                ir::resource_access_t::e_shader_storage_write
+        });
         command_buffer().buffer_barrier({
             .buffer = _cluster_pass.sw_rast.as_const_ref().slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
@@ -450,26 +472,24 @@ namespace app {
             struct {
                 uint64 meshlet_ptr;
                 uint64 meshlet_instances_ptr;
-                uint64 vertex_ptr;
-                uint64 index_ptr;
-                uint64 primitive_ptr;
                 uint64 transform_ptr;
                 uint64 sw_meshlet_offset_ptr;
                 uint64 hw_meshlet_offset_ptr;
-                uint64 meshlet_size_ptr;
+                uint64 sw_command_ptr;
+                uint64 hw_command_ptr;
+                uint64 global_atomics_ptr;
                 uint32 meshlet_count;
                 uint32 width;
                 uint32 height;
             } constants = {
                 _main_pass.meshlets.as_const_ref().address(),
                 _main_pass.meshlet_instances.as_const_ref().address(),
-                _main_pass.vertices.as_const_ref().address(),
-                _main_pass.indices.as_const_ref().address(),
-                _main_pass.primitives.as_const_ref().address(),
                 _main_pass.transforms.as_const_ref().address(),
                 _cluster_pass.sw_rast.as_const_ref().address(),
                 _cluster_pass.hw_rast.as_const_ref().address(),
-                _cluster_pass.meshlet_size.as_const_ref().address(),
+                _cluster_pass.sw_command.as_const_ref().address(),
+                _cluster_pass.hw_command.as_const_ref().address(),
+                _main_pass.atomics.as_const_ref().address(),
                 static_cast<uint32>(meshlet_count),
                 swapchain().width(),
                 swapchain().height()
@@ -477,21 +497,38 @@ namespace app {
 #pragma pack(pop)
             command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, ir::size_bytes(constants), &constants);
         }
-        command_buffer().dispatch((meshlet_count + 3) / 4);
+        command_buffer().dispatch((meshlet_count + 255) / 256);
         command_buffer().buffer_barrier({
-            .buffer = _cluster_pass.meshlet_size.as_const_ref().slice(),
+            .buffer = _cluster_pass.sw_rast.as_const_ref().slice(),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
-            .dest_stage =
-                ir::pipeline_stage_t::e_compute_shader |
-                ir::pipeline_stage_t::e_fragment_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_shader_storage_write,
-            .dest_access =
-                ir::resource_access_t::e_shader_storage_read |
-                ir::resource_access_t::e_shader_storage_write
+            .dest_access = ir::resource_access_t::e_shader_storage_read
+        });
+        command_buffer().buffer_barrier({
+            .buffer = _cluster_pass.hw_rast.as_const_ref().slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_mesh_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read
+        });
+        command_buffer().buffer_barrier({
+            .buffer = _cluster_pass.sw_command.as_const_ref().slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_draw_indirect,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_indirect_command_read
+        });
+        command_buffer().buffer_barrier({
+            .buffer = _cluster_pass.hw_command.as_const_ref().slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_draw_indirect,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_indirect_command_read
         });
         command_buffer().end_debug_marker();
 
-        command_buffer().begin_debug_marker("meshlet_cull_and_draw");
+        command_buffer().begin_debug_marker("hardware_rasterizer");
         command_buffer().image_barrier({
             .image = std::cref(*_main_pass.visbuffer),
             .source_stage = ir::pipeline_stage_t::e_none,
@@ -511,100 +548,89 @@ namespace app {
             .source_access = ir::resource_access_t::e_transfer_write,
             .dest_access =
                 ir::resource_access_t::e_shader_storage_write |
-                ir::resource_access_t::e_shader_read,
+                ir::resource_access_t::e_shader_storage_read,
             .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
             .new_layout = ir::image_layout_t::e_general,
         });
-        command_buffer().begin_render_pass(*_main_pass.framebuffer, {});
-        command_buffer().bind_pipeline(*_main_pass.pipeline);
-        command_buffer().set_viewport({
-            .width = static_cast<float32>(swapchain().width()),
-            .height = static_cast<float32>(swapchain().height()),
-        });
-        command_buffer().set_scissor({
-            .width = swapchain().width(),
-            .height = swapchain().height(),
-        });
-        command_buffer().bind_descriptor_set(*main_set);
-        {
-#pragma pack(push, 1)
-            struct {
-                uint64 meshlet_address;
-                uint64 meshlet_instance_address;
-                uint64 vertex_address;
-                uint64 index_address;
-                uint64 primitive_address;
-                uint64 transform_address;
-                uint32 meshlet_count;
-            } constants = {
-                _main_pass.meshlets.as_const_ref().address(),
-                _main_pass.meshlet_instances.as_const_ref().address(),
-                _main_pass.vertices.as_const_ref().address(),
-                _main_pass.indices.as_const_ref().address(),
-                _main_pass.primitives.as_const_ref().address(),
-                _main_pass.transforms.as_const_ref().address(),
-                static_cast<uint32>(meshlet_count),
-            };
-#pragma pack(pop)
-            command_buffer().push_constants(ir::shader_stage_t::e_task | ir::shader_stage_t::e_mesh, 0, ir::size_bytes(constants), &constants);
+        if (_state.enable_hw) {
+            command_buffer().begin_render_pass(*_main_pass.framebuffer, {});
+            command_buffer().bind_pipeline(*_main_pass.pipeline);
+            command_buffer().set_viewport({
+                .width = static_cast<float32>(swapchain().width()),
+                .height = static_cast<float32>(swapchain().height()),
+            });
+            command_buffer().set_scissor({
+                .width = swapchain().width(),
+                .height = swapchain().height(),
+            });
+            command_buffer().bind_descriptor_set(*main_set);
+            {
+                struct {
+                    uint64 meshlet_ptr;
+                    uint64 instance_ptr;
+                    uint64 vertex_ptr;
+                    uint64 index_ptr;
+                    uint64 primitive_ptr;
+                    uint64 transform_ptr;
+                    uint64 hw_meshlet_offset_ptr;
+                } constants = {
+                    _main_pass.meshlets.as_const_ref().address(),
+                    _main_pass.meshlet_instances.as_const_ref().address(),
+                    _main_pass.vertices.as_const_ref().address(),
+                    _main_pass.indices.as_const_ref().address(),
+                    _main_pass.primitives.as_const_ref().address(),
+                    _main_pass.transforms.as_const_ref().address(),
+                    _cluster_pass.hw_rast.as_const_ref().address(),
+                };
+                command_buffer().push_constants(ir::shader_stage_t::e_mesh, 0, ir::size_bytes(constants), &constants);
+            }
+            command_buffer().draw_mesh_tasks_indirect(_cluster_pass.hw_command.as_const_ref().slice(), 1);
+            command_buffer().end_render_pass();
+            command_buffer().image_barrier({
+                .image = std::cref(*_main_pass.visbuffer),
+                .source_stage = ir::pipeline_stage_t::e_fragment_shader,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access =
+                    ir::resource_access_t::e_shader_storage_read |
+                    ir::resource_access_t::e_shader_storage_write,
+                .old_layout = ir::image_layout_t::e_general,
+                .new_layout = ir::image_layout_t::e_general,
+            });
         }
-        command_buffer().draw_mesh_tasks((meshlet_count + 32 - 1) / 32);
-        command_buffer().end_render_pass();
-        command_buffer().image_barrier({
-            .image = std::cref(*_main_pass.visbuffer),
-            .source_stage = ir::pipeline_stage_t::e_fragment_shader,
-            .dest_stage =
-                ir::pipeline_stage_t::e_fragment_shader |
-                ir::pipeline_stage_t::e_compute_shader,
-            .source_access = ir::resource_access_t::e_shader_storage_write,
-            .dest_access =
-                ir::resource_access_t::e_shader_storage_read |
-                ir::resource_access_t::e_shader_storage_write,
-            .old_layout = ir::image_layout_t::e_general,
-            .new_layout = ir::image_layout_t::e_general,
-        });
         command_buffer().end_debug_marker();
 
-        /*auto compute_raster_set = ir::descriptor_set_builder_t(*_compute_rast_pass.pipeline, 0)
-            .bind_uniform_buffer(0, camera_buffer().slice())
-            .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
-            .build();
-        command_buffer().begin_debug_marker("compute_rasterizer");
-        command_buffer().bind_pipeline(*_compute_rast_pass.pipeline);
-        command_buffer().bind_descriptor_set(*compute_raster_set);
-        {
-#pragma pack(push, 1)
-            struct {
-                uint64 meshlet_address;
-                uint64 meshlet_instance_address;
-                uint64 vertex_address;
-                uint64 index_address;
-                uint64 primitive_address;
-                uint64 transform_address;
-                uint32 meshlet_count;
-            } constants = {
-                _main_pass.meshlets.as_const_ref().address(),
-                _main_pass.meshlet_instances.as_const_ref().address(),
-                _main_pass.vertices.as_const_ref().address(),
-                _main_pass.indices.as_const_ref().address(),
-                _main_pass.primitives.as_const_ref().address(),
-                _main_pass.transforms.as_const_ref().address(),
-                static_cast<uint32>(meshlet_count),
-            };
-#pragma pack(pop)
-            command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, ir::size_bytes(constants), &constants);
+        if (_state.enable_sw) {
+            auto compute_raster_set = ir::descriptor_set_builder_t(*_compute_rast_pass.pipeline, 0)
+                .bind_uniform_buffer(0, camera_buffer().slice())
+                .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
+                .build();
+            command_buffer().begin_debug_marker("compute_rasterizer");
+            command_buffer().bind_pipeline(*_compute_rast_pass.pipeline);
+            command_buffer().bind_descriptor_set(*compute_raster_set);
+            {
+                struct {
+                    uint64 meshlet_address;
+                    uint64 meshlet_instance_address;
+                    uint64 vertex_address;
+                    uint64 index_address;
+                    uint64 primitive_address;
+                    uint64 transform_address;
+                    uint64 sw_rast_address;
+                } constants = {
+                    _main_pass.meshlets.as_const_ref().address(),
+                    _main_pass.meshlet_instances.as_const_ref().address(),
+                    _main_pass.vertices.as_const_ref().address(),
+                    _main_pass.indices.as_const_ref().address(),
+                    _main_pass.primitives.as_const_ref().address(),
+                    _main_pass.transforms.as_const_ref().address(),
+                    _cluster_pass.sw_rast.as_const_ref().address(),
+                };
+                command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, ir::size_bytes(constants), &constants);
+            }
+            command_buffer().dispatch_indirect(_cluster_pass.sw_command.as_const_ref().slice());
+            command_buffer().end_debug_marker();
         }
-        command_buffer().dispatch((meshlet_count + 3) / 4, 1, 1);
-        command_buffer().image_barrier({
-            .image = std::cref(*_main_pass.visbuffer),
-            .source_stage = ir::pipeline_stage_t::e_compute_shader,
-            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
-            .source_access = ir::resource_access_t::e_shader_storage_write,
-            .dest_access = ir::resource_access_t::e_shader_storage_read,
-            .old_layout = ir::image_layout_t::e_general,
-            .new_layout = ir::image_layout_t::e_general,
-        });
-        command_buffer().end_debug_marker();*/
 
         auto final_set = ir::descriptor_set_builder_t(*_final_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
@@ -613,6 +639,17 @@ namespace app {
             .build();
 
         command_buffer().begin_debug_marker("rasterize_final");
+        command_buffer().image_barrier({
+            .image = std::cref(*_main_pass.visbuffer),
+            .source_stage =
+                ir::pipeline_stage_t::e_compute_shader |
+                ir::pipeline_stage_t::e_fragment_shader,
+            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read,
+            .old_layout = ir::image_layout_t::e_general,
+            .new_layout = ir::image_layout_t::e_general,
+        });
         command_buffer().begin_render_pass(*_final_pass.framebuffer, _final_pass.clear_values);
         command_buffer().bind_pipeline(*_final_pass.pipeline);
         command_buffer().set_viewport({
@@ -633,7 +670,6 @@ namespace app {
                 uint64 index_address;
                 uint64 primitive_address;
                 uint64 transform_address;
-                uint64 meshlet_size_address;
                 uint32 view_mode;
             } constants = {
                 _main_pass.meshlets.as_const_ref().address(),
@@ -642,7 +678,6 @@ namespace app {
                 _main_pass.indices.as_const_ref().address(),
                 _main_pass.primitives.as_const_ref().address(),
                 _main_pass.transforms.as_const_ref().address(),
-                _cluster_pass.meshlet_size.as_const_ref().address(),
                 _state.view_mode,
             };
 #pragma pack(pop)

@@ -8,7 +8,7 @@ layout (location = 0) in i_vertex_data_block {
     flat uint i_meshlet_id;
 };
 
-layout (r64ui, set = 0, binding = 2) restrict uniform u64image2D u_visbuffer;
+layout (r64ui, set = 0, binding = 1) restrict uniform u64image2D u_visbuffer;
 
 void main() {
     const uint64_t depth = uint64_t(floatBitsToUint(gl_FragCoord.z));

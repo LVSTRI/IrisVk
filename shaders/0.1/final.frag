@@ -73,7 +73,6 @@ layout (push_constant) uniform pc_address_block {
     b_index_buffer index_ptr;
     b_primitive_buffer primitive_ptr;
     b_transform_buffer transform_ptr;
-    b_meshlet_size meshlet_size_ptr;
     uint view_mode;
 };
 
@@ -211,12 +210,7 @@ void main() {
         }
 
         case 2: {
-            const uint size = meshlet_size_ptr.data[meshlet_instance_id];
-            if (size < 32) {
-                o_pixel = vec4(0.05, 0.085, 0.95, 1.0);
-            } else {
-                o_pixel = vec4(0.95, 0.085, 0.05, 1.0);
-            }
+            o_pixel = vec4(hsv_to_rgb(vec3(float(primitive_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
             break;
         }
     }

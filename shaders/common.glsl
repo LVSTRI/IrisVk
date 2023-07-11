@@ -1,8 +1,15 @@
 #define M_GOLDEN_CONJ 0.6180339887498948482045868343656
 #define MAX_VERTICES 64
 #define MAX_PRIMITIVES 64
+#define CLUSTER_CLASSIFY_ATOMIC_SLOT 0
 
 struct draw_mesh_tasks_indirect_command_t {
+    uint x;
+    uint y;
+    uint z;
+};
+
+struct compute_indirect_command_t {
     uint x;
     uint y;
     uint z;

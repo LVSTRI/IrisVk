@@ -47,6 +47,11 @@ layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
     mat4[] data;
 };
 
+layout (scalar, buffer_reference) restrict readonly buffer b_sw_meshlet_offset {
+    uint count;
+    uint[] data;
+};
+
 layout (push_constant) uniform pc_data_block {
     b_meshlet_buffer meshlet_ptr;
     b_meshlet_instance_buffer instance_ptr;
@@ -54,7 +59,7 @@ layout (push_constant) uniform pc_data_block {
     b_index_buffer index_ptr;
     b_primitive_buffer primitive_ptr;
     b_transform_buffer transform_ptr;
-    uint meshlet_count;
+    b_sw_meshlet_offset sw_meshlet_offset;
 };
 
 shared meshlet_glsl_t s_meshlets[MESHLETS_PER_WORKGROUP];
@@ -90,7 +95,7 @@ void rasterize(in vec3[3] triangle, in ivec2 viewport_size, in uint64_t payload)
         return;
     }
 
-    max_pixel = min(max_pixel, min_pixel + 127);
+    max_pixel = min(max_pixel, min_pixel + 63);
 
     const vec2 edge_01 = -v01.xy;
     const vec2 edge_12 = vert_1 - vert_2;
@@ -205,9 +210,14 @@ void main() {
     const uint meshlet_base_id = gl_WorkGroupID.x * MESHLETS_PER_WORKGROUP;
     const uint meshlet_base_offset = gl_LocalInvocationID.x / MAX_PRIMITIVES;
     const uint local_id = gl_LocalInvocationID.x % MAX_PRIMITIVES;
-    const uint meshlet_instance_id = meshlet_base_id + meshlet_base_offset;
+    const uint meshlet_stray_id = meshlet_base_id + meshlet_base_offset;
+    const bool is_valid_id = meshlet_stray_id < sw_meshlet_offset.count;
+    uint meshlet_instance_id = -1;
+    if (is_valid_id) {
+        meshlet_instance_id = sw_meshlet_offset.data[meshlet_stray_id];
+    }
 
-    if (meshlet_instance_id < meshlet_count && local_id == 0) {
+    if (is_valid_id && local_id == 0) {
         const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
         const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
         const mat4 transform = transform_ptr.data[instance_id];
@@ -230,7 +240,7 @@ void main() {
     }
     barrier();
 
-    if (meshlet_instance_id < meshlet_count) {
+    if (is_valid_id) {
         const uint index_count = s_meshlets[meshlet_base_offset].index_count;
         if (local_id < index_count) {
             const uint index_id = local_id + meshlet_base_offset * MAX_VERTICES;
@@ -245,7 +255,7 @@ void main() {
     }
     barrier();
 
-    if (meshlet_instance_id < meshlet_count) {
+    if (is_valid_id) {
         const uint primitive_count = s_meshlets[meshlet_base_offset].primitive_count;
         if (local_id < primitive_count) {
             const uint primitive_offset = s_meshlets[meshlet_base_offset].primitive_offset;
