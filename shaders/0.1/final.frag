@@ -62,14 +62,18 @@ layout (scalar, buffer_reference) restrict readonly buffer b_cluster_classificat
     uint8_t[] data;
 };
 
+layout (scalar, buffer_reference) restrict buffer b_meshlet_size {
+    uint[] data;
+};
+
 layout (push_constant) uniform pc_address_block {
-    uint64_t meshlet_address;
-    uint64_t meshlet_instance_address;
-    uint64_t vertex_address;
-    uint64_t index_address;
-    uint64_t primitive_address;
-    uint64_t transforms_address;
-    uint64_t cluster_area_address;
+    b_meshlet_buffer meshlet_ptr;
+    b_meshlet_instance_buffer meshlet_instance_ptr;
+    b_vertex_buffer vertex_ptr;
+    b_index_buffer index_ptr;
+    b_primitive_buffer primitive_ptr;
+    b_transform_buffer transform_ptr;
+    b_meshlet_size meshlet_size_ptr;
     uint view_mode;
 };
 
@@ -142,14 +146,6 @@ void main() {
     const uint meshlet_instance_id = uint((payload >> 7) & 0x07ffffff);
     const uint primitive_id = uint(payload & 0x7f);
 
-    restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
-    restrict b_meshlet_instance_buffer meshlet_instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
-    restrict b_vertex_buffer vertex_ptr = b_vertex_buffer(vertex_address);
-    restrict b_index_buffer index_ptr = b_index_buffer(index_address);
-    restrict b_primitive_buffer primitive_ptr = b_primitive_buffer(primitive_address);
-    restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
-    restrict b_cluster_classification cluster_area_ptr = b_cluster_classification(cluster_area_address);
-
     // fetch meshlet data
     const uint meshlet_id = meshlet_instance_ptr.data[meshlet_instance_id].meshlet_id;
     const uint instance_id = meshlet_instance_ptr.data[meshlet_instance_id].instance_id;
@@ -210,17 +206,17 @@ void main() {
         }
 
         case 1: {
-            const uint kind = uint(cluster_area_ptr.data[meshlet_id]);
-            if (kind == uint(CLUSTER_CLASS_SW_RASTER)) {
-                o_pixel = vec4(0.05, 0.085, 0.95, 1.0);
-            } else {
-                o_pixel = vec4(0.95, 0.05, 0.085, 1.0);
-            }
+            o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
             break;
         }
 
         case 2: {
-            o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
+            const uint size = meshlet_size_ptr.data[meshlet_instance_id];
+            if (size < 32) {
+                o_pixel = vec4(0.05, 0.085, 0.95, 1.0);
+            } else {
+                o_pixel = vec4(0.95, 0.085, 0.05, 1.0);
+            }
             break;
         }
     }

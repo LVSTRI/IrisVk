@@ -132,10 +132,7 @@ bool is_meshlet_visible(in uint meshlet_id, in uint instance_id) {
 void main() {
     const uint meshlet_instance_id = gl_GlobalInvocationID.x;
     restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
-    restrict b_cluster_classification cluster_class_ptr = b_cluster_classification(cluster_class_address);
-    bool is_visible =
-        meshlet_instance_id < meshlet_count &&
-        cluster_class_ptr.data[meshlet_instance_id] == CLUSTER_CLASS_HW_RASTER;
+    bool is_visible = meshlet_instance_id < meshlet_count;
     uint meshlet_id = is_visible ? instance_ptr.data[meshlet_instance_id].meshlet_id : -1;
     uint instance_id = is_visible ? instance_ptr.data[meshlet_instance_id].instance_id : -1;
     //is_visible = is_visible && is_meshlet_visible(meshlet_id, instance_id);

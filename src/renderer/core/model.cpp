@@ -260,7 +260,7 @@ namespace app {
                             auto aabb = aabb_t();
                             aabb.min = glm::vec3(std::numeric_limits<float32>::max());
                             aabb.max = glm::vec3(std::numeric_limits<float32>::lowest());
-                            for (auto w = 0_u32; w < meshlets[k].triangle_count * 3; ++w) {
+                            for (auto w = 0_u32; w < meshlet.primitive_count * 3; ++w) {
                                 const auto& vertex = optimized_vertices[
                                     meshlet_indices[meshlets[k].vertex_offset +
                                         meshlet_primitives[meshlets[k].triangle_offset + w]]];

@@ -194,6 +194,9 @@ namespace ir {
         auto writes = std::vector<VkWriteDescriptorSet>();
         writes.reserve(_binding.bindings.size());
         for (const auto& binding : _binding.bindings) {
+            if (binding.contents.empty()) {
+                continue;
+            }
             auto write = VkWriteDescriptorSet();
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             write.pNext = nullptr;

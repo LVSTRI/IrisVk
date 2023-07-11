@@ -17,7 +17,6 @@ namespace ir {
     auto texture_t::make(device_t& device, std::span<const uint8> file, const texture_create_info_t& info) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         auto texture = arc_ptr<self>(new self());
-        auto ec = std::error_code();
         auto ktx = (ktxTexture2*)(nullptr);
         IR_ASSERT(!ktxTexture2_CreateFromMemory(
             file.data(),

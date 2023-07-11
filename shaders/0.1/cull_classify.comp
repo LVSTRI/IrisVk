@@ -1,0 +1,181 @@
+#version 460
+#extension GL_EXT_buffer_reference : enable
+#extension GL_EXT_scalar_block_layout : enable
+//#extension GL_EXT_debug_printf : enable
+#extension GL_KHR_shader_subgroup_vote : enable
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "common.glsl"
+
+#define WORKGROUP_SIZE 256
+#define MESHLETS_PER_WORKGROUP (WORKGROUP_SIZE / MAX_PRIMITIVES)
+#define SUBPIXEL_BITS 8
+#define SUBPIXEL_SAMPLES (1 << SUBPIXEL_BITS)
+
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+layout (set = 0, binding = 0) uniform u_camera_block {
+    camera_data_t data;
+} u_camera;
+
+layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_buffer {
+    meshlet_glsl_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_meshlet_instance_buffer {
+    meshlet_instance_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_vertex_buffer {
+    vertex_format_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_index_buffer {
+    uint[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_primitive_buffer {
+    uint8_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
+    mat4[] data;
+};
+
+layout (scalar, buffer_reference) restrict buffer b_sw_meshlet_offset {
+    uint count;
+    uint[] data;
+};
+
+layout (scalar, buffer_reference) restrict buffer b_hw_meshlet_offset {
+    uint count;
+    uint[] data;
+};
+
+layout (scalar, buffer_reference) restrict buffer b_meshlet_size {
+    uint[] data;
+};
+
+layout (push_constant) uniform pc_data_block {
+    restrict b_meshlet_buffer meshlet_ptr;
+    restrict b_meshlet_instance_buffer meshlet_instance_ptr;
+    restrict b_vertex_buffer vertex_ptr;
+    restrict b_index_buffer index_ptr;
+    restrict b_primitive_buffer primitive_ptr;
+    restrict b_transform_buffer transform_ptr;
+    restrict b_sw_meshlet_offset sw_meshlet_offset_ptr;
+    restrict b_hw_meshlet_offset hw_meshlet_offset_ptr;
+    restrict b_meshlet_size meshlet_size;
+    uint meshlet_count;
+    uint viewport_width;
+    uint viewport_height;
+};
+
+shared meshlet_glsl_t s_meshlets[MESHLETS_PER_WORKGROUP];
+shared mat4 s_pvm[MESHLETS_PER_WORKGROUP];
+shared vec3 s_vertices[MAX_VERTICES * MESHLETS_PER_WORKGROUP];
+shared uint s_primitive_size[MESHLETS_PER_WORKGROUP];
+
+void main() {
+    const uint meshlet_base_id = gl_WorkGroupID.x * MESHLETS_PER_WORKGROUP;
+    const uint meshlet_base_offset = gl_LocalInvocationID.x / MAX_PRIMITIVES;
+    const uint local_id = gl_LocalInvocationID.x % MAX_PRIMITIVES;
+    const uint meshlet_instance_id = meshlet_base_id + meshlet_base_offset;
+
+    if (meshlet_instance_id < meshlet_count && local_id == 0) {
+        const uint meshlet_id = meshlet_instance_ptr.data[meshlet_instance_id].meshlet_id;
+        const uint instance_id = meshlet_instance_ptr.data[meshlet_instance_id].instance_id;
+        const mat4 transform = transform_ptr.data[instance_id];
+        const vec2 scale = vec2(0.5, -0.5) * vec2(viewport_width, viewport_height) * float(SUBPIXEL_SAMPLES);
+        const vec2 bias = (0.5 * vec2(viewport_width, viewport_height)) * float(SUBPIXEL_SAMPLES) + 0.5;
+
+        mat4 pvm = u_camera.data.pv * transform;
+        pvm[0][0] = pvm[0][0] * scale.x + pvm[0][3] * bias.x;
+        pvm[1][0] = pvm[1][0] * scale.x + pvm[1][3] * bias.x;
+        pvm[2][0] = pvm[2][0] * scale.x + pvm[2][3] * bias.x;
+        pvm[3][0] = pvm[3][0] * scale.x + pvm[3][3] * bias.x;
+
+        pvm[0][1] = pvm[0][1] * scale.y + pvm[0][3] * bias.y;
+        pvm[1][1] = pvm[1][1] * scale.y + pvm[1][3] * bias.y;
+        pvm[2][1] = pvm[2][1] * scale.y + pvm[2][3] * bias.y;
+        pvm[3][1] = pvm[3][1] * scale.y + pvm[3][3] * bias.y;
+
+        s_pvm[meshlet_base_offset] = pvm;
+        s_meshlets[meshlet_base_offset] = meshlet_ptr.data[meshlet_id];
+        s_primitive_size[meshlet_base_offset] = 0;
+    }
+    barrier();
+
+    if (meshlet_instance_id < meshlet_count) {
+        const uint index_count = s_meshlets[meshlet_base_offset].index_count;
+        if (local_id < index_count) {
+            const uint index_id = local_id + meshlet_base_offset * MAX_VERTICES;
+            const uint vertex_offset = s_meshlets[meshlet_base_offset].vertex_offset;
+            const uint index_offset = s_meshlets[meshlet_base_offset].index_offset;
+            const uint vertex_index = index_ptr.data[index_offset + local_id];
+            const vec3 position = vec3_from_float(vertex_ptr.data[vertex_offset + vertex_index].position);
+            const vec4 vertex = s_pvm[meshlet_base_offset] * vec4(position, 1.0);
+            const vec3 clip = vertex.xyz / vertex.w;
+            s_vertices[index_id] = vec3(floor(clip.xy), clip.z);
+        }
+    }
+    barrier();
+
+    if (meshlet_instance_id < meshlet_count) {
+        const uint primitive_count = s_meshlets[meshlet_base_offset].primitive_count;
+        if (local_id < primitive_count) {
+            const uint primitive_offset = s_meshlets[meshlet_base_offset].primitive_offset;
+            const vec3 vertex_0 = s_vertices[meshlet_base_offset * MAX_VERTICES + primitive_ptr.data[primitive_offset + local_id * 3 + 0]];
+            const vec3 vertex_1 = s_vertices[meshlet_base_offset * MAX_VERTICES + primitive_ptr.data[primitive_offset + local_id * 3 + 1]];
+            const vec3 vertex_2 = s_vertices[meshlet_base_offset * MAX_VERTICES + primitive_ptr.data[primitive_offset + local_id * 3 + 2]];
+
+            const vec3 v01 = vertex_1 - vertex_0;
+            const vec3 v02 = vertex_2 - vertex_0;
+            /*
+            // backface
+            const float det_xy = v01.x * v02.y - v01.y * v02.x;
+            if (det_xy >= 0.0) {
+                return;
+            }*/
+
+            const vec2 vert_0 = vertex_0.xy;
+            const vec2 vert_1 = vertex_1.xy;
+            const vec2 vert_2 = vertex_2.xy;
+
+            const vec2 min_subpixel = min(min(vert_0, vert_1), vert_2);
+            const vec2 max_subpixel = max(max(vert_0, vert_1), vert_2);
+
+            ivec2 min_pixel = ivec2(floor((min_subpixel + (SUBPIXEL_SAMPLES / 2) - 1) * (1.0 / float(SUBPIXEL_SAMPLES))));
+            ivec2 max_pixel = ivec2(floor((max_subpixel - (SUBPIXEL_SAMPLES / 2) - 1) * (1.0 / float(SUBPIXEL_SAMPLES))));
+            const bool should_clip =
+                any(lessThanEqual(min_pixel, ivec2(0.0))) ||
+                any(greaterThanEqual(max_pixel, ivec2(viewport_width, viewport_height))) ||
+                min(min(vertex_0.z, vertex_1.z), vertex_2.z) < 0.0;
+
+            if (any(greaterThan(min_pixel, max_pixel))) {
+                s_primitive_size[meshlet_base_offset] = 0;
+            } else if (should_clip) {
+                s_primitive_size[meshlet_base_offset] = -1;
+            } else {
+                min_pixel = max(min_pixel, ivec2(0));
+                max_pixel = min(max_pixel, ivec2(viewport_width, viewport_height) - 1);
+                const uint footprint = max(max(max_pixel.x - min_pixel.x, 0), max(max_pixel.y - min_pixel.y, 0));
+                atomicMax(s_primitive_size[meshlet_base_offset], footprint);
+            }
+        }
+    }
+    barrier();
+
+    if (meshlet_instance_id < meshlet_count && local_id == 0) {
+        if (s_primitive_size[meshlet_base_offset] < 32) {
+            const uint slot = atomicAdd(sw_meshlet_offset_ptr.count, 1);
+            sw_meshlet_offset_ptr.data[slot] = meshlet_instance_id;
+        } else {
+            const uint slot = atomicAdd(hw_meshlet_offset_ptr.count, 1);
+            hw_meshlet_offset_ptr.data[slot] = meshlet_instance_id;
+        }
+        meshlet_size.data[meshlet_instance_id] = s_primitive_size[meshlet_base_offset];
+    }
+}

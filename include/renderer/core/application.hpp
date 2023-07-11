@@ -22,7 +22,7 @@ namespace app {
     };
 
     struct state_t {
-        uint32 view_mode = 0;
+        uint32 view_mode = 1;
     };
 
     struct meshlet_material_glsl_t {
@@ -59,9 +59,12 @@ namespace app {
         std::vector<ir::arc_ptr<ir::buffer_t<camera_data_t>>> camera_buffer;
     };
 
-    struct cluster_area_pass_t {
+    struct cluster_classify_pass_t {
         ir::arc_ptr<ir::pipeline_t> pipeline;
-        ir::arc_ptr<ir::buffer_t<uint8>> cluster_class;
+
+        ir::arc_ptr<ir::buffer_t<uint32>> sw_rast;
+        ir::arc_ptr<ir::buffer_t<uint32>> hw_rast;
+        ir::arc_ptr<ir::buffer_t<uint32>> meshlet_size;
     };
 
     struct computer_raster_pass_t {
@@ -124,7 +127,7 @@ namespace app {
 
         camera_t _camera;
         main_pass_t _main_pass;
-        cluster_area_pass_t _cluster_pass;
+        cluster_classify_pass_t _cluster_pass;
         computer_raster_pass_t _compute_rast_pass;
         hiz_pass_t _hiz_pass;
         final_pass_t _final_pass;

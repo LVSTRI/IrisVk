@@ -2,9 +2,6 @@
 #define MAX_VERTICES 64
 #define MAX_PRIMITIVES 64
 
-#define CLUSTER_CLASS_SW_RASTER uint8_t(0)
-#define CLUSTER_CLASS_HW_RASTER uint8_t(1)
-
 struct draw_mesh_tasks_indirect_command_t {
     uint x;
     uint y;

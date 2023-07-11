@@ -10,12 +10,12 @@
 
 #include "common.glsl"
 
+#define WORKGROUP_SIZE 256
+#define MESHLETS_PER_WORKGROUP (WORKGROUP_SIZE / MAX_PRIMITIVES)
 #define SUBPIXEL_BITS 8
 #define SUBPIXEL_SAMPLES (1 << SUBPIXEL_BITS)
-#define SUBPIXEL_MASK (SUBPIXEL_SAMPLES - 1)
-#define SUBPIXEL_DILATE 0
 
-layout (local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 layout (set = 0, binding = 0) uniform u_camera_block {
     camera_data_t data;
@@ -47,28 +47,19 @@ layout (scalar, buffer_reference) restrict readonly buffer b_transform_buffer {
     mat4[] data;
 };
 
-layout (scalar, buffer_reference) restrict readonly buffer b_cluster_classification {
-    uint8_t[] data;
-};
-
 layout (push_constant) uniform pc_data_block {
-    uint64_t meshlet_address;
-    uint64_t meshlet_instance_address;
-    uint64_t vertex_address;
-    uint64_t index_address;
-    uint64_t primitive_address;
-    uint64_t transforms_address;
-    uint64_t cluster_class_address;
+    b_meshlet_buffer meshlet_ptr;
+    b_meshlet_instance_buffer instance_ptr;
+    b_vertex_buffer vertex_ptr;
+    b_index_buffer index_ptr;
+    b_primitive_buffer primitive_ptr;
+    b_transform_buffer transform_ptr;
     uint meshlet_count;
 };
 
-shared uint vertex_offset;
-shared uint index_offset;
-shared uint primitive_offset;
-shared uint index_count;
-shared uint primitive_count;
-shared mat4 pvm;
-shared vec3[64] vertices;
+shared meshlet_glsl_t s_meshlets[MESHLETS_PER_WORKGROUP];
+shared mat4 s_pvm[MESHLETS_PER_WORKGROUP];
+shared vec3 s_vertices[MAX_VERTICES * MESHLETS_PER_WORKGROUP];
 
 void rasterize(in vec3[3] triangle, in ivec2 viewport_size, in uint64_t payload) {
     const vec3 v01 = triangle[1] - triangle[0];
@@ -210,31 +201,20 @@ void rasterize(in vec3[3] triangle, in ivec2 viewport_size, in uint64_t payload)
 }
 
 void main() {
-    restrict b_meshlet_instance_buffer instance_ptr = b_meshlet_instance_buffer(meshlet_instance_address);
-    restrict b_meshlet_buffer meshlet_ptr = b_meshlet_buffer(meshlet_address);
-    restrict b_vertex_buffer vertex_ptr = b_vertex_buffer(vertex_address);
-    restrict b_index_buffer index_ptr = b_index_buffer(index_address);
-    restrict b_primitive_buffer primitive_ptr = b_primitive_buffer(primitive_address);
-    restrict b_transform_buffer transform_ptr = b_transform_buffer(transforms_address);
-    restrict b_cluster_classification cluster_class_ptr = b_cluster_classification(cluster_class_address);
-
-    const uint meshlet_instance_id = gl_WorkGroupID.x;
-
-    const bool is_sw_rast = cluster_class_ptr.data[meshlet_instance_id] == CLUSTER_CLASS_SW_RASTER;
-
     const ivec2 viewport_size = ivec2(imageSize(u_visbuffer));
-    if (is_sw_rast && gl_LocalInvocationID.x == 0) {
+    const uint meshlet_base_id = gl_WorkGroupID.x * MESHLETS_PER_WORKGROUP;
+    const uint meshlet_base_offset = gl_LocalInvocationID.x / MAX_PRIMITIVES;
+    const uint local_id = gl_LocalInvocationID.x % MAX_PRIMITIVES;
+    const uint meshlet_instance_id = meshlet_base_id + meshlet_base_offset;
+
+    if (meshlet_instance_id < meshlet_count && local_id == 0) {
         const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
         const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;
-        vertex_offset = meshlet_ptr.data[meshlet_id].vertex_offset;
-        index_offset = meshlet_ptr.data[meshlet_id].index_offset;
-        primitive_offset = meshlet_ptr.data[meshlet_id].primitive_offset;
-        index_count = meshlet_ptr.data[meshlet_id].index_count;
-        primitive_count = meshlet_ptr.data[meshlet_id].primitive_count;
-        pvm = u_camera.data.pv * transform_ptr.data[instance_id];
+        const mat4 transform = transform_ptr.data[instance_id];
+        const vec2 scale = vec2(0.5, -0.5) * vec2(viewport_size) * float(SUBPIXEL_SAMPLES);
+        const vec2 bias = (0.5 * vec2(viewport_size)) * float(SUBPIXEL_SAMPLES) + 0.5;
 
-        const vec2 scale = vec2(0.5, -0.5) * vec2(viewport_size.xy) * float(SUBPIXEL_SAMPLES);
-        const vec2 bias = (0.5 * vec2(viewport_size.xy)) * float(SUBPIXEL_SAMPLES) + 0.5;
+        mat4 pvm = u_camera.data.pv * transform;
         pvm[0][0] = pvm[0][0] * scale.x + pvm[0][3] * bias.x;
         pvm[1][0] = pvm[1][0] * scale.x + pvm[1][3] * bias.x;
         pvm[2][0] = pvm[2][0] * scale.x + pvm[2][3] * bias.x;
@@ -244,31 +224,36 @@ void main() {
         pvm[1][1] = pvm[1][1] * scale.y + pvm[1][3] * bias.y;
         pvm[2][1] = pvm[2][1] * scale.y + pvm[2][3] * bias.y;
         pvm[3][1] = pvm[3][1] * scale.y + pvm[3][3] * bias.y;
+
+        s_pvm[meshlet_base_offset] = pvm;
+        s_meshlets[meshlet_base_offset] = meshlet_ptr.data[meshlet_id];
     }
     barrier();
 
-    if (is_sw_rast && gl_LocalInvocationID.x < index_count) {
-        const uint index = index_ptr.data[index_offset + gl_LocalInvocationID.x];
-        const vec3 vertex = vec3_from_float(vertex_ptr.data[vertex_offset + index].position);
-        const vec4 position = pvm * vec4(vertex, 1.0);
-        const vec3 clip = position.xyz / position.w;
-        vertices[gl_LocalInvocationID.x] = vec3(floor(clip.xy), clip.z);
+    if (meshlet_instance_id < meshlet_count) {
+        const uint index_count = s_meshlets[meshlet_base_offset].index_count;
+        if (local_id < index_count) {
+            const uint index_id = local_id + meshlet_base_offset * MAX_VERTICES;
+            const uint vertex_offset = s_meshlets[meshlet_base_offset].vertex_offset;
+            const uint index_offset = s_meshlets[meshlet_base_offset].index_offset;
+            const uint vertex_index = index_ptr.data[index_offset + local_id];
+            const vec3 position = vec3_from_float(vertex_ptr.data[vertex_offset + vertex_index].position);
+            const vec4 vertex = s_pvm[meshlet_base_offset] * vec4(position, 1.0);
+            const vec3 clip = vertex.xyz / vertex.w;
+            s_vertices[index_id] = vec3(floor(clip.xy), clip.z);
+        }
     }
     barrier();
 
-    const uint primitive_id = gl_LocalInvocationID.x;
-    if (is_sw_rast && primitive_id < primitive_count) {
-        const restrict uint[] primitives = uint[](
-            primitive_ptr.data[primitive_offset + primitive_id * 3 + 0],
-            primitive_ptr.data[primitive_offset + primitive_id * 3 + 1],
-            primitive_ptr.data[primitive_offset + primitive_id * 3 + 2]);
-
-        const vec3[] ndc_vertices = vec3[](
-            vertices[primitives[0]],
-            vertices[primitives[1]],
-            vertices[primitives[2]]);
-
-        const uint64_t payload = uint64_t(meshlet_instance_id) << 7 | uint64_t(primitive_id);
-        rasterize(ndc_vertices, viewport_size, payload);
+    if (meshlet_instance_id < meshlet_count) {
+        const uint primitive_count = s_meshlets[meshlet_base_offset].primitive_count;
+        if (local_id < primitive_count) {
+            const uint primitive_offset = s_meshlets[meshlet_base_offset].primitive_offset;
+            const vec3 vertex_0 = s_vertices[meshlet_base_offset * MAX_VERTICES + primitive_ptr.data[primitive_offset + local_id * 3 + 0]];
+            const vec3 vertex_1 = s_vertices[meshlet_base_offset * MAX_VERTICES + primitive_ptr.data[primitive_offset + local_id * 3 + 1]];
+            const vec3 vertex_2 = s_vertices[meshlet_base_offset * MAX_VERTICES + primitive_ptr.data[primitive_offset + local_id * 3 + 2]];
+            const uint64_t payload = uint64_t(meshlet_instance_id) << 7 | uint64_t(local_id);
+            rasterize(vec3[](vertex_0, vertex_1, vertex_2), viewport_size, payload);
+        }
     }
 }

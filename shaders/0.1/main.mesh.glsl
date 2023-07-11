@@ -56,7 +56,6 @@ layout (push_constant) uniform pc_data_block {
     uint64_t index_address;
     uint64_t primitive_address;
     uint64_t transforms_address;
-    uint64_t cluster_class_address;
     uint meshlet_count;
 };
 
