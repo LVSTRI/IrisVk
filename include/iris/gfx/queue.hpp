@@ -72,7 +72,7 @@ namespace ir {
         IR_NODISCARD auto logger() const noexcept -> spdlog::logger&;
 
         auto submit(const queue_submit_info_t& info, const fence_t* fence = nullptr) noexcept -> void;
-        auto submit(std::function<void(command_buffer_t&)> record) noexcept -> void;
+        auto submit(const std::function<void(command_buffer_t&)>& record) noexcept -> void;
         auto present(const queue_present_info_t& info) noexcept -> void;
 
     private:

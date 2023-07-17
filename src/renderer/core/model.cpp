@@ -55,7 +55,7 @@ namespace app {
                     });
                 }
             }
-            /*if (is_basisu_texture_valid(material.normal_texture.texture)) {
+            if (is_basisu_texture_valid(material.normal_texture.texture)) {
                 const auto& texture = *material.normal_texture.texture;
                 const auto& image = *texture.basisu_image;
                 const auto& buffer_view = *image.buffer_view;
@@ -71,7 +71,7 @@ namespace app {
                         .data = std::move(raw)
                     });
                 }
-            }*/
+            }
         }
 
         auto meshlet_id = 0_u32;
@@ -89,7 +89,6 @@ namespace app {
                 const auto* position_ptr = (glm::vec3*)(nullptr);
                 const auto* normal_ptr = (glm::vec3*)(nullptr);
                 const auto* uv_ptr = (glm::vec2*)(nullptr);
-                const auto* tangent_ptr = (glm::vec4*)(nullptr);
 
                 auto vertices = std::vector<meshlet_vertex_format_t>();
                 auto vertex_count = 0_u32;
@@ -116,10 +115,6 @@ namespace app {
                             }
                             break;
 
-                        case cgltf_attribute_type_tangent:
-                            tangent_ptr = reinterpret_cast<const glm::vec4*>(data_ptr + buffer_view.offset + accessor.offset);
-                            break;
-
                         default: break;
                     }
                 }
@@ -135,9 +130,6 @@ namespace app {
                     }
                     if (uv_ptr) {
                         std::memcpy(&vertex.uv, &uv_ptr[k], sizeof(vertex.uv));
-                    }
-                    if (tangent_ptr) {
-                        std::memcpy(&vertex.tangent, &tangent_ptr[k], sizeof(vertex.tangent));
                     }
                 }
                 auto indices = std::vector<uint32>();
@@ -171,9 +163,9 @@ namespace app {
                 }
 
                 // optimization
-                /*auto& optimized_indices = indices;
-                auto& optimized_vertices = vertices;*/
-                auto optimized_indices = std::vector<uint32>();
+                auto& optimized_indices = indices;
+                auto& optimized_vertices = vertices;
+                /*auto optimized_indices = std::vector<uint32>();
                 auto optimized_vertices = std::vector<meshlet_vertex_format_t>();
                 {
                     const auto index_count = indices.size();
@@ -218,7 +210,7 @@ namespace app {
                         optimized_vertices.data(),
                         optimized_vertices.size(),
                         sizeof(meshlet_vertex_format_t));
-                }
+                }*/
                 // meshlet build
                 {
                     constexpr static auto max_indices = 64_u32;
@@ -302,39 +294,26 @@ namespace app {
                 }
             }
         }
-        auto node_cache = std::unordered_set<const cgltf_node*>();
         auto meshlet_instances = std::vector<meshlet_instance_t>();
         meshlet_instances.reserve(meshlet_id);
         for (auto i = 0_u32; i < gltf->nodes_count; ++i) {
-            auto nodes = std::queue<const cgltf_node*>();
-            nodes.push(&gltf->nodes[i]);
-            while (!nodes.empty()) {
-                const auto& node = *nodes.front();
-                nodes.pop();
-                if (node_cache.contains(&node)) {
-                    continue;
+            const auto& node = gltf->nodes[i];
+            if (!node.mesh) {
+                continue;
+            }
+            auto transform = glm::identity<glm::mat4>();
+            cgltf_node_transform_world(&node, glm::value_ptr(transform));
+            const auto& mesh = *node.mesh;
+            for (auto j = 0_u32; j < mesh.primitives_count; ++j) {
+                const auto transform_id = model._transforms.size();
+                const auto* primitive = mesh.primitives + j;
+                for (const auto& each : meshlet_cache[primitive]) {
+                    meshlet_instances.push_back({
+                        each.id,
+                        static_cast<uint32>(transform_id)
+                    });
                 }
-                node_cache.insert(&node);
-                for (auto j = 0_u32; j < node.children_count; ++j) {
-                    nodes.push(node.children[j]);
-                }
-                if (!node.mesh) {
-                    continue;
-                }
-                auto transform = glm::identity<glm::mat4>();
-                cgltf_node_transform_world(&node, glm::value_ptr(transform));
-                const auto& mesh = *node.mesh;
-                for (auto j = 0_u32; j < mesh.primitives_count; ++j) {
-                    const auto transform_id = model._transforms.size();
-                    const auto* primitive = mesh.primitives + j;
-                    for (const auto& each : meshlet_cache[primitive]) {
-                        meshlet_instances.push_back({
-                            each.id,
-                            static_cast<uint32>(transform_id)
-                        });
-                    }
-                    model._transforms.emplace_back(transform);
-                }
+                model._transforms.emplace_back(transform);
             }
         }
         model._meshlet_instances = std::move(meshlet_instances);

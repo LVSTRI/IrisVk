@@ -102,7 +102,7 @@ namespace ir {
         IR_PROFILE_SCOPED();
         _binding.pool = pipeline.device().descriptor_pool().handle();
         _binding.layout = pipeline.descriptor_layout(set).handle();
-        _binding.bindings.reserve(pipeline.descriptor_layout(set).bindings().size());
+        _binding.bindings.reserve(1024);
     }
 
     auto descriptor_set_builder_t::bind_uniform_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self& {

@@ -152,10 +152,10 @@ namespace ir {
 
         auto allocation_info = VmaAllocationCreateInfo();
         allocation_info.flags = {};
-        allocation_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-        allocation_info.requiredFlags = {};
-        allocation_info.preferredFlags = {};
-        allocation_info.memoryTypeBits = {};
+        allocation_info.usage = VMA_MEMORY_USAGE_AUTO;
+        allocation_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        allocation_info.preferredFlags = 0;
+        allocation_info.memoryTypeBits = 0;
         allocation_info.pool = {};
         allocation_info.pUserData = nullptr;
         allocation_info.priority = 1.0f;

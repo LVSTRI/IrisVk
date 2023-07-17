@@ -14,7 +14,6 @@ namespace app {
         alignas(alignof(float32)) glm::vec3 position = {};
         alignas(alignof(float32)) glm::vec3 normal = {};
         alignas(alignof(float32)) glm::vec2 uv = {};
-        alignas(alignof(float32)) glm::vec4 tangent = {};
     };
 
     struct aabb_t {

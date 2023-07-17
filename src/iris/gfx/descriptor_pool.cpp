@@ -19,7 +19,7 @@ namespace ir {
         IR_PROFILE_SCOPED();
         return make(device, { {
             std::make_pair(descriptor_type_t::e_sampler, initial_capacity),
-            std::make_pair(descriptor_type_t::e_combined_image_sampler, initial_capacity),
+            std::make_pair(descriptor_type_t::e_combined_image_sampler, initial_capacity * 32),
             std::make_pair(descriptor_type_t::e_sampled_image, initial_capacity),
             std::make_pair(descriptor_type_t::e_storage_image, initial_capacity),
             std::make_pair(descriptor_type_t::e_uniform_texel_buffer, initial_capacity),

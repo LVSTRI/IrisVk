@@ -134,6 +134,37 @@ vec4 interpolate_attributes(in partial_derivatives_t derivatives, in vec4[3] att
         attributes[2] * derivatives.lambda.z;
 }
 
+vec3 analytical_ddx(in partial_derivatives_t derivatives, in vec3[3] values) {
+    return vec3(
+        dot(derivatives.ddx, vec3(values[0].x, values[1].x, values[2].x)),
+        dot(derivatives.ddx, vec3(values[0].y, values[1].y, values[2].y)),
+        dot(derivatives.ddx, vec3(values[0].z, values[1].z, values[2].z))
+    );
+}
+
+vec3 analytical_ddy(in partial_derivatives_t derivatives, in vec3[3] values) {
+    return vec3(
+        dot(derivatives.ddy, vec3(values[0].x, values[1].x, values[2].x)),
+        dot(derivatives.ddy, vec3(values[0].y, values[1].y, values[2].y)),
+        dot(derivatives.ddy, vec3(values[0].z, values[1].z, values[2].z))
+    );
+}
+
+vec3 sample_base_color(in uint texture, in uv_grad_t grad) {
+    if (texture == -1) {
+        return vec3(0.0);
+    }
+    return textureGrad(u_textures[texture], grad.uv, grad.ddx, grad.ddy).rgb;
+}
+
+vec3 sample_normal(in uint texture, in mat3 TBN, in vec3 normal, in uv_grad_t grad) {
+    if (texture == -1) {
+        return normal;
+    }
+    const vec3 s_normal = vec3(textureGrad(u_textures[texture], grad.uv, grad.ddx, grad.ddy).rg, 1.0);
+    return normalize(TBN * (s_normal * 2.0 - 1.0));
+}
+
 void main() {
     const uvec2 resolution = imageSize(u_visbuffer).xy;
     const uint64_t payload = imageLoad(u_visbuffer, ivec2(gl_FragCoord.xy)).x;
@@ -168,19 +199,27 @@ void main() {
         vertex_ptr.data[vertex_offset + index_ptr.data[index_offset + primitive_index[2]]]);
     const restrict mat4 transform = transform_ptr.data[instance_id];
 
+    const vec3[] positions = vec3[](
+        vec3_from_float(vertices[0].position),
+        vec3_from_float(vertices[1].position),
+        vec3_from_float(vertices[2].position));
+    const vec3[] world_positions = vec3[](
+        vec3(transform * vec4(positions[0], 1.0)),
+        vec3(transform * vec4(positions[1], 1.0)),
+        vec3(transform * vec4(positions[2], 1.0)));
     const vec4[] clip_position = vec4[](
-        u_camera.data.pv * transform * vec4(vec3_from_float(vertices[0].position), 1.0),
-        u_camera.data.pv * transform * vec4(vec3_from_float(vertices[1].position), 1.0),
-        u_camera.data.pv * transform * vec4(vec3_from_float(vertices[2].position), 1.0));
-    const vec3 position = unproject_depth(u_camera.data.pv, depth, i_uv);
-
+        u_camera.data.pv * vec4(world_positions[0], 1.0),
+        u_camera.data.pv * vec4(world_positions[1], 1.0),
+        u_camera.data.pv * vec4(world_positions[2], 1.0));
     const partial_derivatives_t derivatives = compute_derivatives(clip_position, i_uv * 2.0 - 1.0, vec2(resolution));
 
+    const mat3 inv_transform = mat3(transpose(inverse(transform)));
     const vec3[] normals = vec3[](
         vec3_from_float(vertices[0].normal),
         vec3_from_float(vertices[1].normal),
         vec3_from_float(vertices[2].normal));
-    const vec3 normal = normalize(mat3(transpose(inverse(transform))) * normalize(interpolate_attributes(derivatives, normals)));
+    const vec3 normal = normalize(interpolate_attributes(derivatives, normals));
+    const vec3 w_normal = normalize(inv_transform * normal);
 
     const vec2[] uvs = vec2[](
         vec2_from_float(vertices[0].uv),
@@ -194,13 +233,27 @@ void main() {
         vec2(interp_uv[0].y, interp_uv[1].y),
         vec2(interp_uv[0].z, interp_uv[1].z));
 
+    mat3 TBN = mat3(0.0);
+    {
+        const vec3 ddx_position = analytical_ddx(derivatives, world_positions);
+        const vec3 ddy_position = analytical_ddy(derivatives, world_positions);
+        const vec2 ddx_uv = uv_grad.ddx;
+        const vec2 ddy_uv = uv_grad.ddy;
+
+        const vec3 N = w_normal;
+        const vec3 T = normalize(ddx_position * ddy_uv.y - ddy_position * ddx_uv.y);
+        const vec3 B = -normalize(cross(N, T));
+
+        TBN = mat3(T, B, N);
+    }
+
+    const vec3 s_base_color = sample_base_color(material.base_color_texture, uv_grad);
+    const vec3 s_normal = sample_normal(material.normal_texture, TBN, w_normal, uv_grad);
+    const vec3 light_dir = normalize(vec3(-0.321, 1.0, -0.5));
+
     switch (view_mode) {
         case 0: {
-            if (material.base_color_texture != -1) {
-                o_pixel = vec4(textureGrad(u_textures[material.base_color_texture], uv_grad.uv, uv_grad.ddx, uv_grad.ddy).rgb, 1.0);
-            } else {
-                o_pixel = vec4(vec3(0.0), 1.0);
-            }
+            o_pixel = vec4(s_base_color, 1.0);
             break;
         }
 
@@ -214,5 +267,4 @@ void main() {
             break;
         }
     }
-    //o_pixel = vec4(normal * 0.5 + 0.5, 1.0);
 }

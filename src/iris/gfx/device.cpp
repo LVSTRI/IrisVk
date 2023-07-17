@@ -150,6 +150,7 @@ namespace ir {
             features_11.storageBuffer16BitAccess = true;
             features_11.uniformAndStorageBuffer16BitAccess = true;
             features_11.storagePushConstant16 = true;
+            features_11.multiview = true;
             features_11.variablePointersStorageBuffer = true;
             features_11.variablePointers = true;
 
@@ -164,6 +165,7 @@ namespace ir {
             mesh_shader_features.pNext = nullptr;
             mesh_shader_features.meshShader = true;
             mesh_shader_features.taskShader = true;
+            mesh_shader_features.multiviewMeshShader = true;
             if (info.features.mesh_shader) {
                 append_extension_chain(features_11, &mesh_shader_features);
             }

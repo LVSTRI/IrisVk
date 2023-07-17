@@ -11,7 +11,7 @@
 #include "common.glsl"
 
 #define WORKGROUP_SIZE 256
-#define MESHLETS_PER_WORKGROUP (WORKGROUP_SIZE / MAX_PRIMITIVES)
+#define MESHLETS_PER_WORKGROUP 4
 #define SUBPIXEL_BITS 8
 #define SUBPIXEL_SAMPLES (1 << SUBPIXEL_BITS)
 
@@ -53,13 +53,13 @@ layout (scalar, buffer_reference) restrict readonly buffer b_sw_meshlet_offset {
 };
 
 layout (push_constant) uniform pc_data_block {
-    b_meshlet_buffer meshlet_ptr;
-    b_meshlet_instance_buffer instance_ptr;
-    b_vertex_buffer vertex_ptr;
-    b_index_buffer index_ptr;
-    b_primitive_buffer primitive_ptr;
-    b_transform_buffer transform_ptr;
-    b_sw_meshlet_offset sw_meshlet_offset;
+    restrict b_meshlet_buffer meshlet_ptr;
+    restrict b_meshlet_instance_buffer instance_ptr;
+    restrict b_vertex_buffer vertex_ptr;
+    restrict b_index_buffer index_ptr;
+    restrict b_primitive_buffer primitive_ptr;
+    restrict b_transform_buffer transform_ptr;
+    restrict b_sw_meshlet_offset sw_meshlet_offset;
 };
 
 shared meshlet_glsl_t s_meshlets[MESHLETS_PER_WORKGROUP];
@@ -206,17 +206,17 @@ void rasterize(in vec3[3] triangle, in ivec2 viewport_size, in uint64_t payload)
 }
 
 void main() {
-    const ivec2 viewport_size = ivec2(imageSize(u_visbuffer));
     const uint meshlet_base_id = gl_WorkGroupID.x * MESHLETS_PER_WORKGROUP;
     const uint meshlet_base_offset = gl_LocalInvocationID.x / MAX_PRIMITIVES;
     const uint local_id = gl_LocalInvocationID.x % MAX_PRIMITIVES;
     const uint meshlet_stray_id = meshlet_base_id + meshlet_base_offset;
     const bool is_valid_id = meshlet_stray_id < sw_meshlet_offset.count;
-    uint meshlet_instance_id = -1;
+    uint meshlet_instance_id = 0;
     if (is_valid_id) {
         meshlet_instance_id = sw_meshlet_offset.data[meshlet_stray_id];
     }
 
+    const ivec2 viewport_size = ivec2(imageSize(u_visbuffer));
     if (is_valid_id && local_id == 0) {
         const uint meshlet_id = instance_ptr.data[meshlet_instance_id].meshlet_id;
         const uint instance_id = instance_ptr.data[meshlet_instance_id].instance_id;

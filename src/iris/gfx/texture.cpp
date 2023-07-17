@@ -53,6 +53,12 @@ namespace ir {
             .view = default_image_view_info,
         });
         auto sampler = sampler_t::make(device, info.sampler);
+        IR_LOG_INFO(device.logger(), "texture metadata: {}x{}x{}, size: {}, format: {}",
+            ktx->baseWidth,
+            ktx->baseHeight,
+            ktx->numLevels,
+            ktx->dataSize,
+            as_string(image.as_const_ref().format()));
 
         // TODO: use the transfer queue
         device.graphics_queue().submit([&](command_buffer_t& cmd) {

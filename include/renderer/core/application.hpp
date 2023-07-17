@@ -58,6 +58,7 @@ namespace app {
         std::vector<ir::arc_ptr<ir::texture_t>> textures;
 
         ir::arc_ptr<ir::buffer_t<uint32>> atomics;
+        ir::arc_ptr<ir::buffer_t<uint32>> sex;
         std::vector<ir::arc_ptr<ir::buffer_t<camera_data_t>>> camera_buffer;
     };
 

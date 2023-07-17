@@ -99,9 +99,7 @@ void main() {
         o_vertex_data[index].meshlet_id = meshlet_instance_id;
     }
 
-    // gl_PrimitiveTriangleIndicesEXT
     for (uint i = 0; i < MAX_PRIMITIVES_PER_THREAD; i++) {
-        // avoid branching, get pipelined memory loads
         const uint index = min(thread_index + i * WORKGROUP_SIZE, primitive_count - 1);
         gl_PrimitiveTriangleIndicesEXT[index] = uvec3(
             uint(primitive_ptr.data[primitive_offset + index * 3 + 0]),

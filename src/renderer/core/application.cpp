@@ -183,7 +183,7 @@ namespace app {
         });
 
         {
-            const auto model = meshlet_model_t::make("../models/compressed/bistro/bistro.glb");
+            const auto model = meshlet_model_t::make("../models/compressed/intel_sponza/intel_sponza.glb");
             auto meshlets = std::vector<meshlet_glsl_t>();
             meshlets.reserve(model.meshlet_count());
             for (const auto& meshlet : model.meshlets()) {
@@ -201,7 +201,7 @@ namespace app {
                 });
             }
 
-            for (const auto& [_, type, file] : model.textures()) {
+            for (const auto textures = model.textures(); const auto& [_, type, file] : textures) {
                 _main_pass.textures.emplace_back(ir::texture_t::make(*_device, file, {
                     .format = [type = type]() {
                         switch (type) {
@@ -221,12 +221,17 @@ namespace app {
                 }));
             }
 
-            _main_pass.meshlets = ir::upload_buffer(*_device, std::span<const meshlet_glsl_t>(meshlets), {});
+            _main_pass.meshlets = ir::upload_buffer<meshlet_glsl_t>(*_device, meshlets, {});
             _main_pass.meshlet_instances = ir::upload_buffer(*_device, model.meshlet_instances(), {});
             _main_pass.vertices = ir::upload_buffer(*_device, model.vertices(), {});
             _main_pass.indices = ir::upload_buffer(*_device, model.indices(), {});
             _main_pass.primitives = ir::upload_buffer(*_device, model.primitives(), {});
-            _main_pass.transforms = ir::upload_buffer(*_device, model.transforms(), {});
+
+            auto transforms = std::vector<glm::mat4>(model.transforms().begin(), model.transforms().end());
+            for (auto& transform : transforms) {
+                //transform = glm::scale(transform, glm::vec3(0.1f));
+            }
+            _main_pass.transforms = ir::upload_buffer<glm::mat4>(*_device, transforms, {});
         }
         _main_pass.atomics = ir::buffer_t<uint32>::make(*_device, {
             .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_transfer_dst,
@@ -731,8 +736,8 @@ namespace app {
                 command_buffer().bind_pipeline(*_hiz_pass.copy);
                 command_buffer().bind_descriptor_set(*depth_copy_set);
                 command_buffer().dispatch(
-                    (_hiz_pass.depth.as_const_ref().width() + 32 - 1) / 32,
-                    (_hiz_pass.depth.as_const_ref().height() + 32 - 1) / 32);
+                    (_hiz_pass.depth.as_const_ref().width() + 15) / 16,
+                    (_hiz_pass.depth.as_const_ref().height() + 15) / 16);
             }
 
             for (auto i = 0_u32; i < _hiz_pass.views.size() - 1; ++i) {
@@ -759,8 +764,8 @@ namespace app {
                 command_buffer().bind_descriptor_set(*depth_reduce_set);
                 command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, sizeof(glm::uvec2), glm::value_ptr(glm::uvec2(width, height)));
                 command_buffer().dispatch(
-                    (width + 32 - 1) / 32,
-                    (height + 32 - 1) / 32);
+                    (width + 15) / 16,
+                    (height + 15) / 16);
             }
             command_buffer().image_barrier({
                 .image = std::cref(*_hiz_pass.depth),
