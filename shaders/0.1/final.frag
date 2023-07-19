@@ -253,7 +253,7 @@ void main() {
 
     switch (view_mode) {
         case 0: {
-            o_pixel = vec4(s_base_color, 1.0);
+            o_pixel = vec4(s_normal * 0.5 + 0.5, 1.0);
             break;
         }
 

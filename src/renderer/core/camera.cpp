@@ -106,7 +106,7 @@ namespace app {
         IR_PROFILE_SCOPED();
         constexpr static auto sensitivity = 0.1f;
         auto& window = _window.get();
-        const auto speed = 7.5f * dt;
+        const auto speed = 10.0f * dt;
 
         const auto& [dx, dy] = window.input().cursor_delta();
         _yaw += sensitivity * dx;

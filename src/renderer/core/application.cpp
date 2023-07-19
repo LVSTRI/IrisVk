@@ -183,7 +183,7 @@ namespace app {
         });
 
         {
-            const auto model = meshlet_model_t::make("../models/compressed/intel_sponza/intel_sponza.glb");
+            const auto model = meshlet_model_t::make("../models/compressed/thai/thai.glb");
             auto meshlets = std::vector<meshlet_glsl_t>();
             meshlets.reserve(model.meshlet_count());
             for (const auto& meshlet : model.meshlets()) {
@@ -284,7 +284,7 @@ namespace app {
             cmd.image_barrier({
                 .image = std::cref(*_hiz_pass.depth),
                 .source_stage = ir::pipeline_stage_t::e_none,
-                .dest_stage = ir::pipeline_stage_t::e_task_shader,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                 .source_access = ir::resource_access_t::e_none,
                 .dest_access = ir::resource_access_t::e_shader_read,
                 .old_layout = ir::image_layout_t::e_undefined,
@@ -431,6 +431,10 @@ namespace app {
 
         auto cluster_area_set = ir::descriptor_set_builder_t(*_cluster_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
+            .bind_combined_image_sampler(
+                1,
+                _hiz_pass.depth.as_const_ref().view(),
+                _hiz_pass.sampler.as_const_ref())
             .build();
 
         const auto meshlet_count = _main_pass.meshlet_instances.as_const_ref().size();
@@ -649,7 +653,9 @@ namespace app {
             .source_stage =
                 ir::pipeline_stage_t::e_compute_shader |
                 ir::pipeline_stage_t::e_fragment_shader,
-            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .dest_stage =
+                ir::pipeline_stage_t::e_compute_shader |
+                ir::pipeline_stage_t::e_fragment_shader,
             .source_access = ir::resource_access_t::e_shader_storage_write,
             .dest_access = ir::resource_access_t::e_shader_storage_read,
             .old_layout = ir::image_layout_t::e_general,
@@ -726,7 +732,7 @@ namespace app {
                     .build();
                 command_buffer().image_barrier({
                     .image = std::cref(*_hiz_pass.depth),
-                    .source_stage = ir::pipeline_stage_t::e_fragment_shader,
+                    .source_stage = ir::pipeline_stage_t::e_compute_shader,
                     .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                     .source_access = ir::resource_access_t::e_none,
                     .dest_access = ir::resource_access_t::e_shader_storage_write,
@@ -748,7 +754,7 @@ namespace app {
                 command_buffer().image_barrier({
                     .image = std::cref(*_hiz_pass.depth),
                     .source_stage = ir::pipeline_stage_t::e_compute_shader,
-                    .dest_stage = ir::pipeline_stage_t::e_compute_shader | ir::pipeline_stage_t::e_task_shader,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                     .source_access = ir::resource_access_t::e_shader_storage_write,
                     .dest_access = ir::resource_access_t::e_shader_read,
                     .old_layout = ir::image_layout_t::e_general,
@@ -770,7 +776,7 @@ namespace app {
             command_buffer().image_barrier({
                 .image = std::cref(*_hiz_pass.depth),
                 .source_stage = ir::pipeline_stage_t::e_compute_shader,
-                .dest_stage = ir::pipeline_stage_t::e_task_shader,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                 .source_access = ir::resource_access_t::e_shader_storage_write,
                 .dest_access = ir::resource_access_t::e_shader_read,
                 .old_layout = ir::image_layout_t::e_general,
