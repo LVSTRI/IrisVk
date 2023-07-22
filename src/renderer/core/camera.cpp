@@ -161,8 +161,8 @@ namespace app {
         for (auto i = 0_u32; i < 4; ++i) { planes[5][i] = pv[i][3] - pv[i][2]; }
 
         for (auto i = 0_u32; i < 6; ++i) {
-            const auto& plane = glm::normalize(planes[i]);
-            frustum.planes[i] = glm::make_vec4(plane);
+            const auto& plane = planes[i] / glm::length(glm::vec3(planes[i]));
+            frustum.planes[i] = plane;
             frustum.planes[i].w = -plane.w;
         }
         return frustum;

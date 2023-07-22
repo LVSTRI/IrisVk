@@ -183,7 +183,7 @@ namespace app {
         });
 
         {
-            const auto model = meshlet_model_t::make("../models/compressed/thai/thai.glb");
+            const auto model = meshlet_model_t::make("../models/compressed/bistro/bistro.glb");
             auto meshlets = std::vector<meshlet_glsl_t>();
             meshlets.reserve(model.meshlet_count());
             for (const auto& meshlet : model.meshlets()) {
