@@ -59,6 +59,7 @@ namespace ir {
 
         auto command_buffers = std::vector<arc_ptr<self>>(count);
         for (auto i = 0_u32; i < count; ++i) {
+            command_buffers[i] = arc_ptr<self>(new self());
             command_buffers[i]->_handle = command_buffer_handles[i];
             command_buffers[i]->_info = info;
             command_buffers[i]->_pool = pool.as_intrusive_ptr();
@@ -142,13 +143,21 @@ namespace ir {
         vkCmdBeginRenderPass(_handle, &render_pass_begin_info, VK_SUBPASS_CONTENTS_INLINE);
     }
 
-    auto command_buffer_t::set_viewport(const viewport_t& viewport) const noexcept -> void {
+    auto command_buffer_t::set_viewport(const viewport_t& viewport, bool inverted) const noexcept -> void {
         IR_PROFILE_SCOPED();
         auto v = VkViewport();
         v.x = viewport.x;
-        v.y = viewport.height - viewport.y;
+        if (inverted) {
+            v.y = viewport.height - viewport.y;
+        } else {
+            v.y = viewport.y;
+        }
         v.width = viewport.width;
-        v.height = viewport.y - viewport.height;
+        if (inverted) {
+            v.height = viewport.y - viewport.height;
+        }  else {
+            v.height = viewport.height;
+        }
         v.minDepth = 0.0f;
         v.maxDepth = 1.0f;
         vkCmdSetViewport(_handle, 0, 1, &v);

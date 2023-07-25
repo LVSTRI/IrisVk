@@ -26,6 +26,8 @@ namespace ir {
     struct device_features_t {
         bool swapchain = false;
         bool mesh_shader = false;
+        bool image_atomics_64 = false;
+        bool fragment_shading_rate = false;
     };
 
     struct device_create_info_t {

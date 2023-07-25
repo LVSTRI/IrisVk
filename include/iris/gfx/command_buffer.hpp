@@ -108,7 +108,7 @@ namespace ir {
         auto begin_debug_marker(const std::string& name) noexcept -> void;
         auto end_debug_marker() noexcept -> void;
         auto begin_render_pass(const framebuffer_t& framebuffer, const std::vector<clear_value_t>& clears) noexcept -> void;
-        auto set_viewport(const viewport_t& viewport) const noexcept -> void;
+        auto set_viewport(const viewport_t& viewport, bool inverted = false) const noexcept -> void;
         auto set_scissor(const scissor_t& scissor) const noexcept -> void;
         auto bind_pipeline(const pipeline_t& pipeline) noexcept -> void;
         auto bind_descriptor_set(const descriptor_set_t& set) noexcept -> void;

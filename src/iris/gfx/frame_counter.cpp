@@ -24,7 +24,7 @@ namespace ir {
 
     auto master_frame_counter_t::tick() noexcept -> void {
         IR_PROFILE_SCOPED();
-        _current_frame.fetch_add(1, std::memory_order_release);
+        _current_frame.fetch_add(1, std::memory_order_acq_rel);
     }
 
     auto master_frame_counter_t::reset() noexcept -> void {

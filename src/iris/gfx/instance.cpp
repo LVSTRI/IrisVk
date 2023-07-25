@@ -26,7 +26,7 @@ namespace ir {
         volkInitialize();
         IR_LOG_INFO(logger, "initialized volk");
         auto extensions = std::vector<const char*>(info.wsi_extensions);
-#if !defined(IRIS_DEBUG)
+#if !defined(IRIS_VALIDATION_LAYERS)
         if (info.features.debug_markers) {
             IR_LOG_INFO(logger, "debug markers enabled");
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -50,7 +50,7 @@ namespace ir {
         instance_info.pNext = nullptr;
         instance_info.flags = {};
         instance_info.pApplicationInfo = &application_info;
-#if defined(IRIS_DEBUG)
+#if defined(IRIS_VALIDATION_LAYERS)
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
         const auto* validation_layer_extension = "VK_LAYER_KHRONOS_validation";
@@ -81,7 +81,7 @@ namespace ir {
 
         IR_LOG_INFO(logger, "instance initialized");
 
-#if defined(IRIS_DEBUG)
+#if defined(IRIS_VALIDATION_LAYERS)
         {
             auto validation_info = VkDebugUtilsMessengerCreateInfoEXT();
             validation_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;

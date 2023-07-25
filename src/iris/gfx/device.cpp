@@ -135,8 +135,12 @@ namespace ir {
             }
 
             auto extensions = std::vector<const char*>();
-            extensions.emplace_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
-            extensions.emplace_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+            if (info.features.fragment_shading_rate) {
+                extensions.emplace_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+            }
+            if (info.features.image_atomics_64) {
+                extensions.emplace_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
+            }
             if (info.features.swapchain) {
                 extensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
             }
@@ -149,7 +153,7 @@ namespace ir {
             features_11.pNext = nullptr;
             features_11.storageBuffer16BitAccess = true;
             features_11.uniformAndStorageBuffer16BitAccess = true;
-            features_11.storagePushConstant16 = true;
+            //features_11.storagePushConstant16 = true;
             features_11.multiview = true;
             features_11.variablePointersStorageBuffer = true;
             features_11.variablePointers = true;
@@ -158,7 +162,9 @@ namespace ir {
             fragment_shading_rate_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
             fragment_shading_rate_features.pNext = nullptr;
             fragment_shading_rate_features.pipelineFragmentShadingRate = true;
-            append_extension_chain(features_11, &fragment_shading_rate_features);
+            if (info.features.fragment_shading_rate) {
+                append_extension_chain(features_11, &fragment_shading_rate_features);
+            }
 
             auto mesh_shader_features = VkPhysicalDeviceMeshShaderFeaturesEXT();
             mesh_shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
@@ -174,29 +180,31 @@ namespace ir {
             image64_atomics_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
             image64_atomics_features.pNext = nullptr;
             image64_atomics_features.shaderImageInt64Atomics = true;
-            append_extension_chain(features_11, &image64_atomics_features);
+            if (info.features.image_atomics_64) {
+                append_extension_chain(features_11, &image64_atomics_features);
+            }
 
             auto features_12 = VkPhysicalDeviceVulkan12Features();
             features_12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
             features_12.pNext = &features_11;
-            features_12.samplerMirrorClampToEdge = true;
+            //features_12.samplerMirrorClampToEdge = true;
             features_12.drawIndirectCount = true;
-            features_12.storageBuffer8BitAccess = true;
+            /*features_12.storageBuffer8BitAccess = true;
             features_12.uniformAndStorageBuffer8BitAccess = true;
             features_12.storagePushConstant8 = true;
             features_12.shaderBufferInt64Atomics = true;
-            features_12.shaderSharedInt64Atomics = true;
-            features_12.shaderFloat16 = true;
+            features_12.shaderSharedInt64Atomics = true;*/
+            //features_12.shaderFloat16 = true;
             features_12.shaderInt8 = true;
             features_12.descriptorIndexing = true;
-            features_12.shaderInputAttachmentArrayDynamicIndexing = true;
+            //features_12.shaderInputAttachmentArrayDynamicIndexing = true;
             features_12.shaderUniformTexelBufferArrayDynamicIndexing = true;
             features_12.shaderStorageTexelBufferArrayDynamicIndexing = true;
             features_12.shaderUniformBufferArrayNonUniformIndexing = true;
             features_12.shaderSampledImageArrayNonUniformIndexing = true;
             features_12.shaderStorageBufferArrayNonUniformIndexing = true;
             features_12.shaderStorageImageArrayNonUniformIndexing = true;
-            features_12.shaderInputAttachmentArrayNonUniformIndexing = true;
+            //features_12.shaderInputAttachmentArrayNonUniformIndexing = true;
             features_12.shaderUniformTexelBufferArrayNonUniformIndexing = true;
             features_12.shaderStorageTexelBufferArrayNonUniformIndexing = true;
             features_12.descriptorBindingUniformBufferUpdateAfterBind = true;
@@ -212,17 +220,14 @@ namespace ir {
             features_12.samplerFilterMinmax = true;
             features_12.scalarBlockLayout = true;
             features_12.imagelessFramebuffer = true;
-            features_12.uniformBufferStandardLayout = true;
             features_12.shaderSubgroupExtendedTypes = true;
-            features_12.separateDepthStencilLayouts = true;
             features_12.hostQueryReset = true;
             features_12.timelineSemaphore = true;
             features_12.bufferDeviceAddress = true;
             features_12.bufferDeviceAddressCaptureReplay = true;
-            features_12.bufferDeviceAddressMultiDevice = true;
+            //features_12.bufferDeviceAddressMultiDevice = true;
             features_12.vulkanMemoryModel = true;
             features_12.vulkanMemoryModelDeviceScope = true;
-            features_12.vulkanMemoryModelAvailabilityVisibilityChains = true;
             features_12.shaderOutputViewportIndex = true;
             features_12.shaderOutputLayer = true;
             features_12.subgroupBroadcastDynamicId = true;
@@ -247,7 +252,7 @@ namespace ir {
             features2.features.depthBiasClamp = true;
             features2.features.depthBounds = true;
             features2.features.wideLines = true;
-            features2.features.alphaToOne = true;
+            //features2.features.alphaToOne = true;
             features2.features.samplerAnisotropy = true;
             features2.features.textureCompressionBC = true;
             features2.features.pipelineStatisticsQuery = true;
@@ -257,17 +262,17 @@ namespace ir {
             features2.features.shaderSampledImageArrayDynamicIndexing = true;
             features2.features.shaderStorageBufferArrayDynamicIndexing = true;
             features2.features.shaderStorageImageArrayDynamicIndexing = true;
-            features2.features.shaderFloat64 = true;
+            //features2.features.shaderFloat64 = true;
             features2.features.shaderInt64 = true;
             features2.features.shaderInt16 = true;
             features2.features.shaderResourceResidency = true;
             features2.features.shaderResourceMinLod = true;
-            features2.features.sparseBinding = true;
+            /*features2.features.sparseBinding = true;
             features2.features.sparseResidencyBuffer = true;
             features2.features.sparseResidencyImage2D = true;
             features2.features.sparseResidencyImage3D = true;
             features2.features.sparseResidencyAliased = true;
-            features2.features.variableMultisampleRate = true;
+            features2.features.variableMultisampleRate = true;*/
             IR_LOG_INFO(logger, "device features enabled");
 
             auto device_info = VkDeviceCreateInfo();

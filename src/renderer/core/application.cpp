@@ -47,7 +47,9 @@ namespace app {
         _device = ir::device_t::make(*_instance, {
             .features = {
                 .swapchain = true,
-                .mesh_shader = true
+                .mesh_shader = true,
+                .image_atomics_64 = true,
+                .fragment_shading_rate = true
             }
         });
         _swapchain = ir::swapchain_t::make(*_device, _platform, {

@@ -194,6 +194,7 @@ target_compile_definitions(IrisVk PUBLIC
     # TODO: Make these options
     IRIS_DEBUG_LOGGER
     #IRIS_DEBUG_PROFILER
+    #IRIS_VALIDATION_LAYERS
 
     #VK_ENABLE_BETA_EXTENSIONS
     VK_NO_PROTOTYPES
@@ -219,21 +220,7 @@ target_link_libraries(IrisVk PUBLIC
 )
 
 target_include_directories(IrisVk PUBLIC include ${Vulkan_INCLUDE_DIRS})
-set(IRIS_VECTOR_COMPILER_OPTIONS
-    -march=native
-    -mmmx
-    -msse
-    -msse2
-    -msse3
-    -mssse3
-    -msse4
-    -msse4a
-    -msse4.1
-    -msse4.2
-    -mavx
-    -mavx2
-    -msha
-    -maes)
+set(IRIS_VECTOR_COMPILER_OPTIONS -march=native)
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(IrisVk PUBLIC
         ${IRIS_VECTOR_COMPILER_OPTIONS}
