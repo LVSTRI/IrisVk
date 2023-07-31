@@ -12,6 +12,7 @@
 
 #include <vector>
 #include <memory>
+#include <span>
 
 namespace ir {
     struct instance_features_t {
@@ -39,6 +40,8 @@ namespace ir {
         IR_NODISCARD auto logger() const noexcept -> spdlog::logger&;
 
         IR_NODISCARD auto enumerate_physical_devices() const noexcept -> std::vector<VkPhysicalDevice>;
+
+        IR_NODISCARD auto features() const noexcept -> const instance_features_t&;
 
     private:
         VkInstance _handle = {};

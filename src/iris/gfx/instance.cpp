@@ -32,7 +32,6 @@ namespace ir {
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 #endif
-
         auto api_version = 0_u32;
         IR_VULKAN_CHECK(logger, vkEnumerateInstanceVersion(&api_version));
 

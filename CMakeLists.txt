@@ -205,6 +205,12 @@ target_compile_definitions(IrisVk PUBLIC
     TRACY_ENABLE
 )
 
+if (WIN32)
+    target_link_directories(IrisVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/deps/DLSS/lib/Windows_x86_64/x86_64)
+else()
+    target_link_directories(IrisVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/deps/DLSS/lib/Linux_x86_64/x86_64)
+endif()
+
 target_link_libraries(IrisVk PUBLIC
     glm
     vma
@@ -217,9 +223,16 @@ target_link_libraries(IrisVk PUBLIC
     TracyClient
     unordered_dense
     spirv-cross-glsl
+    $<$<CONFIG:Debug>:nvsdk_ngx_d_dbg>
+    $<$<CONFIG:Release>:nvsdk_ngx_d>
+    $<$<CONFIG:RelWithDebInfo>:nvsdk_ngx_d>
 )
 
-target_include_directories(IrisVk PUBLIC include ${Vulkan_INCLUDE_DIRS})
+target_include_directories(IrisVk PUBLIC
+    include
+    deps/DLSS/include
+    ${Vulkan_INCLUDE_DIRS})
+
 set(IRIS_VECTOR_COMPILER_OPTIONS -march=native)
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(IrisVk PUBLIC

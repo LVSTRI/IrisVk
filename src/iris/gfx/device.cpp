@@ -189,11 +189,11 @@ namespace ir {
             features_12.pNext = &features_11;
             //features_12.samplerMirrorClampToEdge = true;
             features_12.drawIndirectCount = true;
-            /*features_12.storageBuffer8BitAccess = true;
+            features_12.storageBuffer8BitAccess = true;
             features_12.uniformAndStorageBuffer8BitAccess = true;
-            features_12.storagePushConstant8 = true;
+            //features_12.storagePushConstant8 = true;
             features_12.shaderBufferInt64Atomics = true;
-            features_12.shaderSharedInt64Atomics = true;*/
+            //features_12.shaderSharedInt64Atomics = true;
             //features_12.shaderFloat16 = true;
             features_12.shaderInt8 = true;
             features_12.descriptorIndexing = true;
@@ -451,16 +451,19 @@ namespace ir {
 
     template <>
     auto device_t::cache() noexcept -> cache_t<descriptor_layout_t>& {
+        IR_PROFILE_SCOPED();
         return _descriptor_layouts;
     }
 
     template <>
     auto device_t::cache() noexcept -> cache_t<descriptor_set_t>& {
+        IR_PROFILE_SCOPED();
         return _descriptor_sets;
     }
 
     template <>
     auto device_t::cache() noexcept -> cache_t<sampler_t>& {
+        IR_PROFILE_SCOPED();
         return _samplers;
     }
 

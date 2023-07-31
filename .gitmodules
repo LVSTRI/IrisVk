@@ -46,3 +46,6 @@
 [submodule "deps/KTX-Software"]
 	path = deps/KTX-Software
 	url = https://github.com/KhronosGroup/KTX-Software
+[submodule "deps/DLSS"]
+	path = deps/DLSS
+	url = https://github.com/NVIDIA/DLSS

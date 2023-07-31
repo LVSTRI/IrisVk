@@ -40,7 +40,7 @@ namespace app {
         _platform = ir::wsi_platform_t::make(1920, 1080, "Iris");
         _instance = ir::instance_t::make({
             .features = {
-                .debug_markers = true
+                .debug_markers = true,
             },
             .wsi_extensions = ir::wsi_platform_t::context_extensions()
         });
@@ -569,7 +569,7 @@ namespace app {
             command_buffer().set_viewport({
                 .width = static_cast<float32>(swapchain().width()),
                 .height = static_cast<float32>(swapchain().height()),
-            });
+            }, true);
             command_buffer().set_scissor({
                 .width = swapchain().width(),
                 .height = swapchain().height(),
@@ -668,7 +668,7 @@ namespace app {
         command_buffer().set_viewport({
             .width = static_cast<float32>(swapchain().width()),
             .height = static_cast<float32>(swapchain().height()),
-        });
+        }, true);
         command_buffer().set_scissor({
             .width = swapchain().width(),
             .height = swapchain().height(),

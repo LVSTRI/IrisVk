@@ -161,8 +161,9 @@ vec3 sample_normal(in uint texture, in mat3 TBN, in vec3 normal, in uv_grad_t gr
     if (texture == -1) {
         return normal;
     }
-    const vec3 s_normal = vec3(textureGrad(u_textures[texture], grad.uv, grad.ddx, grad.ddy).rg, 1.0);
-    return normalize(TBN * (s_normal * 2.0 - 1.0));
+    const vec2 s_normal = textureGrad(u_textures[texture], grad.uv, grad.ddx, grad.ddy).rg * 2.0 - 1.0;
+    const float n_z = sqrt(max(1.0 - dot(s_normal, s_normal), 0.0));
+    return normalize(TBN * (vec3(s_normal, n_z)));
 }
 
 void main() {
@@ -243,7 +244,6 @@ void main() {
         const vec3 N = w_normal;
         const vec3 T = normalize(ddx_position * ddy_uv.y - ddy_position * ddx_uv.y);
         const vec3 B = -normalize(cross(N, T));
-
         TBN = mat3(T, B, N);
     }
 
@@ -253,7 +253,7 @@ void main() {
 
     switch (view_mode) {
         case 0: {
-            o_pixel = vec4(s_normal * 0.5 + 0.5, 1.0);
+            o_pixel = vec4(s_normal, 1.0);
             break;
         }
 
