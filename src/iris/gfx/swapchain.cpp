@@ -28,8 +28,7 @@ namespace ir {
         IR_PROFILE_SCOPED();
         auto swapchain = arc_ptr<self>(new self(wsi));
 
-        auto surface = reinterpret_cast<VkSurfaceKHR>(
-            wsi.make_surface(reinterpret_cast<VkInstance>(device.instance().handle())));
+        auto surface = static_cast<VkSurfaceKHR>(wsi.make_surface(device.instance().handle()));
         IR_LOG_INFO(device.logger(), "wsi surface initialized");
 
         const auto family = device.graphics_queue().family();

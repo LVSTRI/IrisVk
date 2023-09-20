@@ -127,11 +127,11 @@ namespace ir {
         IR_PROFILE_SCOPED();
         auto surface = VkSurfaceKHR();
         IR_VULKAN_CHECK(_logger, glfwCreateWindowSurface(
-            reinterpret_cast<VkInstance>(instance),
+            static_cast<VkInstance>(instance),
             reinterpret_cast<GLFWwindow*>(_window_handle),
             nullptr,
             &surface));
-        return reinterpret_cast<gfx_api_object_handle>(surface);
+        return static_cast<gfx_api_object_handle>(surface);
     }
 
     auto swap(wsi_platform_t& lhs, wsi_platform_t& rhs) noexcept -> void {
