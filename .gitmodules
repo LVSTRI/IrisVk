@@ -10,9 +10,6 @@
 [submodule "deps/VulkanMemoryAllocator"]
 	path = deps/VulkanMemoryAllocator
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-[submodule "deps/cgltf"]
-	path = deps/cgltf
-	url = https://github.com/jkuhlmann/cgltf
 [submodule "deps/tracy"]
 	path = deps/tracy
 	url = https://github.com/wolfpld/tracy
@@ -49,3 +46,9 @@
 [submodule "deps/DLSS"]
 	path = deps/DLSS
 	url = https://github.com/NVIDIA/DLSS
+[submodule "deps/METIS"]
+	path = deps/METIS
+	url = https://github.com/KarypisLab/METIS
+[submodule "deps/GKlib"]
+	path = deps/GKlib
+	url = https://github.com/KarypisLab/GKlib

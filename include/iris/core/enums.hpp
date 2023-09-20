@@ -9,6 +9,7 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 #include <type_traits>
+#include <array>
 
 namespace ir {
     namespace det {

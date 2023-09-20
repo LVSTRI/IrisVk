@@ -29,10 +29,10 @@ namespace ir {
     };
 
     enum class depth_state_flag_t {
-        e_none = 0x0,
-        e_enable_clamp = 0x1,
-        e_enable_test = 0x2,
-        e_enable_write = 0x4,
+        e_none = 0,
+        e_enable_clamp = 1 << 0,
+        e_enable_test = 1 << 1,
+        e_enable_write = 1 << 2,
     };
 
     enum class vertex_attribute_t {

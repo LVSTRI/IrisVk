@@ -232,6 +232,16 @@ namespace ir {
         vkCmdDrawIndexed(_handle, indices, instances, first_index, vertex_offset, first_instance);
     }
 
+    auto command_buffer_t::draw_indirect(const buffer_info_t& buffer, uint32 count) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdDrawIndirect(_handle, buffer.handle, buffer.offset, count, 0);
+    }
+
+    auto command_buffer_t::draw_indexed_indirect(const buffer_info_t& buffer, uint32 count) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        vkCmdDrawIndexedIndirect(_handle, buffer.handle, buffer.offset, count, 0);
+    }
+
     auto command_buffer_t::draw_mesh_tasks(uint32 x, uint32 y, uint32 z) const noexcept -> void {
         IR_PROFILE_SCOPED();
         vkCmdDrawMeshTasksEXT(_handle, x, y, z);

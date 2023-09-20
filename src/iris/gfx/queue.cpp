@@ -98,20 +98,22 @@ namespace ir {
         auto command_buffer_info = std::vector<VkCommandBufferSubmitInfo>();
         command_buffer_info.reserve(info.command_buffers.size());
 
-        for (const auto& [semaphore, stage] : info.wait_semaphores) {
+        for (const auto& [semaphore, stage, value] : info.wait_semaphores) {
             wait_semaphore_info.emplace_back(VkSemaphoreSubmitInfo {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .pNext = nullptr,
                 .semaphore = semaphore.get().handle(),
+                .value = value == -1_u64 ? 0 : value,
                 .stageMask = as_enum_counterpart(stage)
             });
         }
 
-        for (const auto& [semaphore, stage] : info.signal_semaphores) {
+        for (const auto& [semaphore, stage, value] : info.signal_semaphores) {
             signal_semaphore_info.emplace_back(VkSemaphoreSubmitInfo {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                 .pNext = nullptr,
                 .semaphore = semaphore.get().handle(),
+                .value = value == -1_u64 ? 0 : value,
                 .stageMask = as_enum_counterpart(stage)
             });
         }
@@ -142,15 +144,15 @@ namespace ir {
         IR_PROFILE_SCOPED();
         auto command_buffer = command_buffer_t::make(transient_pool(0), {});
         auto fence = fence_t::make(device(), false);
-        command_buffer.as_ref().begin();
+        command_buffer->begin();
         record(*command_buffer);
-        command_buffer.as_ref().end();
+        command_buffer->end();
         submit({
             .command_buffers = { std::cref(*command_buffer) },
             .wait_semaphores = {},
             .signal_semaphores = {},
         }, fence.get());
-        fence.as_const_ref().wait();
+        fence->wait();
     }
 
     auto queue_t::present(const queue_present_info_t& info) noexcept -> void {
@@ -173,5 +175,72 @@ namespace ir {
         present_info.pResults = nullptr;
         auto guard = std::lock_guard(_lock);
         IR_VULKAN_CHECK(_device.get().logger(), vkQueuePresentKHR(_handle, &present_info));
+    }
+
+    auto queue_t::bind_sparse(const queue_bind_sparse_info_t& info, const fence_t* fence) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto semaphore_wait_values = std::vector<uint64>(info.wait_semaphores.size());
+        auto semaphore_signal_values = std::vector<uint64>(info.signal_semaphores.size());
+        auto semaphore_submit_info = VkTimelineSemaphoreSubmitInfo();
+        semaphore_submit_info.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+        semaphore_submit_info.waitSemaphoreValueCount = semaphore_wait_values.size();
+        semaphore_submit_info.pWaitSemaphoreValues = semaphore_wait_values.data();
+        semaphore_submit_info.signalSemaphoreValueCount = semaphore_signal_values.size();
+        semaphore_submit_info.pSignalSemaphoreValues = semaphore_signal_values.data();
+
+        auto wait_semaphore_info = std::vector<VkSemaphore>();
+        wait_semaphore_info.reserve(info.wait_semaphores.size());
+        for (auto index = 0_u32; const auto& [semaphore, stage, value] : info.wait_semaphores) {
+            wait_semaphore_info.emplace_back(semaphore.get().handle());
+            semaphore_wait_values[index] = value == -1_u64 ? 0 : value;
+        }
+
+        auto signal_semaphore_info = std::vector<VkSemaphore>();
+        signal_semaphore_info.reserve(info.signal_semaphores.size());
+        for (auto index = 0_u32; const auto& [semaphore, stage, value] : info.signal_semaphores) {
+            signal_semaphore_info.emplace_back(semaphore.get().handle());
+            semaphore_signal_values[index] = value == -1_u64 ? 0 : value;
+        }
+
+        // TODO: better internal API
+        const auto& image = *info.sparse_image_bindings[0].image;
+        const auto granularity = image.granularity();
+        auto image_sparse_binds = std::vector<VkSparseMemoryBind>();
+        image_sparse_binds.reserve(info.sparse_image_bindings.size());
+        for (const auto& [_, page, offset] : info.sparse_image_bindings) {
+            image_sparse_binds.emplace_back(VkSparseMemoryBind {
+                .resourceOffset = offset,
+                .size = granularity.width * granularity.height * 4,
+                .memory = page->block->memory,
+                .memoryOffset = page->offset,
+                .flags = {},
+            });
+        }
+
+        auto image_opaque_bind_info = VkSparseImageOpaqueMemoryBindInfo();
+        image_opaque_bind_info.image = image.handle();
+        image_opaque_bind_info.bindCount = image_sparse_binds.size();
+        image_opaque_bind_info.pBinds = image_sparse_binds.data();
+
+        auto bind_sparse_info = VkBindSparseInfo();
+        bind_sparse_info.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+        bind_sparse_info.pNext = &semaphore_submit_info;
+        bind_sparse_info.waitSemaphoreCount = wait_semaphore_info.size();
+        bind_sparse_info.pWaitSemaphores = wait_semaphore_info.data();
+        // TODO: sparse binding buffers
+        bind_sparse_info.bufferBindCount = 0;
+        bind_sparse_info.pBufferBinds = nullptr;
+        bind_sparse_info.imageOpaqueBindCount = 1;
+        bind_sparse_info.pImageOpaqueBinds = &image_opaque_bind_info;
+        bind_sparse_info.signalSemaphoreCount = signal_semaphore_info.size();
+        bind_sparse_info.pSignalSemaphores = signal_semaphore_info.data();
+        auto guard = std::lock_guard(_lock);
+        IR_VULKAN_CHECK(_device.get().logger(), vkQueueBindSparse(_handle, 1, &bind_sparse_info, fence ? fence->handle() : nullptr));
+    }
+
+    auto queue_t::wait_idle() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto guard = std::lock_guard(_lock);
+        IR_VULKAN_CHECK(_device.get().logger(), vkQueueWaitIdle(_handle));
     }
 }

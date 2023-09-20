@@ -41,9 +41,12 @@ namespace ir {
         auto logger = spdlog::stdout_color_mt("device");
         spdlog::create<spdlog::sinks::stdout_color_sink_mt>("cache");
 
+        auto properties_rt = VkPhysicalDeviceRayTracingPipelinePropertiesKHR();
+        properties_rt.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+        properties_rt.pNext = nullptr;
         auto properties2 = VkPhysicalDeviceProperties2();
         properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-        properties2.pNext = nullptr;
+        properties2.pNext = &properties_rt;
         auto memory_properties = VkPhysicalDeviceMemoryProperties2();
         memory_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
         memory_properties.pNext = nullptr;
@@ -147,6 +150,11 @@ namespace ir {
             if (info.features.mesh_shader) {
                 extensions.emplace_back(VK_EXT_MESH_SHADER_EXTENSION_NAME);
             }
+            if (info.features.ray_tracing) {
+                extensions.emplace_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+                extensions.emplace_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+                extensions.emplace_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+            }
 
             auto features_11 = VkPhysicalDeviceVulkan11Features();
             features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
@@ -157,6 +165,23 @@ namespace ir {
             features_11.multiview = true;
             features_11.variablePointersStorageBuffer = true;
             features_11.variablePointers = true;
+
+            auto acceleration_structure_features = VkPhysicalDeviceAccelerationStructureFeaturesKHR();
+            acceleration_structure_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+            acceleration_structure_features.pNext = nullptr;
+            acceleration_structure_features.accelerationStructure = true;
+            acceleration_structure_features.descriptorBindingAccelerationStructureUpdateAfterBind = true;
+
+            auto ray_tracing_pipeline_features = VkPhysicalDeviceRayTracingPipelineFeaturesKHR();
+            ray_tracing_pipeline_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+            ray_tracing_pipeline_features.pNext = &acceleration_structure_features;
+            ray_tracing_pipeline_features.rayTracingPipeline = true;
+            ray_tracing_pipeline_features.rayTracingPipelineTraceRaysIndirect = true;
+            ray_tracing_pipeline_features.rayTraversalPrimitiveCulling = true;
+
+            if (info.features.ray_tracing) {
+                append_extension_chain(features_11, &ray_tracing_pipeline_features);
+            }
 
             auto fragment_shading_rate_features = VkPhysicalDeviceFragmentShadingRateFeaturesKHR();
             fragment_shading_rate_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
@@ -267,12 +292,12 @@ namespace ir {
             features2.features.shaderInt16 = true;
             features2.features.shaderResourceResidency = true;
             features2.features.shaderResourceMinLod = true;
-            /*features2.features.sparseBinding = true;
+            features2.features.sparseBinding = true;
             features2.features.sparseResidencyBuffer = true;
             features2.features.sparseResidencyImage2D = true;
-            features2.features.sparseResidencyImage3D = true;
+            //features2.features.sparseResidencyImage3D = true;
             features2.features.sparseResidencyAliased = true;
-            features2.features.variableMultisampleRate = true;*/
+            //features2.features.variableMultisampleRate = true;
             IR_LOG_INFO(logger, "device features enabled");
 
             auto device_info = VkDeviceCreateInfo();
@@ -299,6 +324,7 @@ namespace ir {
             }
 
             device->_properties = properties2;
+            device->_properties_rt = properties_rt;
             device->_memory_properties = memory_properties;
             device->_features = features2;
             device->_features_11 = features_11;
@@ -437,6 +463,17 @@ namespace ir {
         auto queue = VkQueue();
         vkGetDeviceQueue(_handle, family.family, family.index, &queue);
         return queue;
+    }
+
+    auto device_t::memory_type_index(uint32 mask, memory_property_t flags) const noexcept -> uint32 {
+        const auto& properties = _memory_properties.memoryProperties;
+        const auto v_flags = as_enum_counterpart(flags);
+        for (uint32 i = 0; i < properties.memoryTypeCount; ++i) {
+            if ((mask & (1 << i)) && (properties.memoryTypes[i].propertyFlags & v_flags) == v_flags) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     auto device_t::wait_idle() const noexcept -> void {

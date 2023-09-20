@@ -23,6 +23,21 @@ namespace ir {
         bool primary = true;
     };
 
+    struct draw_indirect_command_t {
+        uint32 vertex_count = 0;
+        uint32 instance_count = 0;
+        uint32 first_vertex = 0;
+        uint32 first_instance = 0;
+    };
+
+    struct draw_indexed_indirect_command_t {
+        uint32 index_count = 0;
+        uint32 instance_count = 0;
+        uint32 first_index = 0;
+        int32 vertex_offset = 0;
+        uint32 first_instance = 0;
+    };
+
     struct draw_mesh_tasks_indirect_command_t {
         uint32 x = 0;
         uint32 y = 0;
@@ -117,6 +132,8 @@ namespace ir {
         auto push_constants(shader_stage_t stage, uint32 offset, uint64 size, const void* data) const noexcept -> void;
         auto draw(uint32 vertices, uint32 instances, uint32 first_vertex, uint32 first_instance) const noexcept -> void;
         auto draw_indexed(uint32 indices, uint32 instances, uint32 first_index, int32 vertex_offset, uint32 first_instance) const noexcept -> void;
+        auto draw_indirect(const buffer_info_t& buffer, uint32 count) const noexcept -> void;
+        auto draw_indexed_indirect(const buffer_info_t& buffer, uint32 count) const noexcept -> void;
         auto draw_mesh_tasks(uint32 x = 1, uint32 y = 1, uint32 z = 1) const noexcept -> void;
         auto draw_mesh_tasks_indirect(const buffer_info_t& buffer, uint32 count) const noexcept -> void;
         auto end_render_pass() noexcept -> void;

@@ -6,6 +6,8 @@
 #include <iris/core/macros.hpp>
 #include <iris/core/types.hpp>
 
+#include <iris/gfx/sparse_page_allocator.hpp>
+
 #include <volk.h>
 #include <vulkan/vulkan.h>
 
@@ -37,6 +39,7 @@ namespace ir {
     struct queue_semaphore_stage_t {
         std::reference_wrapper<const semaphore_t> semaphore;
         pipeline_stage_t stage = pipeline_stage_t::e_none;
+        uint64 value = -1;
     };
 
     struct queue_submit_info_t {
@@ -49,6 +52,13 @@ namespace ir {
         std::reference_wrapper<const swapchain_t> swapchain;
         std::vector<std::reference_wrapper<const semaphore_t>> wait_semaphores;
         uint32 image = 0;
+    };
+
+    struct queue_bind_sparse_info_t {
+        std::vector<queue_semaphore_stage_t> wait_semaphores;
+        std::vector<queue_semaphore_stage_t> signal_semaphores;
+        // TODO: handle sparse buffer bindings too
+        std::span<const sparse_image_memory_opaque_bind_t> sparse_image_bindings;
     };
 
     class queue_t : public enable_intrusive_refcount_t<queue_t> {
@@ -74,6 +84,8 @@ namespace ir {
         auto submit(const queue_submit_info_t& info, const fence_t* fence = nullptr) noexcept -> void;
         auto submit(const std::function<void(command_buffer_t&)>& record) noexcept -> void;
         auto present(const queue_present_info_t& info) noexcept -> void;
+        auto bind_sparse(const queue_bind_sparse_info_t& info, const fence_t* fence = nullptr) noexcept -> void;
+        auto wait_idle() noexcept -> void;
 
     private:
         VkQueue _handle = {};

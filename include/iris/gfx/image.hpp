@@ -73,6 +73,11 @@ namespace ir {
 
     constexpr static auto default_image_view_info = image_view_create_info_t();
 
+    enum class image_flag_t {
+        e_sparse_binding = 1 << 0,
+        e_sparse_residency = 1 << 1,
+    };
+
     struct image_create_info_t {
         uint32 width = 0;
         uint32 height = 0;
@@ -81,6 +86,7 @@ namespace ir {
         queue_type_t queue = queue_type_t::e_graphics;
         sample_count_t samples = sample_count_t::e_1;
         image_usage_t usage = {};
+        image_flag_t flags = {};
         resource_format_t format = resource_format_t::e_undefined;
         image_layout_t layout = image_layout_t::e_undefined;
         std::optional<image_view_create_info_t> view = std::nullopt;
@@ -138,6 +144,8 @@ namespace ir {
         ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkImage;
+        IR_NODISCARD auto memory_requirements() const noexcept -> const VkMemoryRequirements&;
+        IR_NODISCARD auto sparse_requirements() const noexcept -> const VkSparseImageMemoryRequirements&;
         IR_NODISCARD auto allocation() const noexcept -> VmaAllocation;
         IR_NODISCARD auto view() const noexcept -> const image_view_t&;
 
@@ -145,8 +153,11 @@ namespace ir {
         IR_NODISCARD auto height() const noexcept -> uint32;
         IR_NODISCARD auto levels() const noexcept -> uint32;
         IR_NODISCARD auto layers() const noexcept -> uint32;
+        IR_NODISCARD auto granularity() const noexcept -> extent_3d_t;
         IR_NODISCARD auto samples() const noexcept -> sample_count_t;
         IR_NODISCARD auto usage() const noexcept -> image_usage_t;
+        IR_NODISCARD auto is_sparsely_bound() const noexcept -> bool;
+        IR_NODISCARD auto is_sparsely_resident() const noexcept -> bool;
         IR_NODISCARD auto format() const noexcept -> resource_format_t;
         IR_NODISCARD auto layout() const noexcept -> image_layout_t;
 
@@ -155,10 +166,24 @@ namespace ir {
 
     private:
         VkImage _handle = {};
+        VkMemoryRequirements _requirements = {};
+        VkSparseImageMemoryRequirements _sparse_info = {};
         VmaAllocation _allocation = {};
         arc_ptr<image_view_t> _view;
 
         image_create_info_t _info = {};
         arc_ptr<const device_t> _device = {};
+    };
+
+    class virtual_image_t : enable_intrusive_refcount_t<virtual_image_t> {
+    public:
+        using self = virtual_image_t;
+
+        virtual_image_t() noexcept;
+        ~virtual_image_t() noexcept;
+
+    private:
+
+        arc_ptr<image_t> _handle;
     };
 }

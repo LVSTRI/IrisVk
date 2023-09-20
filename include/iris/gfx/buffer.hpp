@@ -22,10 +22,10 @@
 
 namespace ir {
     enum class buffer_flag_t {
-        e_shared = 0x1,
-        e_mapped = 0x2,
-        e_random_access = 0x4,
-        e_resized = 0x8,
+        e_shared = 1 << 0,
+        e_mapped = 1 << 1,
+        e_random_access = 1 << 2,
+        e_resized = 1 << 3,
     };
 
     struct memory_properties_t {
@@ -92,6 +92,7 @@ namespace ir {
         auto insert(const T(&values)[N]) noexcept -> void;
         template <uint64 N>
         auto insert(uint64 offset, const T(&values)[N]) noexcept -> void;
+        auto fill(const uint64& value, uint64 size = -1) noexcept -> void;
 
         auto push_back(const T& value) noexcept -> void;
         auto pop_back() noexcept -> void;
@@ -134,18 +135,17 @@ namespace ir {
             .flags = info.flags | buffer_flag_t::e_resized,
             .capacity = data.size(),
         });
-        staging.as_ref().insert(data);
+        staging->insert(data);
         const auto& pool = device.transfer_queue().transient_pool(0);
         auto command_buffer = command_buffer_t::make(pool, {});
-        auto& commands = *command_buffer;
-        commands.begin();
-        commands.copy_buffer(staging.as_const_ref().slice(), upload.as_const_ref().slice(), {});
-        commands.end();
+        command_buffer->begin();
+        command_buffer->copy_buffer(staging->slice(), upload->slice(), {});
+        command_buffer->end();
         auto fence = fence_t::make(device, false);
         device.transfer_queue().submit({
-            .command_buffers = { std::cref(commands) }
+            .command_buffers = { std::cref(*command_buffer) }
         }, fence.get());
-        fence.as_const_ref().wait();
+        fence->wait();
         return upload;
     }
 
@@ -358,6 +358,13 @@ namespace ir {
     auto buffer_t<T>::insert(uint64 offset, const T(&values)[N]) noexcept -> void {
         IR_PROFILE_SCOPED();
         insert(offset, std::span<const T>(values));
+    }
+
+    template <typename T>
+    auto buffer_t<T>::fill(const uint64& value, uint64 size) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        std::memset(data(), value, std::min(size, _capacity * sizeof(T)));
+        _size = _capacity;
     }
 
     template <typename T>

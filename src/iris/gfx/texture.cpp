@@ -43,7 +43,7 @@ namespace ir {
             .flags = buffer_flag_t::e_mapped,
             .capacity = ktx->dataSize
         });
-        staging.as_ref().insert(0, ktx->dataSize, ktx->pData);
+        staging->insert(0, ktx->dataSize, ktx->pData);
         auto image = image_t::make(device, {
             .width = ktx->baseWidth,
             .height = ktx->baseHeight,
@@ -58,7 +58,7 @@ namespace ir {
             ktx->baseHeight,
             ktx->numLevels,
             ktx->dataSize,
-            as_string(image.as_const_ref().format()));
+            as_string(image->format()));
 
         // TODO: use the transfer queue
         device.graphics_queue().submit([&](command_buffer_t& cmd) {
@@ -74,7 +74,7 @@ namespace ir {
             for (auto i = 0_u32; i < ktx->numLevels; ++i) {
                 auto offset = 0_u64;
                 ktxTexture_GetImageOffset(ktxTexture(ktx), i, 0, 0, &offset);
-                cmd.copy_buffer_to_image(staging.as_const_ref().slice(offset), image.as_const_ref(), {
+                cmd.copy_buffer_to_image(staging->slice(offset), *image, {
                     .level = i,
                 });
             }
@@ -114,14 +114,14 @@ namespace ir {
     auto texture_t::info() const noexcept -> image_info_t {
         IR_PROFILE_SCOPED();
         return {
-            .sampler = _sampler.as_const_ref().handle(),
-            .view = _image.as_const_ref().view().handle(),
+            .sampler = _sampler->handle(),
+            .view = _image->view().handle(),
             .layout = image_layout_t::e_shader_read_only_optimal
         };
     }
 
     auto texture_t::device() const noexcept -> const device_t& {
         IR_PROFILE_SCOPED();
-        return _device.as_const_ref();
+        return *_device;
     }
 }
