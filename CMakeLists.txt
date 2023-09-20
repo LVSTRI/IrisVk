@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.25)
 project(IrisVk)
 
+option(IRIS_ENABLE_DEBUG_LOGGER "Enables internal debug logger" ON)
+option(IRIS_ENABLE_DEBUG_PROFILER "Enables profiling with Tracy" OFF)
+option(IRIS_ENABLE_VALIDATION_LAYERS "Enables internal Vulkan Validation Layers" OFF)
+option(IRIS_ENABLE_VULKAN_BETA_EXTENSIONS "Enables Vulkan Beta Extensions" OFF)
+
 # Vulkan setup
 find_package(Vulkan REQUIRED)
 
@@ -23,20 +28,6 @@ target_compile_definitions(glm INTERFACE
     GLM_FORCE_AVX2
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
-)
-
-# cgltf setup
-add_library(cgltf STATIC
-    deps/cgltf/cgltf.h
-
-    src/renderer/deps/cgltf.c
-)
-target_include_directories(cgltf PUBLIC deps/cgltf)
-target_compile_definitions(cgltf PUBLIC
-    $<$<BOOL:${WIN32}>:
-        _CRT_SECURE_NO_WARNINGS
-        WIN32_LEAN_AND_MEAN
-        NOMINMAX>
 )
 
 # VMA setup
@@ -201,12 +192,11 @@ target_compile_definitions(IrisVk PUBLIC
         WIN32_LEAN_AND_MEAN
         NOMINMAX>
 
-    # TODO: Make these options
-    IRIS_DEBUG_LOGGER
-    #IRIS_DEBUG_PROFILER
-    $<$<CONFIG:Debug>:IRIS_VALIDATION_LAYERS>
+    $<$<BOOL:${IRIS_ENABLE_DEBUG_LOGGER}>:IRIS_DEBUG_LOGGER>
+    $<$<BOOL:${IRIS_ENABLE_DEBUG_PROFILER}>:IRIS_DEBUG_PROFILER>
+    $<$<BOOL:${IRIS_ENABLE_VALIDATION_LAYERS}>:IRIS_VALIDATION_LAYERS>
+    $<$<BOOL:${IRIS_ENABLE_VULKAN_BETA_EXTENSIONS}>:VK_ENABLE_BETA_EXTENSIONS>
 
-    #VK_ENABLE_BETA_EXTENSIONS
     VK_NO_PROTOTYPES
 
     $<$<BOOL:${WIN32}>:IRIS_PLATFORM_WIN32>
@@ -252,34 +242,3 @@ if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         -Wextra
     )
 endif()
-
-set(IRIS_RENDERER_HEADERS
-    include/renderer/core/application.hpp
-    include/renderer/core/camera.hpp
-    include/renderer/core/model.hpp
-    include/renderer/core/utilities.hpp
-)
-
-set(IRIS_RENDERER_SOURCES
-    src/renderer/core/application.cpp
-    src/renderer/core/camera.cpp
-    src/renderer/core/model.cpp
-
-    src/main.cpp
-)
-
-add_executable(
-    IrisVkRenderer
-    ${IRIS_RENDERER_HEADERS}
-    ${IRIS_RENDERER_SOURCES}
-)
-
-target_link_libraries(IrisVkRenderer PRIVATE
-    IrisVk
-    GKlib
-    metis
-    cgltf
-    meshoptimizer
-)
-target_include_directories(IrisVkRenderer PRIVATE deps/METIS/include)
-target_compile_options(IrisVkRenderer PRIVATE ${IRIS_VECTOR_COMPILER_OPTIONS})
