@@ -202,25 +202,8 @@ namespace ir {
             semaphore_signal_values[index] = value == -1_u64 ? 0 : value;
         }
 
-        // TODO: better internal API
-        const auto& image = *info.sparse_image_bindings[0].image;
-        const auto granularity = image.granularity();
-        auto image_sparse_binds = std::vector<VkSparseMemoryBind>();
-        image_sparse_binds.reserve(info.sparse_image_bindings.size());
-        for (const auto& [_, page, offset] : info.sparse_image_bindings) {
-            image_sparse_binds.emplace_back(VkSparseMemoryBind {
-                .resourceOffset = offset,
-                .size = granularity.width * granularity.height * 4,
-                .memory = page->block->memory,
-                .memoryOffset = page->offset,
-                .flags = {},
-            });
-        }
-
+        // TODO:
         auto image_opaque_bind_info = VkSparseImageOpaqueMemoryBindInfo();
-        image_opaque_bind_info.image = image.handle();
-        image_opaque_bind_info.bindCount = image_sparse_binds.size();
-        image_opaque_bind_info.pBinds = image_sparse_binds.data();
 
         auto bind_sparse_info = VkBindSparseInfo();
         bind_sparse_info.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;

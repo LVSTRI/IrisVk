@@ -145,7 +145,6 @@ set(IRIS_MAIN_HEADERS
     include/iris/gfx/render_pass.hpp
     include/iris/gfx/sampler.hpp
     include/iris/gfx/semaphore.hpp
-    include/iris/gfx/sparse_page_allocator.hpp
     include/iris/gfx/swapchain.hpp
     include/iris/gfx/texture.hpp
 
@@ -171,7 +170,6 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/render_pass.cpp
     src/iris/gfx/sampler.cpp
     src/iris/gfx/semaphore.cpp
-    src/iris/gfx/sparse_page_allocator.cpp
     src/iris/gfx/swapchain.cpp
     src/iris/gfx/texture.cpp
 

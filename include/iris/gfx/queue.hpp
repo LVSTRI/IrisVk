@@ -6,8 +6,6 @@
 #include <iris/core/macros.hpp>
 #include <iris/core/types.hpp>
 
-#include <iris/gfx/sparse_page_allocator.hpp>
-
 #include <volk.h>
 #include <vulkan/vulkan.h>
 
@@ -57,8 +55,7 @@ namespace ir {
     struct queue_bind_sparse_info_t {
         std::vector<queue_semaphore_stage_t> wait_semaphores;
         std::vector<queue_semaphore_stage_t> signal_semaphores;
-        // TODO: handle sparse buffer bindings too
-        std::span<const sparse_image_memory_opaque_bind_t> sparse_image_bindings;
+
     };
 
     class queue_t : public enable_intrusive_refcount_t<queue_t> {

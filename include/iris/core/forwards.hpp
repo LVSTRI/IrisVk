@@ -109,9 +109,6 @@ namespace ir {
 
     enum class texture_format_t;
 
-    struct sparse_image_memory_opaque_bind_t;
-    class sparse_page_allocator_t;
-
     class instance_t;
     class device_t;
     class queue_t;
