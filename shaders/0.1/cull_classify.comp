@@ -102,7 +102,13 @@ bool is_meshlet_occluded(in aabb_t aabb, in mat4 model) {
     const vec2 hiz_size = textureSize(u_hiz, 0);
     const float width = (box_uvs.z - box_uvs.x) * hiz_size.x;
     const float height = (box_uvs.w - box_uvs.y) * hiz_size.y;
-    const float level = floor(log2(max(width, height)));
+    float level = ceil(log2(max(width, height)));
+    const float lower_level = max(level - 1, 0);
+    const vec2 scale = vec2(exp2(-lower_level));
+    const vec2 footprint = ceil(box_uvs.zw * scale) - floor(box_uvs.xy * scale);
+    if (all(lessThanEqual(footprint, vec2(2.0)))) {
+        level = lower_level;
+    }
     // min reduction
     const float depth = textureLod(u_hiz, (box_uvs.xy + box_uvs.zw) / 2.0, level).r;
     return max_z <= depth;

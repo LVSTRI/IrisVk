@@ -58,7 +58,7 @@ namespace ir {
             as_string(info.address_mode.u));
         sampler->_info = info;
 
-        IR_LOG_WARN(device.logger(), "sampler_t ({}): cache miss", fmt::ptr(sampler.as_const_ref().handle()));
+        IR_LOG_WARN(device.logger(), "sampler_t ({}): cache miss", fmt::ptr(sampler->handle()));
         return cache.insert(info, std::move(sampler));
     }
 

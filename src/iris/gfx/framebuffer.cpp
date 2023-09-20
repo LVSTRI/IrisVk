@@ -8,8 +8,8 @@ namespace ir {
 
     framebuffer_t::~framebuffer_t() noexcept {
         IR_PROFILE_SCOPED();
-        vkDestroyFramebuffer(_render_pass.as_const_ref().device().handle(), _handle, nullptr);
-        IR_LOG_INFO(_render_pass.as_const_ref().device().logger(), "framebuffer {} destroyed", fmt::ptr(_handle));
+        vkDestroyFramebuffer(_render_pass->device().handle(), _handle, nullptr);
+        IR_LOG_INFO(_render_pass->device().logger(), "framebuffer {} destroyed", fmt::ptr(_handle));
     }
 
     auto framebuffer_t::make(const render_pass_t& render_pass, const framebuffer_create_info_t& info) noexcept -> arc_ptr<self> {
@@ -18,7 +18,7 @@ namespace ir {
         auto attachments = std::vector<VkImageView>();
         attachments.reserve(info.attachments.size());
         for (const auto& attachment : info.attachments) {
-            attachments.push_back(attachment.as_const_ref().view().handle());
+            attachments.push_back(attachment->view().handle());
         }
         auto framebuffer_info = VkFramebufferCreateInfo();
         framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;

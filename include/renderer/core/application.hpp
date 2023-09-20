@@ -58,7 +58,6 @@ namespace app {
         std::vector<ir::arc_ptr<ir::texture_t>> textures;
 
         ir::arc_ptr<ir::buffer_t<uint32>> atomics;
-        ir::arc_ptr<ir::buffer_t<uint32>> sex;
         std::vector<ir::arc_ptr<ir::buffer_t<camera_data_t>>> camera_buffer;
     };
 
@@ -73,6 +72,25 @@ namespace app {
 
     struct computer_raster_pass_t {
         ir::arc_ptr<ir::pipeline_t> pipeline;
+    };
+
+    struct shadow_pass_t {
+        ir::arc_ptr<ir::image_t> map;
+        ir::arc_ptr<ir::pipeline_t> analyze;
+        ir::arc_ptr<ir::sampler_t> sampler;
+
+        ir::arc_ptr<ir::image_t> hzb;
+        ir::arc_ptr<ir::pipeline_t> reduce;
+        std::vector<ir::arc_ptr<ir::image_view_t>> hzb_views;
+        ir::arc_ptr<ir::buffer_t<uint8>> device_requests;
+
+        ir::arc_ptr<ir::buffer_t<uint32>> sw_rast;
+        ir::arc_ptr<ir::buffer_t<uint32>> hw_rast;
+        ir::arc_ptr<ir::buffer_t<glm::uvec3>> sw_command;
+        ir::arc_ptr<ir::buffer_t<glm::uvec3>> hw_command;
+
+        std::vector<ir::arc_ptr<ir::buffer_t<glm::mat4>>> camera;
+        std::vector<ir::arc_ptr<ir::buffer_t<uint8>>> host_requests;
     };
 
     struct hiz_pass_t {
@@ -125,6 +143,8 @@ namespace app {
         ir::arc_ptr<ir::swapchain_t> _swapchain;
         std::vector<ir::arc_ptr<ir::command_pool_t>> _command_pools;
         std::vector<ir::arc_ptr<ir::command_buffer_t>> _command_buffers;
+
+        ir::arc_ptr<ir::semaphore_t> _sparse_done;
         std::vector<ir::arc_ptr<ir::semaphore_t>> _image_available;
         std::vector<ir::arc_ptr<ir::semaphore_t>> _render_done;
         std::vector<ir::arc_ptr<ir::fence_t>> _frame_fence;
@@ -132,6 +152,7 @@ namespace app {
         camera_t _camera;
         main_pass_t _main_pass;
         cluster_classify_pass_t _cluster_pass;
+        shadow_pass_t _shadow_pass;
         computer_raster_pass_t _compute_rast_pass;
         hiz_pass_t _hiz_pass;
         final_pass_t _final_pass;

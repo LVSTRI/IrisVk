@@ -28,6 +28,7 @@ namespace ir {
         bool mesh_shader = false;
         bool image_atomics_64 = false;
         bool fragment_shading_rate = false;
+        bool ray_tracing = false;
     };
 
     struct device_create_info_t {
@@ -74,6 +75,7 @@ namespace ir {
         IR_NODISCARD auto logger() const noexcept -> spdlog::logger&;
 
         IR_NODISCARD auto fetch_queue(const queue_family_t& family) const noexcept -> VkQueue;
+        IR_NODISCARD auto memory_type_index(uint32 mask, memory_property_t flags) const noexcept -> uint32;
 
         auto wait_idle() const noexcept -> void;
 
@@ -92,6 +94,7 @@ namespace ir {
         VmaAllocator _allocator = {};
 
         VkPhysicalDeviceProperties2 _properties = {};
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR _properties_rt = {};
         VkPhysicalDeviceMemoryProperties2 _memory_properties = {};
         VkPhysicalDeviceFeatures2 _features = {};
         VkPhysicalDeviceVulkan11Features _features_11 = {};

@@ -10,6 +10,7 @@
 #include <iris/gfx/pipeline.hpp>
 #include <iris/gfx/fence.hpp>
 #include <iris/gfx/buffer.hpp>
+#include <iris/gfx/sparse_page_allocator.hpp>
 #include <iris/gfx/texture.hpp>
 #include <iris/gfx/descriptor_set.hpp>
 #include <iris/gfx/descriptor_pool.hpp>
@@ -24,6 +25,11 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
+#define VSM_TILE_SIZE_X 128
+#define VSM_TILE_SIZE_Y 128
+#define VSM_RESOLUTION 16384
+#define VSM_PAGE_COUNT (16384 / VSM_TILE_SIZE_X)
 
 namespace app {
     static auto previous_power_2(uint32 x) noexcept {
@@ -153,7 +159,7 @@ namespace app {
                 }
             }
         });
-        _final_pass.color = ir::image_t::make_from_attachment(*_device, _final_pass.description.as_const_ref().attachment(0), {
+        _final_pass.color = ir::image_t::make_from_attachment(*_device, _final_pass.description->attachment(0), {
             .width = swapchain().width(),
             .height = swapchain().height(),
             .usage =
@@ -185,7 +191,7 @@ namespace app {
         });
 
         {
-            const auto model = meshlet_model_t::make("../models/compressed/bistro/bistro.glb");
+            const auto model = meshlet_model_t::make("../models/compressed/reactor/reactor.glb");
             auto meshlets = std::vector<meshlet_glsl_t>();
             meshlets.reserve(model.meshlet_count());
             for (const auto& meshlet : model.meshlets()) {
@@ -247,12 +253,12 @@ namespace app {
         _cluster_pass.sw_rast = ir::buffer_t<uint32>::make(*_device, {
             .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_transfer_dst,
             .flags = ir::buffer_flag_t::e_resized,
-            .capacity = _main_pass.meshlet_instances.as_const_ref().size() + 1,
+            .capacity = _main_pass.meshlet_instances->size() + 1,
         });
         _cluster_pass.hw_rast = ir::buffer_t<uint32>::make(*_device, {
             .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_transfer_dst,
             .flags = ir::buffer_flag_t::e_resized,
-            .capacity = _main_pass.meshlet_instances.as_const_ref().size() + 1,
+            .capacity = _main_pass.meshlet_instances->size() + 1,
         });
         _cluster_pass.sw_command = ir::buffer_t<glm::uvec3>::make(*_device, {
             .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_indirect_buffer,
@@ -263,6 +269,62 @@ namespace app {
             .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_indirect_buffer,
             .flags = ir::buffer_flag_t::e_resized,
             .capacity = 1,
+        });
+
+        _shadow_pass.map = ir::image_t::make(*_device, {
+            .width = 16384,
+            .height = 16384,
+            .usage = ir::image_usage_t::e_storage | ir::image_usage_t::e_sampled,
+            .flags = ir::image_flag_t::e_sparse_binding | ir::image_flag_t::e_sparse_residency,
+            .format = ir::resource_format_t::e_r32_sfloat,
+            .view = ir::default_image_view_info,
+        });
+        _shadow_pass.analyze = ir::pipeline_t::make(*_device, {
+            .compute = "../shaders/0.1/shadow_page_request.comp",
+        });
+        _shadow_pass.hzb = ir::image_t::make(*_device, {
+            .width = VSM_TILE_SIZE_X,
+            .height = VSM_TILE_SIZE_Y,
+            .levels = static_cast<uint32>(1 + glm::floor(glm::log2(static_cast<float32>(VSM_TILE_SIZE_X)))),
+            .usage =
+                ir::image_usage_t::e_storage |
+                ir::image_usage_t::e_sampled |
+                ir::image_usage_t::e_transfer_dst,
+            .format = ir::resource_format_t::e_r8_uint,
+            .view = ir::default_image_view_info,
+        });
+        _shadow_pass.hzb_views.reserve(_shadow_pass.hzb->levels());
+        for (auto i = 0_u32; i < _shadow_pass.hzb->levels(); ++i) {
+            _shadow_pass.hzb_views.emplace_back(ir::image_view_t::make(*_shadow_pass.hzb, {
+                .subresource {
+                    .level = i,
+                    .level_count = 1,
+                }
+            }));
+        }
+        _shadow_pass.reduce = ir::pipeline_t::make(*_device, {
+            .compute = "../shaders/0.1/shadow_page_reduce.comp",
+        });
+        _shadow_pass.camera = ir::buffer_t<glm::mat4>::make(*_device, frames_in_flight, {
+            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .flags = ir::buffer_flag_t::e_mapped,
+            .capacity = 1,
+        });
+        _shadow_pass.device_requests = ir::buffer_t<uint8>::make(*_device, {
+            .usage =
+                ir::buffer_usage_t::e_storage_buffer |
+                ir::buffer_usage_t::e_transfer_src |
+                ir::buffer_usage_t::e_transfer_dst,
+            .flags = ir::buffer_flag_t::e_resized,
+            .capacity = VSM_TILE_SIZE_X * VSM_TILE_SIZE_Y,
+        });
+        _shadow_pass.host_requests = ir::buffer_t<uint8>::make(*_device, frames_in_flight, {
+            .usage = ir::buffer_usage_t::e_storage_buffer | ir::buffer_usage_t::e_transfer_dst,
+            .flags =
+                ir::buffer_flag_t::e_mapped |
+                ir::buffer_flag_t::e_random_access |
+                ir::buffer_flag_t::e_resized,
+            .capacity = VSM_TILE_SIZE_X * VSM_TILE_SIZE_Y,
         });
 
         _compute_rast_pass.pipeline = ir::pipeline_t::make(*_device, {
@@ -276,15 +338,25 @@ namespace app {
         for (auto& pool : _command_pools) {
             _command_buffers.emplace_back(ir::command_buffer_t::make(*pool, {}));
         }
-        _image_available = ir::semaphore_t::make(*_device, frames_in_flight);
-        _render_done = ir::semaphore_t::make(*_device, frames_in_flight);
-        _frame_fence = ir::fence_t::make(*_device, frames_in_flight);
+        _sparse_done = ir::semaphore_t::make(*_device, { 0, true });
+        _image_available = ir::semaphore_t::make(*_device, frames_in_flight, {});
+        _render_done = ir::semaphore_t::make(*_device, frames_in_flight, {});
+        _frame_fence = ir::fence_t::make(*_device, frames_in_flight, true);
 
         // initial transitions
         device().graphics_queue().submit([this](ir::command_buffer_t& cmd) {
             IR_PROFILE_SCOPED();
             cmd.image_barrier({
                 .image = std::cref(*_hiz_pass.depth),
+                .source_stage = ir::pipeline_stage_t::e_none,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_none,
+                .dest_access = ir::resource_access_t::e_shader_read,
+                .old_layout = ir::image_layout_t::e_undefined,
+                .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+            });
+            cmd.image_barrier({
+                .image = std::cref(*_shadow_pass.hzb),
                 .source_stage = ir::pipeline_stage_t::e_none,
                 .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                 .source_access = ir::resource_access_t::e_none,
@@ -424,30 +496,71 @@ namespace app {
             last_camera = camera_data;
         }
 
+        static auto sparse_allocator = ir::sparse_page_allocator_t::make(*_device, *_shadow_pass.map);
+        const auto shadow_pages = sparse_allocator.request_pages({
+            _shadow_pass.host_requests[_frame_index]->data(),
+            _shadow_pass.host_requests[_frame_index]->size()
+        });
+        if (device().frame_counter().current() % 60 == 0) {
+            IR_LOG_INFO(device().logger(), "shadow binding updates: {}", shadow_pages.size());
+        }
+        auto sparse_semaphore_value = 0_u64;
+        static auto __sparse_once = false;
+        if (!shadow_pages.empty() && !__sparse_once) {
+            __sparse_once = true;
+            sparse_semaphore_value = _sparse_done->increment(2);
+            device().graphics_queue().wait_idle();
+            device().graphics_queue().bind_sparse({
+                .wait_semaphores = {
+                    { std::cref(*_sparse_done), {}, sparse_semaphore_value }
+                },
+                .signal_semaphores = {
+                    { std::cref(*_sparse_done), {}, sparse_semaphore_value + 1 }
+                },
+                .sparse_image_bindings = shadow_pages,
+            });
+        }
+
         camera_buffer().insert(last_camera);
+        _shadow_pass.camera[_frame_index]->insert(
+            glm::ortho(-100.0f, 100.0f, -100.0f, 100.0f, 0.001f, 200.0f) *
+            glm::lookAt(glm::normalize(glm::vec3(25.0f, 100.0f, 25.0f)), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
 
         auto main_set = ir::descriptor_set_builder_t(*_main_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
-            .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
+            .bind_storage_image(1, _main_pass.visbuffer->view())
             .build();
 
         auto cluster_area_set = ir::descriptor_set_builder_t(*_cluster_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
             .bind_combined_image_sampler(
                 1,
-                _hiz_pass.depth.as_const_ref().view(),
-                _hiz_pass.sampler.as_const_ref())
+                _hiz_pass.depth->view(),
+                *_hiz_pass.sampler)
             .build();
 
-        const auto meshlet_count = _main_pass.meshlet_instances.as_const_ref().size();
+        auto shadow_page_req_set = ir::descriptor_set_builder_t(*_shadow_pass.analyze, 0)
+            .bind_uniform_buffer(0, camera_buffer().slice())
+            .bind_storage_image(1, _main_pass.visbuffer->view())
+            .build();
+
+        const auto meshlet_count = _main_pass.meshlet_instances->size();
 
         command_buffer().begin();
         command_buffer().begin_debug_marker("clear_buffers");
-        command_buffer().fill_buffer(_main_pass.atomics.as_const_ref().slice(), 0);
-        command_buffer().fill_buffer(_cluster_pass.sw_rast.as_const_ref().slice(), 0);
-        command_buffer().fill_buffer(_cluster_pass.hw_rast.as_const_ref().slice(), 0);
+        command_buffer().fill_buffer(_main_pass.atomics->slice(), 0);
+        command_buffer().fill_buffer(_cluster_pass.sw_rast->slice(), 0);
+        command_buffer().fill_buffer(_cluster_pass.hw_rast->slice(), 0);
+        command_buffer().fill_buffer(_shadow_pass.device_requests->slice(), 0);
         command_buffer().buffer_barrier({
-            .buffer = _main_pass.atomics.as_const_ref().slice(),
+            .buffer = _shadow_pass.device_requests->slice(),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_write
+        });
+        command_buffer().buffer_barrier({
+            .buffer = _main_pass.atomics->slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_transfer_write,
@@ -456,7 +569,7 @@ namespace app {
                 ir::resource_access_t::e_shader_storage_write
         });
         command_buffer().buffer_barrier({
-            .buffer = _cluster_pass.sw_rast.as_const_ref().slice(),
+            .buffer = _cluster_pass.sw_rast->slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_transfer_write,
@@ -465,7 +578,7 @@ namespace app {
                 ir::resource_access_t::e_shader_storage_write
         });
         command_buffer().buffer_barrier({
-            .buffer = _cluster_pass.hw_rast.as_const_ref().slice(),
+            .buffer = _cluster_pass.hw_rast->slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_transfer_write,
@@ -493,14 +606,14 @@ namespace app {
                 uint32 width;
                 uint32 height;
             } constants = {
-                _main_pass.meshlets.as_const_ref().address(),
-                _main_pass.meshlet_instances.as_const_ref().address(),
-                _main_pass.transforms.as_const_ref().address(),
-                _cluster_pass.sw_rast.as_const_ref().address(),
-                _cluster_pass.hw_rast.as_const_ref().address(),
-                _cluster_pass.sw_command.as_const_ref().address(),
-                _cluster_pass.hw_command.as_const_ref().address(),
-                _main_pass.atomics.as_const_ref().address(),
+                _main_pass.meshlets->address(),
+                _main_pass.meshlet_instances->address(),
+                _main_pass.transforms->address(),
+                _cluster_pass.sw_rast->address(),
+                _cluster_pass.hw_rast->address(),
+                _cluster_pass.sw_command->address(),
+                _cluster_pass.hw_command->address(),
+                _main_pass.atomics->address(),
                 static_cast<uint32>(meshlet_count),
                 swapchain().width(),
                 swapchain().height()
@@ -510,28 +623,28 @@ namespace app {
         }
         command_buffer().dispatch((meshlet_count + 255) / 256);
         command_buffer().buffer_barrier({
-            .buffer = _cluster_pass.sw_rast.as_const_ref().slice(),
+            .buffer = _cluster_pass.sw_rast->slice(),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_shader_storage_write,
             .dest_access = ir::resource_access_t::e_shader_storage_read
         });
         command_buffer().buffer_barrier({
-            .buffer = _cluster_pass.hw_rast.as_const_ref().slice(),
+            .buffer = _cluster_pass.hw_rast->slice(),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
             .dest_stage = ir::pipeline_stage_t::e_mesh_shader,
             .source_access = ir::resource_access_t::e_shader_storage_write,
             .dest_access = ir::resource_access_t::e_shader_storage_read
         });
         command_buffer().buffer_barrier({
-            .buffer = _cluster_pass.sw_command.as_const_ref().slice(),
+            .buffer = _cluster_pass.sw_command->slice(),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
             .dest_stage = ir::pipeline_stage_t::e_draw_indirect,
             .source_access = ir::resource_access_t::e_shader_storage_write,
             .dest_access = ir::resource_access_t::e_indirect_command_read
         });
         command_buffer().buffer_barrier({
-            .buffer = _cluster_pass.hw_command.as_const_ref().slice(),
+            .buffer = _cluster_pass.hw_command->slice(),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
             .dest_stage = ir::pipeline_stage_t::e_draw_indirect,
             .source_access = ir::resource_access_t::e_shader_storage_write,
@@ -585,17 +698,17 @@ namespace app {
                     uint64 transform_ptr;
                     uint64 hw_meshlet_offset_ptr;
                 } constants = {
-                    _main_pass.meshlets.as_const_ref().address(),
-                    _main_pass.meshlet_instances.as_const_ref().address(),
-                    _main_pass.vertices.as_const_ref().address(),
-                    _main_pass.indices.as_const_ref().address(),
-                    _main_pass.primitives.as_const_ref().address(),
-                    _main_pass.transforms.as_const_ref().address(),
-                    _cluster_pass.hw_rast.as_const_ref().address(),
+                    _main_pass.meshlets->address(),
+                    _main_pass.meshlet_instances->address(),
+                    _main_pass.vertices->address(),
+                    _main_pass.indices->address(),
+                    _main_pass.primitives->address(),
+                    _main_pass.transforms->address(),
+                    _cluster_pass.hw_rast->address(),
                 };
                 command_buffer().push_constants(ir::shader_stage_t::e_mesh, 0, ir::size_bytes(constants), &constants);
             }
-            command_buffer().draw_mesh_tasks_indirect(_cluster_pass.hw_command.as_const_ref().slice(), 1);
+            command_buffer().draw_mesh_tasks_indirect(_cluster_pass.hw_command->slice(), 1);
             command_buffer().end_render_pass();
             command_buffer().image_barrier({
                 .image = std::cref(*_main_pass.visbuffer),
@@ -614,7 +727,7 @@ namespace app {
         if (_state.enable_sw) {
             auto compute_raster_set = ir::descriptor_set_builder_t(*_compute_rast_pass.pipeline, 0)
                 .bind_uniform_buffer(0, camera_buffer().slice())
-                .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
+                .bind_storage_image(1, _main_pass.visbuffer->view())
                 .build();
             command_buffer().begin_debug_marker("compute_rasterizer");
             command_buffer().bind_pipeline(*_compute_rast_pass.pipeline);
@@ -629,23 +742,23 @@ namespace app {
                     uint64 transform_address;
                     uint64 sw_rast_address;
                 } constants = {
-                    _main_pass.meshlets.as_const_ref().address(),
-                    _main_pass.meshlet_instances.as_const_ref().address(),
-                    _main_pass.vertices.as_const_ref().address(),
-                    _main_pass.indices.as_const_ref().address(),
-                    _main_pass.primitives.as_const_ref().address(),
-                    _main_pass.transforms.as_const_ref().address(),
-                    _cluster_pass.sw_rast.as_const_ref().address(),
+                    _main_pass.meshlets->address(),
+                    _main_pass.meshlet_instances->address(),
+                    _main_pass.vertices->address(),
+                    _main_pass.indices->address(),
+                    _main_pass.primitives->address(),
+                    _main_pass.transforms->address(),
+                    _cluster_pass.sw_rast->address(),
                 };
                 command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, ir::size_bytes(constants), &constants);
             }
-            command_buffer().dispatch_indirect(_cluster_pass.sw_command.as_const_ref().slice());
+            command_buffer().dispatch_indirect(_cluster_pass.sw_command->slice());
             command_buffer().end_debug_marker();
         }
 
         auto final_set = ir::descriptor_set_builder_t(*_final_pass.pipeline, 0)
             .bind_uniform_buffer(0, camera_buffer().slice())
-            .bind_storage_image(1, _main_pass.visbuffer.as_const_ref().view())
+            .bind_storage_image(1, _main_pass.visbuffer->view())
             .bind_textures(2, _main_pass.textures)
             .build();
 
@@ -685,12 +798,12 @@ namespace app {
                 uint64 transform_address;
                 uint32 view_mode;
             } constants = {
-                _main_pass.meshlets.as_const_ref().address(),
-                _main_pass.meshlet_instances.as_const_ref().address(),
-                _main_pass.vertices.as_const_ref().address(),
-                _main_pass.indices.as_const_ref().address(),
-                _main_pass.primitives.as_const_ref().address(),
-                _main_pass.transforms.as_const_ref().address(),
+                _main_pass.meshlets->address(),
+                _main_pass.meshlet_instances->address(),
+                _main_pass.vertices->address(),
+                _main_pass.indices->address(),
+                _main_pass.primitives->address(),
+                _main_pass.transforms->address(),
                 _state.view_mode,
             };
 #pragma pack(pop)
@@ -698,6 +811,97 @@ namespace app {
         }
         command_buffer().draw(3, 1, 0, 0);
         command_buffer().end_render_pass();
+        command_buffer().end_debug_marker();
+
+        command_buffer().begin_debug_marker("shadow_request_page");
+        command_buffer().bind_pipeline(*_shadow_pass.analyze);
+        command_buffer().bind_descriptor_set(*shadow_page_req_set);
+        {
+            struct {
+                uint64 shadow_camera_address;
+                uint64 shadow_page_request_address;
+            } constants = {
+                _shadow_pass.camera[_frame_index]->address(),
+                _shadow_pass.device_requests->address(),
+            };
+            command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, ir::size_bytes(constants), &constants);
+        }
+        command_buffer().dispatch(
+            (_main_pass.visbuffer->width() + 15) / 16,
+            (_main_pass.visbuffer->height() + 15) / 16);
+        command_buffer().buffer_barrier({
+            .buffer = _shadow_pass.device_requests->slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_transfer_read,
+        });
+        command_buffer().end_debug_marker();
+
+        command_buffer().begin_debug_marker("hiz_build");
+        if (!freeze_frustum) {
+            {
+                auto depth_copy_set = ir::descriptor_set_builder_t(*_hiz_pass.copy, 0)
+                    .bind_storage_image(0, _main_pass.visbuffer->view())
+                    .bind_storage_image(1, *_hiz_pass.views[0])
+                    .build();
+                command_buffer().image_barrier({
+                    .image = std::cref(*_hiz_pass.depth),
+                    .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .source_access = ir::resource_access_t::e_none,
+                    .dest_access = ir::resource_access_t::e_shader_storage_write,
+                    .old_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                    .new_layout = ir::image_layout_t::e_general,
+                });
+                command_buffer().bind_pipeline(*_hiz_pass.copy);
+                command_buffer().bind_descriptor_set(*depth_copy_set);
+                command_buffer().dispatch(
+                    (_hiz_pass.depth->width() + 15) / 16,
+                    (_hiz_pass.depth->height() + 15) / 16);
+            }
+
+            for (auto i = 0_u32; i < _hiz_pass.views.size() - 1; ++i) {
+                auto depth_reduce_set = ir::descriptor_set_builder_t(*_hiz_pass.reduce, 0)
+                    .bind_combined_image_sampler(0, *_hiz_pass.views[i], *_hiz_pass.sampler)
+                    .bind_storage_image(1, *_hiz_pass.views[i + 1])
+                    .build();
+                command_buffer().image_barrier({
+                    .image = std::cref(*_hiz_pass.depth),
+                    .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .source_access = ir::resource_access_t::e_shader_storage_write,
+                    .dest_access = ir::resource_access_t::e_shader_read,
+                    .old_layout = ir::image_layout_t::e_general,
+                    .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                    .subresource = {
+                        .level = i,
+                        .level_count = 1
+                    },
+                });
+                const auto width = std::max(1_u32, _hiz_pass.depth->width() >> (i + 1));
+                const auto height = std::max(1_u32, _hiz_pass.depth->height() >> (i + 1));
+                command_buffer().bind_pipeline(*_hiz_pass.reduce);
+                command_buffer().bind_descriptor_set(*depth_reduce_set);
+                command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, sizeof(glm::uvec2), glm::value_ptr(glm::uvec2(width, height)));
+                command_buffer().dispatch(
+                    (width + 15) / 16,
+                    (height + 15) / 16);
+            }
+            command_buffer().image_barrier({
+                .image = std::cref(*_hiz_pass.depth),
+                .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_shader_read,
+                .old_layout = ir::image_layout_t::e_general,
+                .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                .subresource = {
+                    .level = static_cast<uint32>(_hiz_pass.views.size() - 1),
+                    .level_count = 1
+                },
+            });
+        }
         command_buffer().end_debug_marker();
 
         command_buffer().begin_debug_marker("copy_to_swapchain");
@@ -725,83 +929,106 @@ namespace app {
         });
         command_buffer().end_debug_marker();
 
-        command_buffer().begin_debug_marker("hiz_build");
-        if (!freeze_frustum) {
+        command_buffer().begin_debug_marker("transfer_buffers");
+        command_buffer().image_barrier({
+            .image = std::cref(*_shadow_pass.hzb),
+            .source_stage = ir::pipeline_stage_t::e_none,
+            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_transfer_write,
+            .old_layout = ir::image_layout_t::e_undefined,
+            .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
+        });
+        command_buffer().copy_buffer_to_image(
+            _shadow_pass.device_requests->slice(),
+            *_shadow_pass.hzb,
             {
-                auto depth_copy_set = ir::descriptor_set_builder_t(*_hiz_pass.copy, 0)
-                    .bind_storage_image(0, _main_pass.visbuffer.as_const_ref().view())
-                    .bind_storage_image(1, _hiz_pass.views[0].as_const_ref())
-                    .build();
-                command_buffer().image_barrier({
-                    .image = std::cref(*_hiz_pass.depth),
-                    .source_stage = ir::pipeline_stage_t::e_compute_shader,
-                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-                    .source_access = ir::resource_access_t::e_none,
-                    .dest_access = ir::resource_access_t::e_shader_storage_write,
-                    .old_layout = ir::image_layout_t::e_shader_read_only_optimal,
-                    .new_layout = ir::image_layout_t::e_general,
-                });
-                command_buffer().bind_pipeline(*_hiz_pass.copy);
-                command_buffer().bind_descriptor_set(*depth_copy_set);
-                command_buffer().dispatch(
-                    (_hiz_pass.depth.as_const_ref().width() + 15) / 16,
-                    (_hiz_pass.depth.as_const_ref().height() + 15) / 16);
-            }
-
-            for (auto i = 0_u32; i < _hiz_pass.views.size() - 1; ++i) {
-                auto depth_reduce_set = ir::descriptor_set_builder_t(*_hiz_pass.reduce, 0)
-                    .bind_combined_image_sampler(0, _hiz_pass.views[i].as_const_ref(), _hiz_pass.sampler.as_const_ref())
-                    .bind_storage_image(1, _hiz_pass.views[i + 1].as_const_ref())
-                    .build();
-                command_buffer().image_barrier({
-                    .image = std::cref(*_hiz_pass.depth),
-                    .source_stage = ir::pipeline_stage_t::e_compute_shader,
-                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-                    .source_access = ir::resource_access_t::e_shader_storage_write,
-                    .dest_access = ir::resource_access_t::e_shader_read,
-                    .old_layout = ir::image_layout_t::e_general,
-                    .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
-                    .subresource = {
-                        .level = i,
-                        .level_count = 1
-                    },
-                });
-                const auto width = std::max(1_u32, _hiz_pass.depth.as_const_ref().width() >> (i + 1));
-                const auto height = std::max(1_u32, _hiz_pass.depth.as_const_ref().height() >> (i + 1));
-                command_buffer().bind_pipeline(*_hiz_pass.reduce);
-                command_buffer().bind_descriptor_set(*depth_reduce_set);
-                command_buffer().push_constants(ir::shader_stage_t::e_compute, 0, sizeof(glm::uvec2), glm::value_ptr(glm::uvec2(width, height)));
-                command_buffer().dispatch(
-                    (width + 15) / 16,
-                    (height + 15) / 16);
-            }
+                .level = 0,
+                .level_count = 1
+            });
+        command_buffer().image_barrier({
+            .image = std::cref(*_shadow_pass.hzb),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access =
+                ir::resource_access_t::e_shader_storage_read |
+                ir::resource_access_t::e_shader_storage_write,
+            .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
+            .new_layout = ir::image_layout_t::e_general,
+        });
+        // reduce page hzb
+        for (auto i = 1_u32; i < _shadow_pass.hzb->levels(); ++i) {
+            auto hzb_reduce_set = ir::descriptor_set_builder_t(*_shadow_pass.reduce, 0)
+                .bind_storage_image(0, *_shadow_pass.hzb_views[i - 1])
+                .bind_storage_image(1, *_shadow_pass.hzb_views[i])
+                .build();
+            const auto width = std::max(1_u32, _shadow_pass.hzb->width() >> i);
+            const auto height = std::max(1_u32, _shadow_pass.hzb->height() >> i);
+            command_buffer().bind_pipeline(*_shadow_pass.reduce);
+            command_buffer().bind_descriptor_set(*hzb_reduce_set);
+            command_buffer().dispatch(
+                (width + 15) / 16,
+                (height + 15) / 16);
             command_buffer().image_barrier({
-                .image = std::cref(*_hiz_pass.depth),
+                .image = std::cref(*_shadow_pass.hzb),
                 .source_stage = ir::pipeline_stage_t::e_compute_shader,
                 .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                 .source_access = ir::resource_access_t::e_shader_storage_write,
                 .dest_access = ir::resource_access_t::e_shader_read,
                 .old_layout = ir::image_layout_t::e_general,
-                .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                .new_layout = ir::image_layout_t::e_general,
                 .subresource = {
-                    .level = static_cast<uint32>(_hiz_pass.views.size() - 1),
+                    .level = i,
                     .level_count = 1
                 },
             });
         }
+        command_buffer().copy_buffer(
+            _shadow_pass.device_requests->slice(),
+            _shadow_pass.host_requests[_frame_index]->slice(),
+            {});
+        command_buffer().buffer_barrier({
+            .buffer = _shadow_pass.host_requests[_frame_index]->slice(),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_host,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access = ir::resource_access_t::e_host_read,
+        });
+
         command_buffer().end_debug_marker();
         command_buffer().end();
-
-        device().graphics_queue().submit({
-            .command_buffers = { std::cref(command_buffer()) },
-            .wait_semaphores = {
+        {
+            auto waits = std::vector<ir::queue_semaphore_stage_t> {
                 { std::cref(image_available()), ir::pipeline_stage_t::e_transfer }
-            },
-            .signal_semaphores = {
+            };
+            auto signals = std::vector<ir::queue_semaphore_stage_t> {
                 { std::cref(render_done()), ir::pipeline_stage_t::e_none }
-            },
-        }, &frame_fence());
-
+            };
+            if (!shadow_pages.empty()) {
+                waits.push_back({
+                    std::cref(*_sparse_done),
+                    ir::pipeline_stage_t::e_top_of_pipe,
+                    sparse_semaphore_value + 1
+                });
+                signals.push_back({
+                    std::cref(*_sparse_done),
+                    ir::pipeline_stage_t::e_bottom_of_pipe,
+                    sparse_semaphore_value + 2
+                });
+            } else {
+                signals.push_back({
+                    std::cref(*_sparse_done),
+                    ir::pipeline_stage_t::e_bottom_of_pipe,
+                    _sparse_done->increment(1) + 1
+                });
+            }
+            device().graphics_queue().submit({
+                .command_buffers = { std::cref(command_buffer()) },
+                .wait_semaphores = waits,
+                .signal_semaphores = signals,
+            }, &frame_fence());
+        }
         device().graphics_queue().present({
             .swapchain = std::cref(swapchain()),
             .wait_semaphores = {

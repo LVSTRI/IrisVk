@@ -44,8 +44,7 @@ namespace ir {
         image_view_info.pNext = nullptr;
         image_view_info.flags = {};
         image_view_info.image = image.handle();
-        // TODO: don't hardcode
-        image_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        image_view_info.viewType = image.layers() == 1 ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_2D_ARRAY;
         image_view_info.format = as_enum_counterpart(
             info.format == resource_format_t::e_undefined ?
                 image.format() :
@@ -130,11 +129,18 @@ namespace ir {
             }
             IR_UNREACHABLE();
         }();
-
+        auto is_sparse = false;
         auto image_info = VkImageCreateInfo();
         image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         image_info.pNext = nullptr;
         image_info.flags = {};
+        if ((info.flags & image_flag_t::e_sparse_binding) == image_flag_t::e_sparse_binding) {
+            is_sparse = true;
+            image_info.flags |= VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
+            if ((info.flags & image_flag_t::e_sparse_residency) == image_flag_t::e_sparse_residency) {
+                image_info.flags |= VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
+            }
+        }
         // TODO: don't hardcode
         image_info.imageType = VK_IMAGE_TYPE_2D;
         image_info.format = as_enum_counterpart(info.format);
@@ -150,24 +156,57 @@ namespace ir {
         image_info.pQueueFamilyIndices = &family;
         image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        auto allocation_info = VmaAllocationCreateInfo();
-        allocation_info.flags = {};
-        allocation_info.usage = VMA_MEMORY_USAGE_AUTO;
-        allocation_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        allocation_info.preferredFlags = 0;
-        allocation_info.memoryTypeBits = 0;
-        allocation_info.pool = {};
-        allocation_info.pUserData = nullptr;
-        allocation_info.priority = 1.0f;
-        IR_VULKAN_CHECK(
-            device.logger(),
-            vmaCreateImage(
-                device.allocator(),
-                &image_info,
-                &allocation_info,
-                &image->_handle,
-                &image->_allocation,
-                nullptr));
+        auto format_properties = VkFormatProperties();
+        vkGetPhysicalDeviceFormatProperties(device.gpu(), image_info.format, &format_properties);
+
+        if (!is_sparse) {
+            auto allocation_info = VmaAllocationCreateInfo();
+            allocation_info.flags = {};
+            allocation_info.usage = VMA_MEMORY_USAGE_AUTO;
+            allocation_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            allocation_info.preferredFlags = 0;
+            allocation_info.memoryTypeBits = 0;
+            allocation_info.pool = {};
+            allocation_info.pUserData = nullptr;
+            allocation_info.priority = 1.0f;
+            IR_VULKAN_CHECK(
+                device.logger(),
+                vmaCreateImage(
+                    device.allocator(),
+                    &image_info,
+                    &allocation_info,
+                    &image->_handle,
+                    &image->_allocation,
+                    nullptr));
+            vkGetImageMemoryRequirements(device.handle(), image->_handle, &image->_requirements);
+        } else {
+            IR_VULKAN_CHECK(device.logger(), vkCreateImage(device.handle(), &image_info, nullptr, &image->_handle));
+            auto memory_requirements = VkMemoryRequirements();
+            vkGetImageMemoryRequirements(device.handle(), image->_handle, &memory_requirements);
+            auto sparse_req_count = 0_u32;
+            vkGetImageSparseMemoryRequirements(device.handle(), image->_handle, &sparse_req_count, nullptr);
+            auto sparse_reqs = std::vector<VkSparseImageMemoryRequirements>(sparse_req_count);
+            vkGetImageSparseMemoryRequirements(device.handle(), image->_handle, &sparse_req_count, sparse_reqs.data());
+            auto image_sparse_req = VkSparseImageMemoryRequirements();
+            const auto aspect = as_enum_counterpart(deduce_image_aspect(info));
+            for (const auto& requirement : sparse_reqs) {
+                if ((requirement.formatProperties.aspectMask & aspect) == aspect) {
+                    IR_LOG_INFO(
+                        device.logger(), "image {} sparse info | granularity: {}x{}x{}, tail first LOD: {}, tail size: {}",
+                        fmt::ptr(image->_handle),
+                        requirement.formatProperties.imageGranularity.width,
+                        requirement.formatProperties.imageGranularity.height,
+                        requirement.formatProperties.imageGranularity.depth,
+                        requirement.imageMipTailFirstLod,
+                        requirement.imageMipTailSize);
+                    image_sparse_req = requirement;
+                    break;
+                }
+            }
+            image->_requirements = memory_requirements;
+            image->_sparse_info = image_sparse_req;
+        }
+
         image->_info = info;
         image->_device = device.as_intrusive_ptr();
         if (info.view) {
@@ -241,6 +280,16 @@ namespace ir {
         return _handle;
     }
 
+    auto image_t::memory_requirements() const noexcept -> const VkMemoryRequirements& {
+        IR_PROFILE_SCOPED();
+        return _requirements;
+    }
+
+    auto image_t::sparse_requirements() const noexcept -> const VkSparseImageMemoryRequirements& {
+        IR_PROFILE_SCOPED();
+        return _sparse_info;
+    }
+
     auto image_t::allocation() const noexcept -> VmaAllocation {
         IR_PROFILE_SCOPED();
         return _allocation;
@@ -271,6 +320,15 @@ namespace ir {
         return _info.layers;
     }
 
+    auto image_t::granularity() const noexcept -> extent_3d_t {
+        IR_PROFILE_SCOPED();
+        return {
+            _sparse_info.formatProperties.imageGranularity.width,
+            _sparse_info.formatProperties.imageGranularity.height,
+            _sparse_info.formatProperties.imageGranularity.depth
+        };
+    }
+
     auto image_t::samples() const noexcept -> sample_count_t {
         IR_PROFILE_SCOPED();
         return _info.samples;
@@ -279,6 +337,16 @@ namespace ir {
     auto image_t::usage() const noexcept -> image_usage_t {
         IR_PROFILE_SCOPED();
         return _info.usage;
+    }
+
+    auto image_t::is_sparsely_bound() const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        return (_info.flags & image_flag_t::e_sparse_binding) == image_flag_t::e_sparse_binding;
+    }
+
+    auto image_t::is_sparsely_resident() const noexcept -> bool {
+        IR_PROFILE_SCOPED();
+        return (_info.flags & image_flag_t::e_sparse_residency) == image_flag_t::e_sparse_residency;
     }
 
     auto image_t::format() const noexcept -> resource_format_t {

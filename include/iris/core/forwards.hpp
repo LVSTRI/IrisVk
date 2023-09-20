@@ -23,6 +23,7 @@ namespace ir {
     struct buffer_create_info_t;
     struct sampler_create_info_t;
     struct texture_create_info_t;
+    struct semaphore_create_info_t;
 
     enum class sample_count_t : uint32;
     enum class image_usage_t : uint32;
@@ -53,6 +54,10 @@ namespace ir {
 
     enum class queue_type_t;
     struct queue_family_t;
+    struct queue_semaphore_stage_t;
+    struct queue_submit_info_t;
+    struct queue_present_info_t;
+    struct queue_bind_sparse_info_t;
 
     struct attachment_layout_t;
     struct attachment_info_t;
@@ -87,6 +92,12 @@ namespace ir {
     struct descriptor_content_t;
     struct descriptor_set_binding_t;
 
+    struct offset_2d_t;
+    struct offset_3d_t;
+    struct extent_2d_t;
+    struct extent_3d_t;
+    struct image_subresource_t;
+
     template <typename>
     struct cache_entry_t;
 
@@ -97,6 +108,9 @@ namespace ir {
     struct sampler_address_mode_combo_t;
 
     enum class texture_format_t;
+
+    struct sparse_image_memory_opaque_bind_t;
+    class sparse_page_allocator_t;
 
     class instance_t;
     class device_t;

@@ -49,3 +49,9 @@
 [submodule "deps/DLSS"]
 	path = deps/DLSS
 	url = https://github.com/NVIDIA/DLSS
+[submodule "deps/METIS"]
+	path = deps/METIS
+	url = https://github.com/KarypisLab/METIS
+[submodule "deps/GKlib"]
+	path = deps/GKlib
+	url = https://github.com/KarypisLab/GKlib

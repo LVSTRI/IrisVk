@@ -249,7 +249,7 @@ namespace ir {
             descriptor_layout.end(),
             std::back_inserter(descriptor_layout_handles),
             [](const auto& layout) {
-                return layout.as_const_ref().handle();
+                return layout->handle();
             });
 
         auto pipeline_layout_info = VkPipelineLayoutCreateInfo();
@@ -619,7 +619,7 @@ namespace ir {
             descriptor_layout.end(),
             std::back_inserter(descriptor_layout_handles),
             [](const auto& layout) {
-                return layout.as_const_ref().handle();
+                return layout->handle();
             });
 
         auto pipeline_layout_info = VkPipelineLayoutCreateInfo();
@@ -1023,7 +1023,7 @@ namespace ir {
             descriptor_layout.end(),
             std::back_inserter(descriptor_layout_handles),
             [](const auto& layout) {
-                return layout.as_const_ref().handle();
+                return layout->handle();
             });
 
         auto pipeline_layout_info = VkPipelineLayoutCreateInfo();

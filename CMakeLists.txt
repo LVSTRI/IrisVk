@@ -106,6 +106,14 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 target_compile_definitions(ktx PUBLIC KHRONOS_STATIC)
 
+# METIS setup
+add_subdirectory(deps/GKlib)
+add_subdirectory(deps/METIS)
+
+target_compile_definitions(GKlib PUBLIC USE_GKREGEX)
+target_compile_definitions(metis PUBLIC USE_GKREGEX IDXTYPEWIDTH=32 REALTYPEWIDTH=32)
+target_include_directories(metis PUBLIC deps/GKlib)
+
 # meshoptimizer setup
 add_subdirectory(deps/meshoptimizer)
 
@@ -146,6 +154,7 @@ set(IRIS_MAIN_HEADERS
     include/iris/gfx/render_pass.hpp
     include/iris/gfx/sampler.hpp
     include/iris/gfx/semaphore.hpp
+    include/iris/gfx/sparse_page_allocator.hpp
     include/iris/gfx/swapchain.hpp
     include/iris/gfx/texture.hpp
 
@@ -171,6 +180,7 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/render_pass.cpp
     src/iris/gfx/sampler.cpp
     src/iris/gfx/semaphore.cpp
+    src/iris/gfx/sparse_page_allocator.cpp
     src/iris/gfx/swapchain.cpp
     src/iris/gfx/texture.cpp
 
@@ -194,7 +204,7 @@ target_compile_definitions(IrisVk PUBLIC
     # TODO: Make these options
     IRIS_DEBUG_LOGGER
     #IRIS_DEBUG_PROFILER
-    #IRIS_VALIDATION_LAYERS
+    $<$<CONFIG:Debug>:IRIS_VALIDATION_LAYERS>
 
     #VK_ENABLE_BETA_EXTENSIONS
     VK_NO_PROTOTYPES
@@ -231,14 +241,16 @@ target_link_libraries(IrisVk PUBLIC
 target_include_directories(IrisVk PUBLIC
     include
     deps/DLSS/include
-    ${Vulkan_INCLUDE_DIRS})
+    ${Vulkan_INCLUDE_DIRS}
+)
 
 set(IRIS_VECTOR_COMPILER_OPTIONS -march=native)
 if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     target_compile_options(IrisVk PUBLIC
         ${IRIS_VECTOR_COMPILER_OPTIONS}
         -Wall
-        -Wextra)
+        -Wextra
+    )
 endif()
 
 set(IRIS_RENDERER_HEADERS
@@ -262,5 +274,12 @@ add_executable(
     ${IRIS_RENDERER_SOURCES}
 )
 
-target_link_libraries(IrisVkRenderer PRIVATE IrisVk cgltf meshoptimizer)
+target_link_libraries(IrisVkRenderer PRIVATE
+    IrisVk
+    GKlib
+    metis
+    cgltf
+    meshoptimizer
+)
+target_include_directories(IrisVkRenderer PRIVATE deps/METIS/include)
 target_compile_options(IrisVkRenderer PRIVATE ${IRIS_VECTOR_COMPILER_OPTIONS})

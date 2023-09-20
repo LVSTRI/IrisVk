@@ -4,6 +4,7 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <meshoptimizer.h>
+#include <metis.h>
 
 #include <unordered_set>
 #include <filesystem>
@@ -16,6 +17,7 @@
 namespace app {
     static auto is_basisu_texture_valid(const cgltf_texture* texture) noexcept {
         IR_PROFILE_SCOPED();
+        return false;
         if (texture) {
             return
                 texture->basisu_image &&
@@ -33,6 +35,56 @@ namespace app {
         const auto s_path = path.generic_string();
         cgltf_parse_file(&options, s_path.c_str(), &gltf);
         cgltf_load_buffers(&options, gltf, s_path.c_str());
+
+        /*// TEST: graph partitioning
+        {
+            // suppose simplest case: triangle mesh, 3 vertices, 3 edges, 1 face
+            auto indices = std::vector{
+                0_u32,
+                1_u32,
+                2_u32,
+            };
+            auto adjacency = std::vector<int32>(indices.begin(), indices.end());
+            auto offsets = std::vector<int32>();
+            offsets.reserve(indices.size() / 3 + 1);
+            for (auto i = 0_u32; i <= indices.size(); i += 3) {
+                offsets.emplace_back(i);
+            }
+            auto element_count = static_cast<int32>(indices.size()) / 3;
+            auto nodes_count = static_cast<int32>(indices.size());
+            auto n_common = 2;
+            auto n_flag = 0;
+            auto* dual_offsets = static_cast<int32*>(nullptr);
+            auto* dual_adjacency = static_cast<int32*>(nullptr);
+            IR_ASSERT(METIS_MeshToDual(
+                &element_count,
+                &nodes_count,
+                offsets.data(),
+                adjacency.data(),
+                &n_common,
+                &n_flag,
+                &dual_offsets,
+                &dual_adjacency
+            ) == METIS_OK, "METIS_MeshToDual failed");
+            std::printf("%s\n", std::format("[dual] index_size = {}", indices.size()).c_str());
+            std::printf("%s\n", std::format("[dual] max_index = {}", *std::max_element(indices.begin(), indices.end())).c_str());
+            std::printf("%s\n", std::format("[dual] max_element = {}", *std::max_element(dual_adjacency, dual_adjacency + std::max(dual_offsets[element_count - 1] - 1, 0))).c_str());
+            for (auto x = 0_u32; x < element_count; ++x) {
+                auto i0 = dual_offsets[x];
+                auto i1 = dual_offsets[x + 1];
+                for (auto y = i0; y < i1; ++y) {
+                    std::printf("%s\n", std::format("[dual] range: ({}, {}), element [{}] = ({}, {}, {})",
+                        i0,
+                        i1,
+                        y,
+                        indices[dual_adjacency[y] * 3 + 0],
+                        indices[dual_adjacency[y] * 3 + 1],
+                        indices[dual_adjacency[y] * 3 + 2]
+                    ).c_str());
+                }
+            }
+            __debugbreak();
+        }*/
 
         auto texture_cache = ir::akl::fast_hash_map<const cgltf_texture*, uint32>();
         auto textures = std::vector<texture_info_t>();
@@ -98,6 +150,9 @@ namespace app {
                     const auto& buffer_view = *accessor.buffer_view;
                     const auto& buffer = *buffer_view.buffer;
                     const auto& data_ptr = static_cast<const char*>(buffer.data);
+                    if (!data_ptr) {
+                        continue;
+                    }
                     switch (attribute.type) {
                         case cgltf_attribute_type_position:
                             IR_ASSERT(accessor.type == cgltf_type_vec3, "invalid vertex position type");

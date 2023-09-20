@@ -4,6 +4,11 @@
 #define CLUSTER_CLASSIFY_ATOMIC_SLOT 0
 #define VMM_ARGS(scope, storage, semantics) gl_Scope##scope, gl_StorageSemantics##storage, gl_Semantics##semantics
 
+#define VSM_TILE_SIZE_X 128
+#define VSM_TILE_SIZE_Y 128
+#define VSM_RESOLUTION 16384
+#define VSM_PAGE_COUNT (16384 / VSM_TILE_SIZE_X)
+
 struct draw_mesh_tasks_indirect_command_t {
     uint x;
     uint y;

@@ -152,10 +152,10 @@ namespace ir {
 
     auto descriptor_set_builder_t::bind_textures(uint32 binding, const std::vector<arc_ptr<texture_t>>& textures) noexcept -> self& {
         IR_PROFILE_SCOPED();
-        auto infos = std::vector<std::variant<image_info_t, buffer_info_t>>();
+        auto infos = std::vector<descriptor_data>();
         infos.reserve(textures.size());
         for (const auto& texture : textures) {
-            infos.emplace_back(texture.as_const_ref().info());
+            infos.emplace_back(texture->info());
         }
         _binding.bindings.emplace_back(descriptor_content_t {
             .binding = binding,
@@ -200,7 +200,7 @@ namespace ir {
             auto write = VkWriteDescriptorSet();
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             write.pNext = nullptr;
-            write.dstSet = set.as_const_ref().handle();
+            write.dstSet = set->handle();
             write.dstBinding = binding.binding;
             write.dstArrayElement = 0;
             write.descriptorCount = binding.contents.size();
@@ -251,7 +251,7 @@ namespace ir {
             }
             writes.emplace_back(write);
         }
-        IR_LOG_WARN(device.logger(), "descriptor_set_t ({}): cache miss", fmt::ptr(set.as_const_ref().handle()));
+        IR_LOG_WARN(device.logger(), "descriptor_set_t ({}): cache miss", fmt::ptr(set->handle()));
         vkUpdateDescriptorSets(device.handle(), writes.size(), writes.data(), 0, nullptr);
         return set;
     }

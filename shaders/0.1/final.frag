@@ -253,17 +253,17 @@ void main() {
 
     switch (view_mode) {
         case 0: {
-            o_pixel = vec4(s_normal, 1.0);
+            o_pixel = vec4(s_base_color, 1.0);
             break;
         }
 
         case 1: {
-            o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_instance_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
+            o_pixel = vec4(hsv_to_rgb(vec3(float(meshlet_id) * M_GOLDEN_CONJ, 0.75, 0.80)), 1.0);
             break;
         }
 
         case 2: {
-            o_pixel = vec4(hsv_to_rgb(vec3(float(primitive_id) * M_GOLDEN_CONJ, 0.875, 0.85)), 1.0);
+            o_pixel = vec4(hsv_to_rgb(vec3(float(primitive_id) * M_GOLDEN_CONJ, 0.75, 0.80)), 1.0);
             break;
         }
     }

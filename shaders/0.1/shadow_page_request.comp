@@ -1,0 +1,54 @@
+#version 460 core
+#extension GL_EXT_scalar_block_layout : enable
+#extension GL_EXT_buffer_reference : enable
+#extension GL_KHR_shader_subgroup : enable
+//#extension GL_EXT_debug_printf : enable
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_EXT_shader_image_int64 : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "common.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (set = 0, binding = 0) uniform u_camera_block {
+    camera_data_t data;
+} u_camera;
+
+layout (r64ui, set = 0, binding = 1) uniform restrict readonly u64image2D u_visbuffer;
+
+layout (scalar, buffer_reference) restrict readonly buffer b_shadow_block {
+    mat4 pv;
+};
+
+layout (scalar, buffer_reference) restrict readonly buffer b_vsm_page_request_block {
+    uint8_t[] pages;
+};
+
+layout (push_constant) uniform u_pc_block {
+    b_shadow_block shadow_data_ptr;
+    b_vsm_page_request_block vsm_page_req_ptr;
+};
+
+void main() {
+    const ivec2 position = ivec2(gl_GlobalInvocationID.xy);
+    const uvec2 size = imageSize(u_visbuffer);
+    if (any(greaterThanEqual(position, size))) {
+        return;
+    }
+    const uint64_t payload = imageLoad(u_visbuffer, position).x;
+    const uint depth_bits = uint((payload >> 34) & 0x3fffffff);
+    if (depth_bits == 0) {
+        return;
+    }
+    const float depth = uintBitsToFloat(depth_bits);
+    const vec2 uv = (vec2(position) + vec2(0.5)) / vec2(size);
+    vec4 world_position = inverse(u_camera.data.pv) * vec4(uv * 2.0 - 1.0, depth, 1.0);
+    world_position /= world_position.w;
+    const vec4 shadow_uv = shadow_data_ptr.pv * world_position * 0.5 + 0.5;
+    const uint shadow_tile_x = min(uint(shadow_uv.x * VSM_RESOLUTION / VSM_TILE_SIZE_X), VSM_TILE_SIZE_X - 1);
+    const uint shadow_tile_y = min(uint(shadow_uv.y * VSM_RESOLUTION / VSM_TILE_SIZE_Y), VSM_TILE_SIZE_Y - 1);
+    const uint shadow_tile_index = shadow_tile_x + shadow_tile_y * VSM_TILE_SIZE_X;
+    vsm_page_req_ptr.pages[shadow_tile_index] = uint8_t(1);
+}

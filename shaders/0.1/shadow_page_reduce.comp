@@ -1,0 +1,23 @@
+#version 460
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout (r8ui, set = 0, binding = 0) uniform restrict readonly uimage2D u_hzb_previous;
+layout (r8ui, set = 0, binding = 1) uniform restrict writeonly uimage2D u_hzb_current;
+
+void main() {
+    const ivec2 position = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(position, imageSize(u_hzb_current)))) {
+        return;
+    }
+    const vec2 previous_size = vec2(imageSize(u_hzb_previous)) - 1;
+    const vec2 current_size = vec2(imageSize(u_hzb_current)) - 1;
+    const bool[] pages = bool[](
+        bool(imageLoad(u_hzb_previous, ivec2((vec2(position) + vec2(0.0, 0.0)) / current_size * previous_size)).x),
+        bool(imageLoad(u_hzb_previous, ivec2((vec2(position) + vec2(0.0, 1.0)) / current_size * previous_size)).x),
+        bool(imageLoad(u_hzb_previous, ivec2((vec2(position) + vec2(1.0, 0.0)) / current_size * previous_size)).x),
+        bool(imageLoad(u_hzb_previous, ivec2((vec2(position) + vec2(1.0, 1.0)) / current_size * previous_size)).x)
+    );
+    const bool reduced = pages[0] || pages[1] || pages[2] || pages[3];
+    imageStore(u_hzb_current, position, uvec4(reduced));
+}
