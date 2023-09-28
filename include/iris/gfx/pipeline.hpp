@@ -57,6 +57,8 @@ namespace ir {
         depth_state_flag_t depth_flags = {};
         compare_op_t depth_compare_op = compare_op_t::e_less;
         cull_mode_t cull_mode = cull_mode_t::e_none;
+        uint32 width = 0;
+        uint32 height = 0;
         uint32 subpass = 0;
     };
 
@@ -69,6 +71,8 @@ namespace ir {
         depth_state_flag_t depth_flags = {};
         compare_op_t depth_compare_op = compare_op_t::e_less;
         cull_mode_t cull_mode = cull_mode_t::e_none;
+        uint32 width = 0;
+        uint32 height = 0;
         uint32 subpass = 0;
     };
 
@@ -80,8 +84,16 @@ namespace ir {
         ~pipeline_t() noexcept;
 
         IR_NODISCARD static auto make(device_t& device, const compute_pipeline_create_info_t& info) noexcept -> arc_ptr<self>;
-        IR_NODISCARD static auto make(device_t& device, const framebuffer_t& framebuffer, const graphics_pipeline_create_info_t& info) noexcept -> arc_ptr<self>;
-        IR_NODISCARD static auto make(device_t& device, const framebuffer_t& framebuffer, const mesh_shading_pipeline_create_info_t& info) noexcept -> arc_ptr<self>;
+        IR_NODISCARD static auto make(
+            device_t& device,
+            const render_pass_t& render_pass,
+            const graphics_pipeline_create_info_t& info
+        ) noexcept -> arc_ptr<self>;
+        IR_NODISCARD static auto make(
+            device_t& device,
+            const render_pass_t& render_pass,
+            const mesh_shading_pipeline_create_info_t& info
+        ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkPipeline;
         IR_NODISCARD auto layout() const noexcept -> VkPipelineLayout;
@@ -94,7 +106,6 @@ namespace ir {
         IR_NODISCARD auto graphics_info() const noexcept -> const graphics_pipeline_create_info_t&;
         IR_NODISCARD auto mesh_info() const noexcept -> const mesh_shading_pipeline_create_info_t&;
         IR_NODISCARD auto device() noexcept -> device_t&;
-        IR_NODISCARD auto framebuffer() const noexcept -> const framebuffer_t&;
         IR_NODISCARD auto render_pass() const noexcept -> const render_pass_t&;
 
     private:
@@ -108,6 +119,6 @@ namespace ir {
             graphics_pipeline_create_info_t,
             mesh_shading_pipeline_create_info_t> _info = {};
         arc_ptr<device_t> _device;
-        arc_ptr<const framebuffer_t> _framebuffer;
+        arc_ptr<const render_pass_t> _render_pass;
     };
 }

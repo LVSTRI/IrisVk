@@ -21,6 +21,7 @@ namespace ir {
         const command_pool_t& pool,
         const command_buffer_create_info_t& info
     ) noexcept -> arc_ptr<self> {
+        IR_PROFILE_SCOPED();
         auto command_buffer = arc_ptr<self>(new self());
         auto command_buffer_info = VkCommandBufferAllocateInfo();
         command_buffer_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -73,6 +74,7 @@ namespace ir {
     }
 
     auto command_buffer_t::info() const noexcept -> const command_buffer_create_info_t& {
+        IR_PROFILE_SCOPED();
         return _info;
     }
 

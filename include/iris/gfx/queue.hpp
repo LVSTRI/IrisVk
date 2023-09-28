@@ -80,7 +80,7 @@ namespace ir {
 
         auto submit(const queue_submit_info_t& info, const fence_t* fence = nullptr) noexcept -> void;
         auto submit(const std::function<void(command_buffer_t&)>& record) noexcept -> void;
-        auto present(const queue_present_info_t& info) noexcept -> void;
+        auto present(const queue_present_info_t& info) noexcept -> bool;
         auto bind_sparse(const queue_bind_sparse_info_t& info, const fence_t* fence = nullptr) noexcept -> void;
         auto wait_idle() noexcept -> void;
 

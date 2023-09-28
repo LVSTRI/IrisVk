@@ -210,18 +210,21 @@ namespace ir {
         return _wsi.get();
     }
 
-    auto swapchain_t::acquire_next_image(const semaphore_t& semaphore) const noexcept -> uint32 {
+    auto swapchain_t::acquire_next_image(const semaphore_t& semaphore) const noexcept -> std::pair<uint32, bool> {
         IR_PROFILE_SCOPED();
         auto index = uint32();
-        IR_VULKAN_CHECK(
-            device().logger(),
-            vkAcquireNextImageKHR(
-                device().handle(),
-                _handle,
-                -1_u64,
-                semaphore.handle(),
-                nullptr,
-                &index));
-        return index;
+        const auto result = vkAcquireNextImageKHR(device().handle(), _handle, -1_u64, semaphore.handle(), nullptr, &index);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR ||
+            result == VK_ERROR_SURFACE_LOST_KHR ||
+            result == VK_SUBOPTIMAL_KHR
+        ) {
+            return std::make_pair(-1_u32, true);
+        }
+
+        if (result != VK_SUCCESS) {
+            IR_VULKAN_CHECK(device().logger(), result);
+            IR_UNREACHABLE();
+        }
+        return std::make_pair(index, false);
     }
 }

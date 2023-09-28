@@ -8,6 +8,7 @@
 
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/queue.hpp>
+#include <iris/gfx/fence.hpp>
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
@@ -331,7 +332,7 @@ namespace ir {
     template <typename T>
     auto buffer_t<T>::insert(uint64 offset, const T& value) noexcept -> void {
         IR_PROFILE_SCOPED();
-        insert(offset, { &value, 1 });
+        insert(offset * sizeof(T), { &value, 1 });
     }
 
     template <typename T>
@@ -357,7 +358,7 @@ namespace ir {
     template <uint64 N>
     auto buffer_t<T>::insert(uint64 offset, const T(&values)[N]) noexcept -> void {
         IR_PROFILE_SCOPED();
-        insert(offset, std::span<const T>(values));
+        insert(offset * sizeof(T), std::span<const T>(values));
     }
 
     template <typename T>

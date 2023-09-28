@@ -34,7 +34,8 @@ namespace ir {
         IR_NODISCARD static auto make(
             const device_t& device,
             const wsi_platform_t& wsi,
-            const swapchain_create_info_t& info) noexcept -> arc_ptr<self>;
+            const swapchain_create_info_t& info
+        ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkSwapchainKHR;
         IR_NODISCARD auto surface() const noexcept -> VkSurfaceKHR;
@@ -48,7 +49,7 @@ namespace ir {
         IR_NODISCARD auto device() const noexcept -> const device_t&;
         IR_NODISCARD auto wsi() const noexcept -> const wsi_platform_t&;
 
-        IR_NODISCARD auto acquire_next_image(const semaphore_t& semaphore) const noexcept -> uint32;
+        IR_NODISCARD auto acquire_next_image(const semaphore_t& semaphore) const noexcept -> std::pair<uint32, bool>;
 
     private:
         VkSwapchainKHR _handle = {};

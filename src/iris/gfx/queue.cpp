@@ -155,7 +155,7 @@ namespace ir {
         fence->wait();
     }
 
-    auto queue_t::present(const queue_present_info_t& info) noexcept -> void {
+    auto queue_t::present(const queue_present_info_t& info) noexcept -> bool {
         IR_PROFILE_SCOPED();
         auto wait_semaphore_info = std::vector<VkSemaphore>();
         wait_semaphore_info.reserve(info.wait_semaphores.size());
@@ -174,7 +174,18 @@ namespace ir {
         present_info.pImageIndices = &info.image;
         present_info.pResults = nullptr;
         auto guard = std::lock_guard(_lock);
-        IR_VULKAN_CHECK(_device.get().logger(), vkQueuePresentKHR(_handle, &present_info));
+        const auto result = vkQueuePresentKHR(_handle, &present_info);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR ||
+            result == VK_ERROR_SURFACE_LOST_KHR ||
+            result == VK_SUBOPTIMAL_KHR
+        ) {
+            return true;
+        }
+        if (result != VK_SUCCESS) {
+            IR_VULKAN_CHECK(_device.get().logger(), result);
+            IR_UNREACHABLE();
+        }
+        return false;
     }
 
     auto queue_t::bind_sparse(const queue_bind_sparse_info_t& info, const fence_t* fence) noexcept -> void {

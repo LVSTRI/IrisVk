@@ -48,7 +48,8 @@ namespace ir {
 
         IR_NODISCARD static auto make(
             const instance_t& instance,
-            const device_create_info_t& info = {}) noexcept -> arc_ptr<self>;
+            const device_create_info_t& info = {}
+        ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkDevice;
         IR_NODISCARD auto gpu() const noexcept -> VkPhysicalDevice;

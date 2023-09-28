@@ -97,6 +97,11 @@ namespace ir {
         glfwPollEvents();
     }
 
+    auto wsi_platform_t::wait_events() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        glfwWaitEvents();
+    }
+
     auto wsi_platform_t::should_close() const noexcept -> bool {
         IR_PROFILE_SCOPED();
         return glfwWindowShouldClose(reinterpret_cast<GLFWwindow*>(_window_handle));
@@ -114,6 +119,16 @@ namespace ir {
         glfwSetInputMode(reinterpret_cast<GLFWwindow*>(_window_handle), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         _input.reset_cursor();
         _is_cursor_captured = false;
+    }
+
+    auto wsi_platform_t::update_viewport() noexcept -> std::pair<uint32, uint32> {
+        IR_PROFILE_SCOPED();
+        auto width = 0_i32;
+        auto height = 0_i32;
+        glfwGetFramebufferSize(reinterpret_cast<GLFWwindow*>(_window_handle), &width, &height);
+        _width = static_cast<uint32>(width);
+        _height = static_cast<uint32>(height);
+        return { _width, _height };
     }
 
     auto wsi_platform_t::context_extensions() noexcept -> std::vector<const char*> {

@@ -26,6 +26,7 @@ namespace ir {
         IR_NODISCARD static auto make(uint32 width, uint32 height, std::string_view title) noexcept -> self;
 
         static auto poll_events() noexcept -> void;
+        static auto wait_events() noexcept -> void;
         IR_NODISCARD static auto context_extensions() noexcept -> std::vector<const char*>;
 
         IR_NODISCARD auto window_handle() const noexcept -> platform_window_handle;
@@ -42,6 +43,8 @@ namespace ir {
 
         auto capture_cursor() noexcept -> void;
         auto release_cursor() noexcept -> void;
+
+        auto update_viewport() noexcept -> std::pair<uint32, uint32>;
 
         IR_NODISCARD auto make_surface(gfx_api_object_handle instance) const noexcept -> gfx_api_object_handle;
 

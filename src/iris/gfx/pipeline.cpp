@@ -286,7 +286,7 @@ namespace ir {
 
     auto pipeline_t::make(
         device_t& device,
-        const framebuffer_t& framebuffer,
+        const render_pass_t& render_pass,
         const graphics_pipeline_create_info_t& info
     ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
@@ -488,8 +488,8 @@ namespace ir {
         auto viewport = VkViewport();
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = static_cast<float32>(framebuffer.width());
-        viewport.height = static_cast<float32>(framebuffer.height());
+        viewport.width = static_cast<float32>(info.width);
+        viewport.height = static_cast<float32>(info.height);
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
 
@@ -648,7 +648,7 @@ namespace ir {
         pipeline_info.pColorBlendState = &color_blend_info;
         pipeline_info.pDynamicState = &dynamic_state_info;
         pipeline_info.layout = pipeline->_layout;
-        pipeline_info.renderPass = framebuffer.render_pass().handle();
+        pipeline_info.renderPass = render_pass.handle();
         pipeline_info.subpass = info.subpass;
         pipeline_info.basePipelineHandle = nullptr;
         pipeline_info.basePipelineIndex = 0;
@@ -667,13 +667,13 @@ namespace ir {
         pipeline->_type = pipeline_type_t::e_graphics;
         pipeline->_info = info;
         pipeline->_device = device.as_intrusive_ptr();
-        pipeline->_framebuffer = framebuffer.as_intrusive_ptr();
+        pipeline->_render_pass = render_pass.as_intrusive_ptr();
         return pipeline;
     }
 
     auto pipeline_t::make(
         device_t& device,
-        const framebuffer_t& framebuffer,
+        const render_pass_t& render_pass,
         const mesh_shading_pipeline_create_info_t& info
     ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
@@ -892,8 +892,8 @@ namespace ir {
         auto viewport = VkViewport();
         viewport.x = 0.0f;
         viewport.y = 0.0f;
-        viewport.width = static_cast<float32>(framebuffer.width());
-        viewport.height = static_cast<float32>(framebuffer.height());
+        viewport.width = static_cast<float32>(info.width);
+        viewport.height = static_cast<float32>(info.height);
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
 
@@ -1052,7 +1052,7 @@ namespace ir {
         pipeline_info.pColorBlendState = &color_blend_info;
         pipeline_info.pDynamicState = &dynamic_state_info;
         pipeline_info.layout = pipeline->_layout;
-        pipeline_info.renderPass = framebuffer.render_pass().handle();
+        pipeline_info.renderPass = render_pass.handle();
         pipeline_info.subpass = info.subpass;
         pipeline_info.basePipelineHandle = {};
         pipeline_info.basePipelineIndex = 0;
@@ -1071,7 +1071,7 @@ namespace ir {
         pipeline->_type = pipeline_type_t::e_graphics;
         pipeline->_info = info;
         pipeline->_device = device.as_intrusive_ptr();
-        pipeline->_framebuffer = framebuffer.as_intrusive_ptr();
+        pipeline->_render_pass = render_pass.as_intrusive_ptr();
         return pipeline;
     }
 
@@ -1125,13 +1125,8 @@ namespace ir {
         return *_device;
     }
 
-    auto pipeline_t::framebuffer() const noexcept -> const framebuffer_t& {
-        IR_PROFILE_SCOPED();
-        return *_framebuffer;
-    }
-
     auto pipeline_t::render_pass() const noexcept -> const render_pass_t& {
         IR_PROFILE_SCOPED();
-        return framebuffer().render_pass();
+        return *_render_pass;
     }
 }
