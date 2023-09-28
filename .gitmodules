@@ -1,0 +1,9 @@
+[submodule "deps/IrisVk"]
+	path = deps/IrisVk
+	url = https://github.com/LVSTRI/IrisVk
+[submodule "deps/meshoptimizer"]
+	path = deps/meshoptimizer
+	url = https://github.com/zeux/meshoptimizer
+[submodule "deps/cgltf"]
+	path = deps/cgltf
+	url = https://github.com/jkuhlmann/cgltf

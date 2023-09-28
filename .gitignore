@@ -1,0 +1,10 @@
+.idea
+.idea/*
+.vs
+.vs/*
+
+cmake-*
+cmake-*/*
+
+models
+models/*
