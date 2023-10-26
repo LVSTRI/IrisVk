@@ -21,20 +21,19 @@ namespace ir {
     ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         auto layout = arc_ptr<self>(new self(std::ref(device)));
-        auto bindings_info = std::vector<VkDescriptorSetLayoutBinding>();
-        bindings_info.reserve(bindings.size());
+        auto bindings_info = std::vector<VkDescriptorSetLayoutBinding>(bindings.size());
         for (const auto& binding : bindings) {
-            bindings_info.push_back(VkDescriptorSetLayoutBinding {
+            bindings_info[binding.binding] = VkDescriptorSetLayoutBinding {
                 .binding = binding.binding,
                 .descriptorType = as_enum_counterpart(binding.type),
                 .descriptorCount = binding.count,
                 .stageFlags = static_cast<VkShaderStageFlags>(
                     as_enum_counterpart(binding.stage)),
                 .pImmutableSamplers = nullptr
-            });
+            };
         }
 
-        auto binding_flags = std::vector<VkDescriptorBindingFlags>();
+        auto binding_flags = std::vector<VkDescriptorBindingFlags>(bindings.size());
         binding_flags.reserve(bindings.size());
         for (const auto& binding : bindings) {
             auto flags = VkDescriptorBindingFlagBits();
@@ -44,7 +43,7 @@ namespace ir {
                     VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
                     VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
             }
-            binding_flags.emplace_back(flags);
+            binding_flags[binding.binding] = flags;
         }
 
         auto binding_flags_info = VkDescriptorSetLayoutBindingFlagsCreateInfo();

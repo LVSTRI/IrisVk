@@ -78,6 +78,14 @@ namespace ir {
         extent_3d_t extent = ignored_extent_3d;
     };
 
+    struct image_blit_t {
+        std::array<offset_3d_t, 2> source_offset = { ignored_offset_3d, ignored_offset_3d };
+        std::array<offset_3d_t, 2> dest_offset = { ignored_offset_3d, ignored_offset_3d };
+        image_subresource_t source_subresource = {};
+        image_subresource_t dest_subresource = {};
+        sampler_filter_t filter = sampler_filter_t::e_nearest;
+    };
+
     struct buffer_copy_t {
         uint32 source_offset = 0;
         uint32 dest_offset = 0;
@@ -141,6 +149,7 @@ namespace ir {
         auto dispatch_indirect(const buffer_info_t& buffer) const noexcept -> void;
         auto fill_buffer(const buffer_info_t& buffer, uint32 data) const noexcept -> void;
         auto clear_image(const image_t& image, const clear_value_t& clear, const image_subresource_t& subresource) const noexcept -> void;
+        auto blit_image(const image_t& source, const image_t& dest, const image_blit_t& blit) const noexcept -> void;
         auto copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void;
         auto copy_buffer(const buffer_info_t& source, const buffer_info_t& dest, const buffer_copy_t& copy) const noexcept -> void;
         auto copy_buffer_to_image(const buffer_info_t& source, const image_t& dest, const image_subresource_t& subresource) const noexcept -> void;

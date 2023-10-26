@@ -40,6 +40,14 @@ namespace ir {
             typename A = std::allocator<std::pair<K, T>>,
             typename B = bucket_type::standard>
         using fast_hash_map = map<K, T, H, E, A, B>;
+
+        template <
+            typename K,
+            typename H = hash<K>,
+            typename E = std::equal_to<K>,
+            typename A = std::allocator<K>,
+            typename B = bucket_type::standard>
+        using fast_hash_set = set<K, H, E, A, B>;
     }
 
     inline namespace literals {

@@ -100,7 +100,7 @@ namespace ir {
 
         // potentially destructive
         auto resize(uint64 size) noexcept -> void;
-        // destructive
+        // potentially destructive
         auto reserve(uint64 capacity) noexcept -> void;
         auto clear() noexcept -> void;
 
@@ -332,7 +332,7 @@ namespace ir {
     template <typename T>
     auto buffer_t<T>::insert(uint64 offset, const T& value) noexcept -> void {
         IR_PROFILE_SCOPED();
-        insert(offset * sizeof(T), { &value, 1 });
+        insert(offset, { &value, 1 });
     }
 
     template <typename T>
@@ -358,7 +358,7 @@ namespace ir {
     template <uint64 N>
     auto buffer_t<T>::insert(uint64 offset, const T(&values)[N]) noexcept -> void {
         IR_PROFILE_SCOPED();
-        insert(offset * sizeof(T), std::span<const T>(values));
+        insert(offset, std::span<const T>(values));
     }
 
     template <typename T>

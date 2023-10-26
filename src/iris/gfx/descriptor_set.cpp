@@ -165,6 +165,22 @@ namespace ir {
         return *this;
     }
 
+    auto descriptor_set_builder_t::bind_sampled_image(uint32 binding, const image_view_t& view, image_layout_t layout) noexcept -> self& {
+        IR_PROFILE_SCOPED();
+        _binding.bindings.emplace_back(descriptor_content_t {
+            .binding = binding,
+            .type = descriptor_type_t::e_sampled_image,
+            .contents = {
+                image_info_t {
+                    .sampler = {},
+                    .view = view.handle(),
+                    .layout = layout,
+                },
+            }
+        });
+        return *this;
+    }
+
     auto descriptor_set_builder_t::bind_combined_image_sampler(uint32 binding, const image_view_t& view, const sampler_t& sampler) noexcept -> self& {
         IR_PROFILE_SCOPED();
         _binding.bindings.emplace_back(descriptor_content_t {

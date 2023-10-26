@@ -50,6 +50,7 @@ namespace ir {
     struct graphics_pipeline_create_info_t {
         fs::path vertex;
         fs::path fragment;
+        sample_count_t sample_count = sample_count_t::e_1;
         primitive_topology_t primitive_type = primitive_topology_t::e_triangle_list;
         std::vector<attachment_blend_t> blend;
         std::vector<dynamic_state_t> dynamic_states;
@@ -66,6 +67,7 @@ namespace ir {
         fs::path task;
         fs::path mesh;
         fs::path fragment;
+        sample_count_t sample_count = sample_count_t::e_1;
         std::vector<attachment_blend_t> blend;
         std::vector<dynamic_state_t> dynamic_states;
         depth_state_flag_t depth_flags = {};

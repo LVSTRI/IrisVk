@@ -128,8 +128,9 @@ namespace ir {
         }
         auto options = shc::CompileOptions();
         options.SetGenerateDebugInfo();
-        //options.SetOptimizationLevel(shaderc_optimization_level_performance);
+        options.SetOptimizationLevel(shaderc_optimization_level_performance);
         options.SetSourceLanguage(shaderc_source_language_glsl);
+        options.SetForcedVersionProfile(460, shaderc_profile_core);
         options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
         options.SetTargetSpirv(shaderc_spirv_version_1_6);
         options.SetIncluder(std::make_unique<shader_includer_t>(std::move(include_path)));
@@ -197,6 +198,18 @@ namespace ir {
             descriptor_type_t::e_combined_image_sampler,
             shader_stage_t::e_compute,
             desc_bindings);
+        process_resource(
+            compiler,
+            resources.separate_images,
+            descriptor_type_t::e_sampled_image,
+            shader_stage_t::e_compute,
+            desc_bindings);
+        process_resource(
+            compiler,
+            resources.separate_samplers,
+            descriptor_type_t::e_sampler,
+            shader_stage_t::e_compute,
+            desc_bindings);
 
         if (!resources.push_constant_buffers.empty()) {
             const auto& pc = resources.push_constant_buffers.front();
@@ -214,15 +227,10 @@ namespace ir {
             auto& cache = device.cache<descriptor_layout_t>();
             for (const auto& [set, layout] : desc_bindings) {
                 const auto& pair_bindings = layout.values();
-                auto bindings = std::vector<descriptor_binding_t>();
-                bindings.reserve(pair_bindings.size());
-                std::transform(
-                    pair_bindings.begin(),
-                    pair_bindings.end(),
-                    std::back_inserter(bindings),
-                    [](const auto& pair) {
-                        return pair.second;
-                    });
+                auto bindings = std::vector<descriptor_binding_t>(pair_bindings.size());
+                for (const auto& [binding, desc] : pair_bindings) {
+                    bindings[binding] = desc;
+                }
                 if (set >= descriptor_layout.size()) {
                     descriptor_layout.resize(set + 1);
                 }
@@ -339,6 +347,18 @@ namespace ir {
                 descriptor_type_t::e_combined_image_sampler,
                 shader_stage_t::e_vertex,
                 desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_images,
+                descriptor_type_t::e_sampled_image,
+                shader_stage_t::e_vertex,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_samplers,
+                descriptor_type_t::e_sampler,
+                shader_stage_t::e_vertex,
+                desc_bindings);
 
             if (!resources.push_constant_buffers.empty()) {
                 const auto& pc = resources.push_constant_buffers.front();
@@ -392,6 +412,18 @@ namespace ir {
                 compiler,
                 resources.sampled_images,
                 descriptor_type_t::e_combined_image_sampler,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_images,
+                descriptor_type_t::e_sampled_image,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_samplers,
+                descriptor_type_t::e_sampler,
                 shader_stage_t::e_fragment,
                 desc_bindings);
 
@@ -529,9 +561,9 @@ namespace ir {
         multisample_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisample_info.pNext = nullptr;
         multisample_info.flags = 0;
-        multisample_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisample_info.rasterizationSamples = as_enum_counterpart(info.sample_count);
         multisample_info.sampleShadingEnable = true;
-        multisample_info.minSampleShading = 0.2f;
+        multisample_info.minSampleShading = 1.0f;
         multisample_info.pSampleMask = nullptr;
         multisample_info.alphaToCoverageEnable = false;
         multisample_info.alphaToOneEnable = false;
@@ -727,6 +759,18 @@ namespace ir {
                 descriptor_type_t::e_combined_image_sampler,
                 shader_stage_t::e_task,
                 desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_images,
+                descriptor_type_t::e_sampled_image,
+                shader_stage_t::e_task,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_samplers,
+                descriptor_type_t::e_sampler,
+                shader_stage_t::e_task,
+                desc_bindings);
 
             if (!resources.push_constant_buffers.empty()) {
                 const auto& pc = resources.push_constant_buffers.front();
@@ -778,6 +822,18 @@ namespace ir {
                 compiler,
                 resources.sampled_images,
                 descriptor_type_t::e_combined_image_sampler,
+                shader_stage_t::e_mesh,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_images,
+                descriptor_type_t::e_sampled_image,
+                shader_stage_t::e_mesh,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_samplers,
+                descriptor_type_t::e_sampler,
                 shader_stage_t::e_mesh,
                 desc_bindings);
 
@@ -839,6 +895,18 @@ namespace ir {
                 compiler,
                 resources.sampled_images,
                 descriptor_type_t::e_combined_image_sampler,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_images,
+                descriptor_type_t::e_sampled_image,
+                shader_stage_t::e_fragment,
+                desc_bindings);
+            process_resource(
+                compiler,
+                resources.separate_samplers,
+                descriptor_type_t::e_sampler,
                 shader_stage_t::e_fragment,
                 desc_bindings);
 
@@ -933,9 +1001,9 @@ namespace ir {
         multisample_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisample_info.pNext = nullptr;
         multisample_info.flags = 0;
-        multisample_info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisample_info.rasterizationSamples = as_enum_counterpart(info.sample_count);
         multisample_info.sampleShadingEnable = true;
-        multisample_info.minSampleShading = 0.2f;
+        multisample_info.minSampleShading = 1.0f;
         multisample_info.pSampleMask = nullptr;
         multisample_info.alphaToCoverageEnable = false;
         multisample_info.alphaToOneEnable = false;

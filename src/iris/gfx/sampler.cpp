@@ -74,5 +74,6 @@ namespace ir {
 
     auto sampler_t::device() const noexcept -> device_t& {
         IR_PROFILE_SCOPED();
-        return _device.get();    }
+        return _device.get();
+    }
 }

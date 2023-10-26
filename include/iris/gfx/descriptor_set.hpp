@@ -94,6 +94,11 @@ namespace ir {
         auto bind_storage_image(uint32 binding, const image_view_t& view) noexcept -> self&;
         auto bind_texture(uint32 binding, const texture_t& texture) noexcept -> self&;
         auto bind_textures(uint32 binding, const std::vector<arc_ptr<texture_t>>& textures) noexcept -> self&;
+        auto bind_sampled_image(
+            uint32 binding,
+            const image_view_t& view,
+            image_layout_t layout = image_layout_t::e_shader_read_only_optimal
+        ) noexcept -> self&;
         auto bind_combined_image_sampler(uint32 binding, const image_view_t& view, const sampler_t& sampler) noexcept -> self&;
 
         auto build() const noexcept -> arc_ptr<descriptor_set_t>;

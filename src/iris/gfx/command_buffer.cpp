@@ -306,6 +306,80 @@ namespace ir {
             &subresource_range);
     }
 
+    auto command_buffer_t::blit_image(const image_t& source, const image_t& dest, const image_blit_t& blit) const noexcept -> void {
+        auto blit_region = VkImageBlit();
+        blit_region.srcSubresource.aspectMask = as_enum_counterpart(source.view().aspect());
+        if (blit.source_subresource.level != level_ignored) {
+            blit_region.srcSubresource.mipLevel = blit.source_subresource.level;
+        }
+        if (blit.source_subresource.layer != layer_ignored) {
+            blit_region.srcSubresource.baseArrayLayer = blit.source_subresource.layer;
+            blit_region.srcSubresource.layerCount = blit.source_subresource.layer_count;
+        } else {
+            blit_region.srcSubresource.baseArrayLayer = 0;
+            blit_region.srcSubresource.layerCount = source.layers();
+        }
+
+        blit_region.dstSubresource.aspectMask = as_enum_counterpart(dest.view().aspect());
+        if (blit.dest_subresource.level != level_ignored) {
+            blit_region.dstSubresource.mipLevel = blit.dest_subresource.level;
+        }
+        if (blit.dest_subresource.layer != layer_ignored) {
+            blit_region.dstSubresource.baseArrayLayer = blit.dest_subresource.layer;
+            blit_region.dstSubresource.layerCount = blit.dest_subresource.layer_count;
+        } else {
+            blit_region.dstSubresource.baseArrayLayer = 0;
+            blit_region.dstSubresource.layerCount = dest.layers();
+        }
+
+        for (auto i = 0_u32; i < 2; ++i) {
+            if (blit.source_offset[i] == ignored_offset_3d) {
+                if (i == 0) {
+                    blit_region.srcOffsets[i] = { 0, 0, 0 };
+                } else {
+                    blit_region.srcOffsets[i] = {
+                        static_cast<int32>(source.width()),
+                        static_cast<int32>(source.height()),
+                        1
+                    };
+                }
+            } else {
+                blit_region.srcOffsets[i] = {
+                    blit.source_offset[i].x,
+                    blit.source_offset[i].y,
+                    blit.source_offset[i].z
+                };
+            }
+            if (blit.dest_offset[i] == ignored_offset_3d) {
+                if (i == 0) {
+                    blit_region.dstOffsets[i] = { 0, 0, 0 };
+                } else {
+                    blit_region.dstOffsets[i] = {
+                        static_cast<int32>(dest.width()),
+                        static_cast<int32>(dest.height()),
+                        1
+                    };
+                }
+            } else {
+                blit_region.dstOffsets[i] = {
+                    blit.dest_offset[i].x,
+                    blit.dest_offset[i].y,
+                    blit.dest_offset[i].z
+                };
+            }
+        }
+
+        vkCmdBlitImage(
+            _handle,
+            source.handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            dest.handle(),
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &blit_region,
+            as_enum_counterpart(blit.filter));
+    }
+
     auto command_buffer_t::copy_image(const image_t& source, const image_t& dest, const image_copy_t& copy) const noexcept -> void {
         IR_PROFILE_SCOPED();
         auto copy_region = VkImageCopy();
@@ -414,8 +488,8 @@ namespace ir {
         }
         copy.imageOffset = { 0, 0, 0 };
         copy.imageExtent = {
-            std::max(dest.width() >> subresource.level, 1_u32),
-            std::max(dest.height() >> subresource.level, 1_u32),
+            std::max(dest.width() >> copy.imageSubresource.mipLevel, 1_u32),
+            std::max(dest.height() >> copy.imageSubresource.mipLevel, 1_u32),
             // TODO
             1
         };

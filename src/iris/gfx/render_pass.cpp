@@ -110,6 +110,7 @@ namespace ir {
             dependency_description.pNext = &memory_barriers.emplace_back(memory_barrier);
             dependency_description.srcSubpass = dependency.source;
             dependency_description.dstSubpass = dependency.dest;
+            dependency_description.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
             dependencies.emplace_back(dependency_description);
         }
 
