@@ -139,6 +139,8 @@ set(IRIS_MAIN_HEADERS
 
     include/iris/wsi/input.hpp
     include/iris/wsi/wsi_platform.hpp
+
+    include/iris/iris.hpp
 )
 
 set(IRIS_MAIN_SOURCES
