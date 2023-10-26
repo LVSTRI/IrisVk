@@ -97,14 +97,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 target_compile_definitions(ktx PUBLIC KHRONOS_STATIC)
 
-# METIS setup
-add_subdirectory(deps/GKlib)
-add_subdirectory(deps/METIS)
-
-target_compile_definitions(GKlib PUBLIC USE_GKREGEX)
-target_compile_definitions(metis PUBLIC USE_GKREGEX IDXTYPEWIDTH=32 REALTYPEWIDTH=32)
-target_include_directories(metis PUBLIC deps/GKlib)
-
 # unordered_dense setup
 add_subdirectory(deps/unordered_dense)
 
