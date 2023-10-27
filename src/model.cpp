@@ -35,19 +35,26 @@ namespace test {
         cgltf_parse_file(&options, s_path.c_str(), &gltf);
         cgltf_load_buffers(&options, gltf, s_path.c_str());
 
-        auto texture_cache = ir::akl::fast_hash_map<const cgltf_texture*, uint32>();
+        auto material_cache = ir::akl::fast_hash_map<const cgltf_material*, uint32> {
+            { nullptr, -1 }
+        };
+        auto texture_cache = ir::akl::fast_hash_map<const cgltf_texture*, uint32> {
+            { nullptr, -1 }
+        };
+        auto materials = std::vector<material_t>();
         auto textures = std::vector<texture_info_t>();
-        /*for (auto i = 0_u32; i < gltf->materials_count; ++i) {
+        for (auto i = 0_u32; i < gltf->materials_count; ++i) {
             const auto& material = gltf->materials[i];
+            auto c_material = material_t();
             if (is_basisu_texture_valid(material.pbr_metallic_roughness.base_color_texture.texture)) {
                 const auto& texture = *material.pbr_metallic_roughness.base_color_texture.texture;
-                const auto& image = *texture.basisu_image;
-                const auto& buffer_view = *image.buffer_view;
-                const auto& buffer = *buffer_view.buffer;
-                const auto* data = reinterpret_cast<const uint8*>(buffer.data) + buffer_view.offset;
-                auto raw = std::vector<uint8>(buffer_view.size);
-                std::memcpy(raw.data(), data, raw.size());
                 if (!texture_cache.contains(&texture)) {
+                    const auto& image = *texture.basisu_image;
+                    const auto& buffer_view = *image.buffer_view;
+                    const auto& buffer = *buffer_view.buffer;
+                    const auto* data = reinterpret_cast<const uint8*>(buffer.data) + buffer_view.offset;
+                    auto raw = std::vector<uint8>(buffer_view.size);
+                    std::memcpy(raw.data(), data, raw.size());
                     texture_cache[&texture] = textures.size();
                     textures.push_back({
                         .id = static_cast<uint32>(textures.size()),
@@ -55,16 +62,17 @@ namespace test {
                         .data = std::move(raw)
                     });
                 }
+                c_material.base_color_texture = texture_cache[&texture];
             }
             if (is_basisu_texture_valid(material.normal_texture.texture)) {
                 const auto& texture = *material.normal_texture.texture;
-                const auto& image = *texture.basisu_image;
-                const auto& buffer_view = *image.buffer_view;
-                const auto& buffer = *buffer_view.buffer;
-                const auto* data = reinterpret_cast<const uint8*>(buffer.data) + buffer_view.offset;
-                auto raw = std::vector<uint8>(buffer_view.size);
-                std::memcpy(raw.data(), data, raw.size());
                 if (!texture_cache.contains(&texture)) {
+                    const auto& image = *texture.basisu_image;
+                    const auto& buffer_view = *image.buffer_view;
+                    const auto& buffer = *buffer_view.buffer;
+                    const auto* data = reinterpret_cast<const uint8*>(buffer.data) + buffer_view.offset;
+                    auto raw = std::vector<uint8>(buffer_view.size);
+                    std::memcpy(raw.data(), data, raw.size());
                     texture_cache[&texture] = textures.size();
                     textures.push_back({
                         .id = static_cast<uint32>(textures.size()),
@@ -72,8 +80,14 @@ namespace test {
                         .data = std::move(raw)
                     });
                 }
+                c_material.normal_texture = texture_cache[&texture];
             }
-        }*/
+            c_material.base_color_factor = glm::make_vec3(material.pbr_metallic_roughness.base_color_factor);
+            if (!material_cache.contains(&material)) {
+                material_cache[&material] = materials.size();
+                materials.push_back(c_material);
+            }
+        }
 
         auto meshlet_id = 0_u32;
         auto vertex_offset = 0_u32;
@@ -261,26 +275,6 @@ namespace test {
                                 aabb.max = glm::max(aabb.max, vertex.position);
                             }
                             meshlet.aabb = aabb;
-
-                            if (primitive.material) {
-                                const auto& material = *primitive.material;
-                                {
-                                    const auto* base_color_texture = material.pbr_metallic_roughness.base_color_texture.texture;
-                                    if (is_basisu_texture_valid(base_color_texture)) {
-                                        if (texture_cache.contains(base_color_texture)) {
-                                            // TODO
-                                        }
-                                    }
-                                }
-                                {
-                                    const auto* normal_texture = material.normal_texture.texture;
-                                    if (is_basisu_texture_valid(normal_texture)) {
-                                        if (texture_cache.contains(normal_texture)) {
-                                            // TODO
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                     vertex_offset += optimized_vertices.size();
@@ -311,7 +305,8 @@ namespace test {
                 for (const auto& each : meshlet_cache[primitive]) {
                     meshlet_instances.push_back({
                         each.id,
-                        static_cast<uint32>(transform_id)
+                        static_cast<uint32>(transform_id),
+                        static_cast<uint32>(material_cache[primitive->material])
                     });
                 }
                 model._transforms.emplace_back(transform);
@@ -319,6 +314,7 @@ namespace test {
         }
         model._meshlet_instances = std::move(meshlet_instances);
         model._textures = std::move(textures);
+        model._materials = std::move(materials);
         return model;
     }
 
@@ -350,6 +346,11 @@ namespace test {
     auto meshlet_model_t::transforms() const noexcept -> std::span<const glm::mat4> {
         IR_PROFILE_SCOPED();
         return _transforms;
+    }
+
+    auto meshlet_model_t::materials() const noexcept -> std::span<const material_t> {
+        IR_PROFILE_SCOPED();
+        return _materials;
     }
 
     auto meshlet_model_t::textures() const noexcept -> std::span<const texture_info_t> {

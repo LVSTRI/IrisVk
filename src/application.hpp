@@ -16,28 +16,36 @@
 #include <iris/gfx/buffer.hpp>
 #include <iris/gfx/semaphore.hpp>
 #include <iris/gfx/fence.hpp>
+#include <iris/gfx/texture.hpp>
 
 #include <iris/wsi/wsi_platform.hpp>
 
 #include <vector>
 #include <chrono>
 
+#define IRIS_MAX_DIRECTIONAL_LIGHTS 4
+
 namespace test {
     struct view_t {
-        glm::mat4 projection;
-        glm::mat4 inv_projection;
-        glm::mat4 view;
-        glm::mat4 inv_view;
-        glm::mat4 proj_view;
-        glm::mat4 inv_proj_view;
-        glm::vec4 eye_position;
-        glm::vec4 frustum[6];
-        glm::vec2 resolution;
+        glm::mat4 projection = {};
+        glm::mat4 inv_projection = {};
+        glm::mat4 view = {};
+        glm::mat4 inv_view = {};
+        glm::mat4 proj_view = {};
+        glm::mat4 inv_proj_view = {};
+        glm::vec4 eye_position = {};
+        glm::vec4 frustum[6] = {};
+        glm::vec2 resolution = {};
     };
 
     struct transform_t {
-        glm::mat4 model;
-        glm::mat4 prev_model;
+        glm::mat4 model = {};
+        glm::mat4 prev_model = {};
+    };
+
+    struct directional_light_t {
+        glm::vec3 direction = {};
+        float32 intensity = 0.0f;
     };
 
     class application_t {
@@ -94,7 +102,8 @@ namespace test {
         struct {
             std::vector<ir::arc_ptr<ir::buffer_t<view_t>>> views;
             std::vector<ir::arc_ptr<ir::buffer_t<transform_t>>> transforms;
-            std::vector<ir::arc_ptr<ir::buffer_t<uint64>>> addresses;
+            std::vector<ir::arc_ptr<ir::buffer_t<material_t>>> materials;
+            std::vector<ir::arc_ptr<ir::buffer_t<directional_light_t>>> directional_lights;
             ir::arc_ptr<ir::buffer_t<base_meshlet_t>> meshlets;
             ir::arc_ptr<ir::buffer_t<meshlet_instance_t>> meshlet_instances;
             ir::arc_ptr<ir::buffer_t<meshlet_vertex_format_t>> vertices;
@@ -102,6 +111,11 @@ namespace test {
             ir::arc_ptr<ir::buffer_t<uint8>> primitives;
             ir::arc_ptr<ir::buffer_t<uint64>> atomics;
         } _buffer;
+
+        struct scene_t {
+            std::vector<ir::arc_ptr<ir::texture_t>> textures;
+            std::vector<material_t> materials;
+        } _scene;
 
         camera_t _camera;
 

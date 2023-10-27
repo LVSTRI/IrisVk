@@ -11,49 +11,44 @@
 #define IRIS_GLSL_SHADOW_VIEW_START_INDEX 1
 #define IRIS_GLSL_SHADOW_VIEW_END_INDEX (IRIS_GLSL_MAX_SHADOW_VIEWS + IRIS_GLSL_SHADOW_VIEW_START_INDEX)
 
-#define IRIS_GLSL_VIEW_BUFFER_SLOT 0
-#define IRIS_GLSL_MESHLET_INSTANCE_BUFFER_SLOT 1
-#define IRIS_GLSL_MESHLET_BUFFER_SLOT 2
-#define IRIS_GLSL_TRANSFORM_BUFFER_SLOT 3
-#define IRIS_GLSL_VERTEX_BUFFER_SLOT 4
-#define IRIS_GLSL_INDEX_BUFFER_SLOT 5
-#define IRIS_GLSL_PRIMITIVE_BUFFER_SLOT 6
-#define IRIS_GLSL_ATOMIC_BUFFER_SLOT 7
+layout (scalar, buffer_reference) restrict buffer b_view_block {
+    view_t[] data;
+};
 
-#define IRIS_GLSL_VIEW_BUFFER_BLOCK(name) name { \
-    view_t[] data;                               \
-}
+layout (scalar, buffer_reference) restrict buffer b_meshlet_instance_block {
+    meshlet_instance_t[] data;
+};
 
-#define IRIS_GLSL_MESHLET_INSTANCE_BUFFER_BLOCK(name) name { \
-    meshlet_instance_t[] data;                               \
-}
+layout (scalar, buffer_reference) restrict buffer b_meshlet_block {
+    meshlet_t[] data;
+};
 
-#define IRIS_GLSL_MESHLET_BUFFER_BLOCK(name) name { \
-    meshlet_t[] data;                               \
-}
+layout (scalar, buffer_reference) restrict buffer b_transform_block {
+    transform_t[] data;
+};
 
-#define IRIS_GLSL_TRANSFORM_BUFFER_BLOCK(name) name { \
-    transform_t[] data;                               \
-}
+layout (scalar, buffer_reference) restrict buffer b_vertex_block {
+    vertex_format_t[] data;
+};
 
-#define IRIS_GLSL_VERTEX_BUFFER_BLOCK(name) name { \
-    vertex_format_t[] data;                        \
-}
+layout (scalar, buffer_reference) restrict buffer b_index_block {
+    uint[] data;
+};
 
-#define IRIS_GLSL_INDEX_BUFFER_BLOCK(name) name { \
-    uint[] data;                                  \
-}
+layout (scalar, buffer_reference) restrict buffer b_primitive_block {
+    uint8_t[] data;
+};
 
-#define IRIS_GLSL_PRIMITIVE_BUFFER_BLOCK(name) name { \
-    uint8_t[] data;                                   \
-}
+layout (scalar, buffer_reference) restrict buffer b_atomic_block {
+    uint[] data;
+};
 
-#define IRIS_GLSL_ADDRESS_BUFFER_BLOCK(name) name { \
-    uint64_t[] data;                                \
-}
+layout (scalar, buffer_reference) restrict buffer b_material_block {
+    material_t[] data;
+};
 
-#define IRIS_GLSL_ATOMIC_BUFFER_BLOCK(name) name { \
-    uint[] data;                                   \
-}
+layout (scalar, buffer_reference) restrict buffer b_directional_light_block {
+    directional_light_t[] data;
+};
 
 #endif

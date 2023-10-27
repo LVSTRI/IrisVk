@@ -8,7 +8,6 @@
 #extension GL_EXT_shader_explicit_arithmetic_types : enable
 
 #include "visbuffer/common.glsl"
-#include "data.glsl"
 #include "buffer.glsl"
 
 #define WORK_GROUP_SIZE 32
@@ -23,17 +22,14 @@ layout (location = 0) out o_vertex_data_block {
     flat uint meshlet_id;
 } o_vertex_data[];
 
-layout (scalar, buffer_reference) restrict readonly buffer IRIS_GLSL_VIEW_BUFFER_BLOCK(b_view_block);
-layout (scalar, buffer_reference) restrict readonly buffer IRIS_GLSL_MESHLET_INSTANCE_BUFFER_BLOCK(b_meshlet_instance_block);
-layout (scalar, buffer_reference) restrict readonly buffer IRIS_GLSL_MESHLET_BUFFER_BLOCK(b_meshlet_block);
-layout (scalar, buffer_reference) restrict readonly buffer IRIS_GLSL_TRANSFORM_BUFFER_BLOCK(b_transform_block);
-layout (scalar, buffer_reference) restrict readonly buffer IRIS_GLSL_VERTEX_BUFFER_BLOCK(b_vertex_block);
-layout (scalar, buffer_reference) restrict readonly buffer IRIS_GLSL_INDEX_BUFFER_BLOCK(b_index_block);
-layout (scalar, buffer_reference) restrict readonly buffer IRIS_GLSL_PRIMITIVE_BUFFER_BLOCK(b_primitive_block);
-layout (scalar, buffer_reference) restrict readonly buffer IRIS_GLSL_ADDRESS_BUFFER_BLOCK(b_address_block);
-
-layout (push_constant) uniform u_push_constants_block {
-     b_address_block u_address_ptr;
+layout (scalar, push_constant) restrict readonly uniform u_push_constants_block {
+    restrict readonly b_view_block u_view_ptr;
+    restrict readonly b_meshlet_instance_block u_meshlet_instance_ptr;
+    restrict readonly b_meshlet_block u_meshlet_ptr;
+    restrict readonly b_transform_block u_transform_ptr;
+    restrict readonly b_vertex_block u_vertex_ptr;
+    restrict readonly b_index_block u_index_ptr;
+    restrict readonly b_primitive_block u_primitive_ptr;
 };
 
 shared uint vertex_offset;
@@ -47,21 +43,13 @@ void main() {
     const uint thread_index = gl_LocalInvocationID.x;
     const uint meshlet_instance_id = gl_WorkGroupID.x;
 
-    restrict b_view_block view_ptr = b_view_block(u_address_ptr.data[IRIS_GLSL_VIEW_BUFFER_SLOT]);
-    restrict b_meshlet_instance_block meshlet_instance_ptr = b_meshlet_instance_block(u_address_ptr.data[IRIS_GLSL_MESHLET_INSTANCE_BUFFER_SLOT]);
-    restrict b_meshlet_block meshlet_ptr = b_meshlet_block(u_address_ptr.data[IRIS_GLSL_MESHLET_BUFFER_SLOT]);
-    restrict b_transform_block transform_ptr = b_transform_block(u_address_ptr.data[IRIS_GLSL_TRANSFORM_BUFFER_SLOT]);
-    restrict b_vertex_block vertex_ptr = b_vertex_block(u_address_ptr.data[IRIS_GLSL_VERTEX_BUFFER_SLOT]);
-    restrict b_index_block index_ptr = b_index_block(u_address_ptr.data[IRIS_GLSL_INDEX_BUFFER_SLOT]);
-    restrict b_primitive_block primitive_ptr = b_primitive_block(u_address_ptr.data[IRIS_GLSL_PRIMITIVE_BUFFER_SLOT]);
-
     if (thread_index == 0) {
-        const uint meshlet_id = meshlet_instance_ptr.data[meshlet_instance_id].meshlet_id;
-        const uint instance_id = meshlet_instance_ptr.data[meshlet_instance_id].instance_id;
-        const view_t main_view = view_ptr.data[IRIS_GLSL_MAIN_VIEW_INDEX];
+        const uint meshlet_id = u_meshlet_instance_ptr.data[meshlet_instance_id].meshlet_id;
+        const uint instance_id = u_meshlet_instance_ptr.data[meshlet_instance_id].instance_id;
+        const view_t main_view = u_view_ptr.data[IRIS_GLSL_MAIN_VIEW_INDEX];
 
-        const meshlet_t meshlet = meshlet_ptr.data[meshlet_id];
-        const mat4 transform = transform_ptr.data[instance_id].model;
+        const meshlet_t meshlet = u_meshlet_ptr.data[meshlet_id];
+        const mat4 transform = u_transform_ptr.data[instance_id].model;
         vertex_offset = meshlet.vertex_offset;
         index_offset = meshlet.index_offset;
         primitive_offset = meshlet.primitive_offset;
@@ -75,7 +63,7 @@ void main() {
     for (uint i = 0; i < MAX_INDICES_PER_THREAD; i++) {
         // avoid branching, get pipelined memory loads
         const uint index = min(thread_index + i * WORK_GROUP_SIZE, index_count - 1);
-        const vec3 position = vertex_ptr.data[vertex_offset + index_ptr.data[index_offset + index]].position;
+        const vec3 position = u_vertex_ptr.data[vertex_offset + u_index_ptr.data[index_offset + index]].position;
 
         gl_MeshVerticesEXT[index].gl_Position = pvm * vec4(position, 1.0);
         o_vertex_data[index].meshlet_id = meshlet_instance_id;
@@ -84,9 +72,9 @@ void main() {
     for (uint i = 0; i < MAX_PRIMITIVES_PER_THREAD; i++) {
         const uint index = min(thread_index + i * WORK_GROUP_SIZE, primitive_count - 1);
         gl_PrimitiveTriangleIndicesEXT[index] = uvec3(
-            uint(primitive_ptr.data[primitive_offset + index * 3 + 0]),
-            uint(primitive_ptr.data[primitive_offset + index * 3 + 1]),
-            uint(primitive_ptr.data[primitive_offset + index * 3 + 2]));
+            uint(u_primitive_ptr.data[primitive_offset + index * 3 + 0]),
+            uint(u_primitive_ptr.data[primitive_offset + index * 3 + 1]),
+            uint(u_primitive_ptr.data[primitive_offset + index * 3 + 2]));
         gl_MeshPrimitivesEXT[index].gl_PrimitiveID = int(index);
     }
 }

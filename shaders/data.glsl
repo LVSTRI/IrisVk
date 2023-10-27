@@ -42,16 +42,29 @@ struct meshlet_t {
     uint primitive_offset;
     uint index_count;
     uint primitive_count;
+    aabb_t aabb;
 };
 
 struct meshlet_instance_t {
     uint meshlet_id;
     uint instance_id;
+    uint material_id;
 };
 
 struct transform_t {
     mat4 model;
     mat4 prev_model;
+};
+
+struct material_t {
+    uint base_color_texture;
+    uint normal_texture;
+    vec3 base_color_factor;
+};
+
+struct directional_light_t {
+    vec3 direction;
+    float intensity;
 };
 
 #endif

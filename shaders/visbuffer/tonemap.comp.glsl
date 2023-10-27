@@ -8,20 +8,20 @@
 
 #include "utilities.glsl"
 
-layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout (rgba32f, set = 0, binding = 0) uniform restrict readonly image2D u_input;
 layout (rgba8, set = 0, binding = 1) uniform restrict writeonly image2D u_output;
 
 vec3 tonemap(in vec3 color) {
-    const float l = luminance(color);
-    const vec3 reinhard = color / (1.0 + color);
-    return mix(color / (1.0 + l), reinhard, reinhard);
+    const float lum = luminance(color);
+    const vec3 reinhard = color / (color + 1.0);
+    return mix(color / (lum + 1.0), reinhard, reinhard);
 }
 
 void main() {
     const ivec2 size = imageSize(u_input);
-    if (gl_GlobalInvocationID.x >= size.x || gl_GlobalInvocationID.y >= size.y) {
+    if (any(greaterThanEqual(gl_GlobalInvocationID.xy, size))) {
         return;
     }
     const vec4 payload = imageLoad(u_input, ivec2(gl_GlobalInvocationID.xy));

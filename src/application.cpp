@@ -10,6 +10,10 @@
 #include <algorithm>
 
 namespace test {
+    static auto dispatch_work_group_size(uint32 size, uint32 wg) noexcept -> uint32 {
+        return (size + wg - 1) / wg;
+    }
+
     static auto dispatch_work_group_size(glm::uvec2 size = { 1, 1 }, glm::uvec2 wg = { 1, 1 }) noexcept -> glm::uvec2 {
         return glm::uvec2(
             (size.x + wg.x - 1) / wg.x,
@@ -23,6 +27,20 @@ namespace test {
             (size.y + wg.y - 1) / wg.y,
             (size.z + wg.z - 1) / wg.z
         );
+    }
+
+    static auto previous_power_2(uint32 value) noexcept -> uint32 {
+        return 1 << (32 - std::countl_zero(value - 1));
+    }
+
+    static auto polar_to_cartesian(float32 elevation, float32 azimuth) noexcept -> glm::vec3 {
+        elevation = glm::radians(elevation);
+        azimuth = glm::radians(azimuth);
+        return glm::normalize(-glm::vec3(
+            std::cos(elevation) * std::cos(azimuth),
+            std::sin(elevation),
+            std::cos(elevation) * std::sin(azimuth)
+        ));
     }
 
     application_t::application_t() noexcept
@@ -67,7 +85,29 @@ namespace test {
         auto indices = std::vector<uint32>();
         auto primitives = std::vector<uint8>();
         auto transforms = std::vector<transform_t>();
+        auto materials = std::vector<material_t>();
+        auto meshlet_offset = 0_u32;
         for (auto& model : models) {
+            for (const auto textures = model.textures(); const auto& [_, type, file] : textures) {
+                _scene.textures.emplace_back(ir::texture_t::make(*_device, file, {
+                    .format = [type = type]() {
+                        switch (type) {
+                            case texture_type_t::e_base_color:
+                                return ir::texture_format_t::e_ttf_bc7_rgba;
+                            case texture_type_t::e_normal:
+                                return ir::texture_format_t::e_ttf_bc5_rg;
+                        }
+                        IR_UNREACHABLE();
+                    }(),
+                    .sampler = {
+                        .filter = { ir::sampler_filter_t::e_linear },
+                        .mip_mode = ir::sampler_mipmap_mode_t::e_linear,
+                        .address_mode = { ir::sampler_address_mode_t::e_repeat },
+                        .anisotropy = 16.0f,
+                    }
+                }));
+            }
+
             for (const auto& meshlet : model.meshlets()) {
                 auto base_meshlet = base_meshlet_t();
                 base_meshlet.vertex_offset = meshlet.vertex_offset + vertices.size();
@@ -75,18 +115,25 @@ namespace test {
                 base_meshlet.primitive_offset = meshlet.primitive_offset + primitives.size();
                 base_meshlet.index_count = meshlet.index_count;
                 base_meshlet.primitive_count = meshlet.primitive_count;
+                base_meshlet.aabb = meshlet.aabb;
                 meshlets.emplace_back(base_meshlet);
             }
             for (auto instance : model.meshlet_instances()) {
+                instance.meshlet_id += meshlet_offset;
                 instance.instance_id += transforms.size();
+                instance.material_id += materials.size();
                 meshlet_instances.emplace_back(instance);
             }
             vertices.insert(vertices.end(), model.vertices().begin(), model.vertices().end());
             indices.insert(indices.end(), model.indices().begin(), model.indices().end());
             primitives.insert(primitives.end(), model.primitives().begin(), model.primitives().end());
             transforms.insert(transforms.end(), model.transforms().begin(), model.transforms().end());
+            materials.insert(materials.end(), model.materials().begin(), model.materials().end());
+            meshlet_offset += meshlets.size();
             model = {};
         }
+        _scene.materials = std::move(materials);
+
         _buffer.meshlets = ir::upload_buffer<base_meshlet_t>(*_device, meshlets, {
             .usage = ir::buffer_usage_t::e_storage_buffer,
         });
@@ -107,6 +154,16 @@ namespace test {
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = transforms.size(),
         });
+        _buffer.materials = ir::buffer_t<material_t>::make(*_device, frames_in_flight, {
+            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .flags = ir::buffer_flag_t::e_mapped,
+            .capacity = 4096,
+        });
+        _buffer.directional_lights = ir::buffer_t<directional_light_t>::make(*_device, frames_in_flight, {
+            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .flags = ir::buffer_flag_t::e_mapped,
+            .capacity = IRIS_MAX_DIRECTIONAL_LIGHTS,
+        });
         _buffer.views = ir::buffer_t<view_t>::make(*_device, frames_in_flight, {
             .usage = ir::buffer_usage_t::e_storage_buffer,
             .flags = ir::buffer_flag_t::e_mapped,
@@ -114,11 +171,6 @@ namespace test {
         });
         _buffer.atomics = ir::buffer_t<uint64>::make(*_device, {
             .usage = ir::buffer_usage_t::e_storage_buffer,
-            .capacity = 4096,
-        });
-        _buffer.addresses = ir::buffer_t<uint64>::make(*_device, frames_in_flight, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
-            .flags = ir::buffer_flag_t::e_mapped,
             .capacity = 4096,
         });
         for (auto i = 0_u32; i < frames_in_flight; ++i) {
@@ -140,8 +192,7 @@ namespace test {
         IR_PROFILE_SCOPED();
         return std::forward_as_tuple(
             *_buffer.views[_frame_index],
-            *_buffer.transforms[_frame_index],
-            *_buffer.addresses[_frame_index]
+            *_buffer.transforms[_frame_index]
         );
     }
 
@@ -225,9 +276,12 @@ namespace test {
 
         const auto& [
             view_buffer,
-            transform_buffer,
-            address_buffer
+            transform_buffer
         ] = _current_frame_buffers();
+
+        auto& material_buffer = *_buffer.materials[_frame_index];
+        auto& directional_light_buffer = *_buffer.directional_lights[_frame_index];
+
         // write main view
         {
             auto view = view_t();
@@ -245,17 +299,17 @@ namespace test {
             view_buffer.insert(0, view);
         }
 
-        // write addresses
+        // write materials
         {
-            address_buffer.insert(std::to_array({
-                view_buffer.address(),
-                _buffer.meshlet_instances->address(),
-                _buffer.meshlets->address(),
-                transform_buffer.address(),
-                _buffer.vertices->address(),
-                _buffer.indices->address(),
-                _buffer.primitives->address(),
-            }));
+            material_buffer.insert(_scene.materials);
+        }
+
+        // write directional lights
+        {
+            auto directional_light = directional_light_t();
+            directional_light.direction = polar_to_cartesian(240.0f, 30.0f);
+            directional_light.intensity = 1.0f;
+            directional_light_buffer.insert(directional_light);
         }
     }
 
@@ -327,7 +381,7 @@ namespace test {
                     },
                     {
                         .layout = {
-                            .final = ir::image_layout_t::e_depth_stencil_attachment_optimal
+                            .final = ir::image_layout_t::e_shader_read_only_optimal
                         },
                         .format = ir::resource_format_t::e_d32_sfloat,
                         .load_op = ir::attachment_load_op_t::e_clear,
@@ -346,10 +400,12 @@ namespace test {
                         .dest = 0,
                         .source_stage =
                             ir::pipeline_stage_t::e_color_attachment_output |
-                            ir::pipeline_stage_t::e_early_fragment_tests,
+                            ir::pipeline_stage_t::e_early_fragment_tests |
+                            ir::pipeline_stage_t::e_late_fragment_tests,
                         .dest_stage =
                             ir::pipeline_stage_t::e_color_attachment_output |
-                            ir::pipeline_stage_t::e_early_fragment_tests,
+                            ir::pipeline_stage_t::e_early_fragment_tests |
+                            ir::pipeline_stage_t::e_late_fragment_tests,
                         .source_access = ir::resource_access_t::e_none,
                         .dest_access =
                             ir::resource_access_t::e_color_attachment_write |
@@ -359,12 +415,13 @@ namespace test {
                         .dest = ir::external_subpass,
                         .source_stage =
                             ir::pipeline_stage_t::e_color_attachment_output |
-                            ir::pipeline_stage_t::e_early_fragment_tests,
+                            ir::pipeline_stage_t::e_early_fragment_tests |
+                            ir::pipeline_stage_t::e_late_fragment_tests,
                         .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                         .source_access =
                             ir::resource_access_t::e_color_attachment_write |
                             ir::resource_access_t::e_depth_stencil_attachment_write,
-                        .dest_access = ir::resource_access_t::e_shader_storage_read
+                        .dest_access = ir::resource_access_t::e_shader_read
                     }
                 }
             });
@@ -400,7 +457,7 @@ namespace test {
         _visbuffer.depth = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(1), {
             .width = _swapchain->width(),
             .height = _swapchain->height(),
-            .usage = ir::image_usage_t::e_depth_stencil_attachment,
+            .usage = ir::image_usage_t::e_depth_stencil_attachment | ir::image_usage_t::e_sampled,
             .view = ir::default_image_view_info,
         });
         _visbuffer.color = ir::image_t::make(*_device, {
@@ -438,8 +495,7 @@ namespace test {
 
         const auto& [
             view_buffer,
-            transform_buffer,
-            address_buffer
+            transform_buffer
         ] = _current_frame_buffers();
 
         command_buffer.begin_debug_marker("visbuffer_pass");
@@ -450,13 +506,24 @@ namespace test {
         command_buffer.set_viewport({
             .width = static_cast<float32>(_swapchain->width()),
             .height = static_cast<float32>(_swapchain->height()),
-        }, true);
+        });
         command_buffer.set_scissor({
             .width = _swapchain->width(),
             .height = _swapchain->height(),
         });
         command_buffer.bind_pipeline(*_visbuffer.main);
-        command_buffer.push_constants(ir::shader_stage_t::e_mesh, 0, sizeof(uint64), ir::as_const_ptr(address_buffer.address()));
+        {
+            const auto push_constants = ir::make_byte_bag(std::to_array({
+                view_buffer.address(),
+                _buffer.meshlet_instances->address(),
+                _buffer.meshlets->address(),
+                transform_buffer.address(),
+                _buffer.vertices->address(),
+                _buffer.indices->address(),
+                _buffer.primitives->address(),
+            }));
+            command_buffer.push_constants(ir::shader_stage_t::e_mesh, 0, sizeof(push_constants), &push_constants);
+        }
         command_buffer.draw_mesh_tasks(_buffer.meshlet_instances->size());
         command_buffer.end_render_pass();
         command_buffer.end_debug_marker();
@@ -471,16 +538,26 @@ namespace test {
             frame_fence
         ] = _current_frame_data();
 
+        const auto& [
+            view_buffer,
+            transform_buffer
+        ] = _current_frame_buffers();
+
+        auto& material_buffer = *_buffer.materials[_frame_index];
+        const auto& directional_light_buffer = *_buffer.directional_lights[_frame_index];
+
         const auto set = ir::descriptor_set_builder_t(*_visbuffer.resolve, 0)
-            .bind_storage_image(0, _visbuffer.ids->view())
-            .bind_storage_image(1, _visbuffer.color->view())
+            .bind_sampled_image(0, _visbuffer.depth->view())
+            .bind_storage_image(1, _visbuffer.ids->view())
+            .bind_storage_image(2, _visbuffer.color->view())
+            .bind_textures(3, _scene.textures)
             .build();
         const auto resolve_dispatch = dispatch_work_group_size({
             _swapchain->width(),
             _swapchain->height(),
         }, {
-            16,
-            16,
+            8,
+            8,
         });
 
         command_buffer.begin_debug_marker("visbuffer_resolve");
@@ -495,6 +572,21 @@ namespace test {
             .old_layout = ir::image_layout_t::e_undefined,
             .new_layout = ir::image_layout_t::e_general,
         });
+
+        {
+            const auto push_constants = ir::make_byte_bag(std::to_array({
+                view_buffer.address(),
+                _buffer.meshlet_instances->address(),
+                _buffer.meshlets->address(),
+                transform_buffer.address(),
+                _buffer.vertices->address(),
+                _buffer.indices->address(),
+                _buffer.primitives->address(),
+                material_buffer.address(),
+                directional_light_buffer.address(),
+            }));
+            command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
+        }
         command_buffer.dispatch(resolve_dispatch.x, resolve_dispatch.y);
         command_buffer.image_barrier({
             .image = std::cref(*_visbuffer.color),
@@ -525,8 +617,8 @@ namespace test {
             _swapchain->width(),
             _swapchain->height(),
         }, {
-            16,
-            16,
+            8,
+            8,
         });
 
         command_buffer.begin_debug_marker("visbuffer_tonemap");
@@ -573,7 +665,7 @@ namespace test {
             .old_layout = ir::image_layout_t::e_undefined,
             .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
         });
-        command_buffer.copy_image(*_visbuffer.final, _swapchain->image(image_index), {});
+        command_buffer.blit_image(*_visbuffer.final, _swapchain->image(image_index), {});
         command_buffer.image_barrier({
             .image = std::cref(_swapchain->image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_transfer,

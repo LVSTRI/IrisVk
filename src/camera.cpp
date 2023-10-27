@@ -83,23 +83,29 @@ namespace test {
     auto camera_t::projection(bool infinite, bool reverse_z) const noexcept -> glm::mat4 {
         IR_PROFILE_SCOPED();
         const auto type = ((uint32(infinite) << 1u) | uint32(reverse_z));
+        auto p = glm::mat4();
         switch (type) {
             case 0b00u:
-                return glm::perspective(fov(), aspect(), _near, _far);
+                p = glm::perspective(fov(), aspect(), _near, _far);
+                break;
             case 0b01u:
-                return glm::perspective(fov(), aspect(), _far, _near);
+                p = glm::perspective(fov(), aspect(), _far, _near);
+                break;
             case 0b10u:
-                return glm::infinitePerspective(fov(), aspect(), _near);
+                p = glm::infinitePerspective(fov(), aspect(), _near);
+                break;
             case 0b11u:
                 const auto f = 1.0f / glm::tan(fov() / 2.0f);
-                return {
+                p = {
                     f / aspect(), 0.0f, 0.0f, 0.0f,
                     0.0f, f, 0.0f, 0.0f,
                     0.0f, 0.0f, 0.0f, -1.0f,
                     0.0f, 0.0f, _near, 0.0f
                 };
+                break;
         }
-        IR_UNREACHABLE();
+        p[1][1] *= -1;
+        return p;
     }
 
     auto camera_t::update(float32 dt) noexcept -> void {
@@ -142,9 +148,9 @@ namespace test {
         }
 
         _front = glm::normalize(glm::vec3(
-            glm::cos(r_yaw) * glm::cos(r_pitch),
+            glm::cos(r_pitch) * glm::cos(r_yaw),
             glm::sin(r_pitch),
-            glm::sin(r_yaw) * glm::cos(r_pitch)));
+            glm::cos(r_pitch) * glm::sin(r_yaw)));
         _right = glm::normalize(glm::cross(_front, { 0.0f, 1.0f, 0.0f }));
         _up = glm::normalize(glm::cross(_right, _front));
     }

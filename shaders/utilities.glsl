@@ -42,10 +42,14 @@ vec3 linear_as_srgb(in vec3 rgb) {
     return rgb;
 }
 
-vec3 uv_to_world_position(in mat4 pv, in vec2 uv, in float depth) {
+vec3 uv_to_world(in mat4 inv_proj_view, in vec2 uv, in float depth) {
     const vec4 ndc = vec4(uv * 2.0 - 1.0, depth, 1.0);
-    const vec4 world = inverse(pv) * ndc;
+    const vec4 world = inv_proj_view * ndc;
     return world.xyz / world.w;
+}
+
+vec2 uv_flip_y(in vec2 uv) {
+    return vec2(uv.x, 1.0 - uv.y);
 }
 
 vec2 vec2_from_float(in float[2] v) {
