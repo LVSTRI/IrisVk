@@ -14,6 +14,9 @@ namespace ir {
         { value.size() } -> std::convertible_to<uint64>;
     };
 
+    template <typename... Ts>
+    constexpr auto size_bytes_of_pack = (sizeof(Ts) + ...);
+
     template <typename C>
         requires is_container<C>
     IR_NODISCARD constexpr auto size_bytes(const C& container) noexcept -> uint64 {
@@ -78,6 +81,29 @@ namespace ir {
     template <typename T, typename = std::enable_if_t<std::is_enum_v<T>>>
     constexpr auto operator ^=(T& left, const T& right) noexcept -> T& {
         return left = static_cast<T>(left ^ right);
+    }
+
+    // byte bag
+    namespace det {
+        template <typename T, typename C>
+        constexpr auto __make_byte_bag_impl(T& data, uint64& offset, const C& current) noexcept -> void {
+            __builtin_memcpy(&data[offset], &current, sizeof(C));
+        }
+
+        template <typename T, typename C, typename... Ts>
+        constexpr auto __make_byte_bag_impl(T& data, uint64& offset, const C& current, Ts&&... args) noexcept -> void {
+            __builtin_memcpy(&data[offset], &current, sizeof(C));
+            __make_byte_bag_impl(data, offset += sizeof(C), args...);
+        }
+    }
+
+    template <typename... Ts>
+        requires (std::is_trivial_v<Ts> && ...)
+    IR_NODISCARD constexpr auto make_byte_bag(Ts&&... args) noexcept -> std::array<uint8, size_bytes_of_pack<Ts...>> {
+        auto offset = 0_u64;
+        auto data = std::array<uint8, size_bytes_of_pack<Ts...>>();
+        det::__make_byte_bag_impl(data, offset, args...);
+        return data;
     }
 
     // morton LUT

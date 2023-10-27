@@ -128,7 +128,7 @@ namespace ir {
         }
         auto options = shc::CompileOptions();
         options.SetGenerateDebugInfo();
-        options.SetOptimizationLevel(shaderc_optimization_level_performance);
+        options.SetOptimizationLevel(shaderc_optimization_level_zero);
         options.SetSourceLanguage(shaderc_source_language_glsl);
         options.SetForcedVersionProfile(460, shaderc_profile_core);
         options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
