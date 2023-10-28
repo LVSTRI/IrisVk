@@ -15,8 +15,11 @@
 #include "utilities.glsl"
 
 struct virtual_page_info_t {
-    uvec3 position;
-    vec3 uv;
+    uvec2 position;
+    uint clipmap_level;
+    vec2 uv;
+    vec2 stable_uv;
+    float depth;
 };
 
 uint encode_physical_page_entry(in uvec2 page) {
@@ -48,7 +51,7 @@ uvec2 virtual_to_physical_texel(in uvec2 virtual_texel) {
 }
 
 // From: https://github.com/JuanDiegoMontoya/Frogfood/blob/main/data/shaders/shadows/vsm/VsmCommon.h.glsl#L174C70-L174C73
-virtual_page_info_t virtual_page_info_from_depth(
+precise virtual_page_info_t virtual_page_info_from_depth(
     in restrict b_view_block view_ptr,
     in restrict b_vsm_globals_block vsm_globals_ptr,
     in vec2 resolution,
@@ -70,12 +73,17 @@ virtual_page_info_t virtual_page_info_from_depth(
     const uint clipmap_level = clamp(unclamped_clipmap_level, 0, vsm_data.clipmap_count - 1);
     const mat4 clipmap_proj_view = view_ptr.data[IRIS_SHADOW_VIEW_START_INDEX + clipmap_level].proj_view;
     const vec4 shadow_position = clipmap_proj_view * vec4(world_position, 1.0);
+    const vec4 stable_shadow_position = make_stable_proj_view(clipmap_proj_view) * vec4(world_position, 1.0);
     const vec2 virtual_shadow_uv = fract(shadow_position.xy * 0.5 + 0.5);
+    const vec2 stable_virtual_shadow_uv = fract(stable_shadow_position.xy * 0.5 + 0.5);
     const uvec2 virtual_shadow_page = uvec2(virtual_shadow_uv * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
 
     return virtual_page_info_t(
-        uvec3(virtual_shadow_page, clipmap_level),
-        vec3(virtual_shadow_uv, shadow_position.z)
+        virtual_shadow_page,
+        clipmap_level,
+        virtual_shadow_uv,
+        stable_virtual_shadow_uv,
+        shadow_position.z
     );
 }
 

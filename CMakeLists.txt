@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.26)
 project(IrisVkTests)
 
+set(IRIS_ENABLE_DEBUG_PROFILER OFF CACHE BOOL "Enable debug profiler" FORCE)
 add_subdirectory(deps/IrisVk)
 
 set(CMAKE_CXX_STANDARD 23)

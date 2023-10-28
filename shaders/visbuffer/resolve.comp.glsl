@@ -1,5 +1,6 @@
 #version 460
 #extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_sparse_texture2 : enable
 #extension GL_KHR_shader_subgroup : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_buffer_reference : enable
@@ -19,7 +20,8 @@ layout (set = 0, binding = 0) uniform texture2D u_depth;
 layout (r32ui, set = 0, binding = 1) restrict readonly uniform uimage2D u_visbuffer;
 layout (rgba32f, set = 0, binding = 2) restrict writeonly uniform image2D u_output;
 
-layout (set = 0, binding = 3) uniform sampler2D[] u_textures;
+layout (set = 0, binding = 3) uniform sampler2DShadow[16] u_vsm;
+layout (set = 0, binding = 4) uniform sampler2D[] u_textures;
 
 layout (scalar, push_constant) restrict uniform u_push_constants_block {
     restrict b_view_block u_view_ptr;
@@ -35,6 +37,25 @@ layout (scalar, push_constant) restrict uniform u_push_constants_block {
 
     restrict b_vsm_globals_block u_vsm_globals_ptr;
 };
+
+const vec3[] _debug_clipmap_colors = vec3[](
+    vec3(1.0, 0.5, 0.5),
+    vec3(0.5, 1.0, 0.5),
+    vec3(0.5, 0.5, 1.0),
+    vec3(1.0, 1.0, 0.5),
+    vec3(1.0, 0.5, 1.0),
+    vec3(0.5, 1.0, 1.0),
+    vec3(1.0, 0.5, 0.0),
+    vec3(0.5, 1.0, 0.0),
+    vec3(0.0, 0.5, 1.0),
+    vec3(1.0, 0.0, 0.5),
+    vec3(0.0, 1.0, 0.5),
+    vec3(0.5, 0.0, 1.0),
+    vec3(1.0, 0.5, 0.5),
+    vec3(0.5, 1.0, 0.5),
+    vec3(0.5, 0.5, 1.0),
+    vec3(1.0, 1.0, 0.5)
+);
 
 uint[3] load_primitive_indices(in uint offset, in uint index) {
     return uint[3](
@@ -162,7 +183,9 @@ void main() {
         uvec2(gl_GlobalInvocationID.xy),
         v_depth
     );
+    const uint clipmap_level = virtual_page.clipmap_level;
 
+    const float light_ambient = 0.025;
     vec3 color = vec3(0.0);
     {
         vec3 base_color = vec3(1.0);
@@ -176,23 +199,38 @@ void main() {
         const directional_light_t sun_dir_light = u_dir_light_ptr.data[0];
         const vec3 light_dir = sun_dir_light.direction;
         const float light_intensity = sun_dir_light.intensity;
-        const float light_ambient = 0.0125;
         const float light_diffuse = max(dot(normal, light_dir), 0.0);
         const float light_specular = pow(max(dot(reflect(-light_dir, normal), view_direction), 0.0), 64.0);
-        color += light_intensity * (light_ambient + light_diffuse + light_specular) * base_color;
+        float shadow_factor = 0.0;
+        {
+            const float texel_size = 1.0 / (IRIS_VSM_VIRTUAL_BASE_SIZE * (clipmap_level + 1));
+            for (uint i = 0; i < 32; ++i) {
+                float shadow_depth = 0.0;
+                const int x = int(i) % 4 - 2;
+                const int y = int(i) / 4 - 2;
+                const vec2 uv = virtual_page.uv + vec2(x, y) * texel_size;
+                const float z = virtual_page.depth;
+                const int residency = sparseTextureLodARB(u_vsm[clipmap_level], vec3(uv, z), 0, shadow_depth);
+                if (!sparseTexelsResidentARB(residency)) {
+                    shadow_depth = 1.0;
+                }
+                shadow_factor += shadow_depth;
+            }
+            shadow_factor /= 32.0;
+        }
+
+        color = base_color * light_ambient;
+        color += light_intensity * (light_diffuse + light_specular) * base_color * shadow_factor;
     }
-    const uint virtual_page_index = virtual_page.position.x + virtual_page.position.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
-    const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_SIZE * mod(virtual_page.uv.xy, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
-    color = 2.0 * hsv_to_rgb(vec3(float(virtual_page.position.z) * M_GOLDEN_CONJ, 0.875, 0.85));
-    color += 1.0 * hsv_to_rgb(vec3(float(virtual_page_index) * M_GOLDEN_CONJ, 0.875, 0.85));
-    if (
-        virtual_page_uv.x < 0.01 ||
-        virtual_page_uv.y < 0.01 ||
-        virtual_page_uv.x > 0.99 ||
-        virtual_page_uv.y > 0.99
+    const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
+    /*if (
+        virtual_page_uv.x < 0.02 ||
+        virtual_page_uv.y < 0.02 ||
+        virtual_page_uv.x > 0.98 ||
+        virtual_page_uv.y > 0.98
     ) {
-        color = vec3(1, 0, 0);
-    }
+        color = vec3(1.0, 0.0125, 0.0125);
+    }*/
 
     imageStore(u_output, ivec2(gl_GlobalInvocationID.xy), vec4(color, 1.0));
 }

@@ -4,7 +4,7 @@
 #extension GL_EXT_buffer_reference : enable
 #include "vsm/common.glsl"
 
-layout (local_size_x = 8, local_size_y = 8) in;
+layout (local_size_x = 16, local_size_y = 16) in;
 
 layout (set = 0, binding = 0) uniform texture2D u_depth;
 
@@ -37,5 +37,5 @@ void main() {
     );
     const uvec2 virtual_page_position = clamp(virtual_page.position.xy, uvec2(0), uvec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE - 1));
     const uint virtual_page_index = virtual_page_position.x + virtual_page_position.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
-    u_vsm_page_request_ptr.data[virtual_page_index + virtual_page.position.z * IRIS_VSM_VIRTUAL_PAGE_COUNT] = uint8_t(1);
+    u_vsm_page_request_ptr.data[virtual_page_index + virtual_page.clipmap_level * IRIS_VSM_VIRTUAL_PAGE_COUNT] = uint8_t(1);
 }
