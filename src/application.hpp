@@ -23,7 +23,20 @@
 #include <vector>
 #include <chrono>
 
+#define IRIS_MAIN_VIEW_INDEX 0
+#define IRIS_SHADOW_VIEW_START 1
+
 #define IRIS_MAX_DIRECTIONAL_LIGHTS 4
+#define IRIS_VSM_VIRTUAL_BASE_SIZE 16384
+#define IRIS_VSM_VIRTUAL_PAGE_SIZE 128
+#define IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE (IRIS_VSM_VIRTUAL_BASE_SIZE / IRIS_VSM_VIRTUAL_PAGE_SIZE)
+#define IRIS_VSM_VIRTUAL_PAGE_COUNT (IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE)
+#define IRIS_VSM_PHYSICAL_BASE_SIZE 8192
+#define IRIS_VSM_PHYSICAL_PAGE_SIZE 128
+#define IRIS_VSM_PHYSICAL_PAGE_ROW_SIZE (IRIS_VSM_PHYSICAL_BASE_SIZE / IRIS_VSM_PHYSICAL_PAGE_SIZE)
+#define IRIS_VSM_PHYSICAL_PAGE_COUNT (IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE)
+#define IRIS_VSM_MAX_CLIPMAPS 32
+#define IRIS_VSM_CLIPMAP_COUNT 16
 
 namespace test {
     struct view_t {
@@ -48,6 +61,23 @@ namespace test {
         float32 intensity = 0.0f;
     };
 
+    struct vsm_global_data_t {
+        float32 first_width = 10.0f;
+        float32 lod_bias = -2.0f;
+        uint32 clipmap_count = IRIS_VSM_MAX_CLIPMAPS;
+    };
+
+    template <typename T>
+    struct readback_t {
+        ir::arc_ptr<ir::buffer_t<T>> device;
+        std::vector<ir::arc_ptr<ir::buffer_t<T>>> host;
+    };
+
+    struct hzb_t {
+        ir::arc_ptr<ir::image_t> image;
+        std::vector<ir::arc_ptr<ir::image_view_t>> views;
+    };
+
     class application_t {
     public:
         application_t() noexcept;
@@ -69,10 +99,13 @@ namespace test {
         auto _initialize() noexcept -> void;
         auto _initialize_sync() noexcept -> void;
         auto _initialize_visbuffer_pass() noexcept -> void;
+        auto _initialize_vsm_pass() noexcept -> void;
 
+        auto _clear_buffer_pass() noexcept -> void;
         auto _visbuffer_pass() noexcept -> void;
         auto _visbuffer_resolve_pass() noexcept -> void;
         auto _visbuffer_tonemap_pass() noexcept -> void;
+        auto _vsm_mark_visible_pages_pass() noexcept -> void;
         auto _swapchain_copy_pass(uint32 image_index) noexcept -> void;
 
         uint64 _frame_index = 0;
@@ -100,6 +133,16 @@ namespace test {
         } _visbuffer;
 
         struct {
+            bool is_initialized = false;
+            ir::arc_ptr<ir::pipeline_t> mark_visible_pages;
+
+            std::vector<hzb_t> hzbs;
+
+            readback_t<uint8> visible_pages_buffer;
+            std::vector<ir::arc_ptr<ir::buffer_t<vsm_global_data_t>>> globals_buffer;
+        } _vsm;
+
+        struct {
             std::vector<ir::arc_ptr<ir::buffer_t<view_t>>> views;
             std::vector<ir::arc_ptr<ir::buffer_t<transform_t>>> transforms;
             std::vector<ir::arc_ptr<ir::buffer_t<material_t>>> materials;
@@ -116,6 +159,11 @@ namespace test {
             std::vector<ir::arc_ptr<ir::texture_t>> textures;
             std::vector<material_t> materials;
         } _scene;
+
+        struct state_t {
+            vsm_global_data_t vsm_global_data = {};
+            std::vector<directional_light_t> directional_lights = {};
+        } _state;
 
         camera_t _camera;
 

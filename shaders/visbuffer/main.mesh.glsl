@@ -46,7 +46,7 @@ void main() {
     if (thread_index == 0) {
         const uint meshlet_id = u_meshlet_instance_ptr.data[meshlet_instance_id].meshlet_id;
         const uint instance_id = u_meshlet_instance_ptr.data[meshlet_instance_id].instance_id;
-        const view_t main_view = u_view_ptr.data[IRIS_GLSL_MAIN_VIEW_INDEX];
+        const view_t main_view = u_view_ptr.data[IRIS_MAIN_VIEW_INDEX];
 
         const meshlet_t meshlet = u_meshlet_ptr.data[meshlet_id];
         const mat4 transform = u_transform_ptr.data[instance_id].model;

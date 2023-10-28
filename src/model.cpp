@@ -43,7 +43,7 @@ namespace test {
         };
         auto materials = std::vector<material_t>();
         auto textures = std::vector<texture_info_t>();
-        for (auto i = 0_u32; i < gltf->materials_count; ++i) {
+        /*for (auto i = 0_u32; i < gltf->materials_count; ++i) {
             const auto& material = gltf->materials[i];
             auto c_material = material_t();
             if (is_basisu_texture_valid(material.pbr_metallic_roughness.base_color_texture.texture)) {
@@ -87,7 +87,7 @@ namespace test {
                 material_cache[&material] = materials.size();
                 materials.push_back(c_material);
             }
-        }
+        }*/
 
         auto meshlet_id = 0_u32;
         auto vertex_offset = 0_u32;
@@ -300,13 +300,15 @@ namespace test {
             cgltf_node_transform_world(&node, glm::value_ptr(transform));
             const auto& mesh = *node.mesh;
             for (auto j = 0_u32; j < mesh.primitives_count; ++j) {
-                const auto transform_id = model._transforms.size();
+                const auto transform_id = static_cast<uint32>(model._transforms.size());
                 const auto* primitive = mesh.primitives + j;
+                const auto material_id = material_cache.contains(primitive->material) ?
+                    material_cache[primitive->material] : -1;
                 for (const auto& each : meshlet_cache[primitive]) {
                     meshlet_instances.push_back({
                         each.id,
-                        static_cast<uint32>(transform_id),
-                        static_cast<uint32>(material_cache[primitive->material])
+                        transform_id,
+                        material_id
                     });
                 }
                 model._transforms.emplace_back(transform);

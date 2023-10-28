@@ -9,10 +9,11 @@
 #extension GL_EXT_shader_explicit_arithmetic_types : enable
 
 #include "visbuffer/common.glsl"
+#include "vsm/common.glsl"
 #include "utilities.glsl"
 #include "buffer.glsl"
 
-layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout (set = 0, binding = 0) uniform texture2D u_depth;
 layout (r32ui, set = 0, binding = 1) restrict readonly uniform uimage2D u_visbuffer;
@@ -20,8 +21,8 @@ layout (rgba32f, set = 0, binding = 2) restrict writeonly uniform image2D u_outp
 
 layout (set = 0, binding = 3) uniform sampler2D[] u_textures;
 
-layout (scalar, push_constant) restrict readonly uniform u_push_constants_block {
-    restrict readonly b_view_block u_view_ptr;
+layout (scalar, push_constant) restrict uniform u_push_constants_block {
+    restrict b_view_block u_view_ptr;
     restrict readonly b_meshlet_instance_block u_meshlet_instance_ptr;
     restrict readonly b_meshlet_block u_meshlet_ptr;
     restrict readonly b_transform_block u_transform_ptr;
@@ -31,6 +32,8 @@ layout (scalar, push_constant) restrict readonly uniform u_push_constants_block 
 
     restrict readonly b_material_block u_material_ptr;
     restrict readonly b_directional_light_block u_dir_light_ptr;
+
+    restrict b_vsm_globals_block u_vsm_globals_ptr;
 };
 
 uint[3] load_primitive_indices(in uint offset, in uint index) {
@@ -116,7 +119,7 @@ void main() {
     const uint instance_id = u_meshlet_instance_ptr.data[meshlet_instance_id].instance_id;
     const uint material_id = u_meshlet_instance_ptr.data[meshlet_instance_id].material_id;
     const meshlet_t meshlet = u_meshlet_ptr.data[meshlet_id];
-    const view_t main_view = u_view_ptr.data[IRIS_GLSL_MAIN_VIEW_INDEX];
+    const view_t main_view = u_view_ptr.data[IRIS_MAIN_VIEW_INDEX];
     const mat4 transform = u_transform_ptr.data[instance_id].model;
     const mat3 normal_transform = mat3(transpose(inverse(transform)));
     const vec2 view_uv = vec2(gl_GlobalInvocationID.xy) / vec2(size);
@@ -151,22 +154,44 @@ void main() {
     );
     const vec3 base_normal = normalize(interpolate(derivatives, world_normal));
 
+    const virtual_page_info_t virtual_page = virtual_page_info_from_depth(
+        u_view_ptr,
+        u_vsm_globals_ptr,
+        vec2(size),
+        main_view.inv_proj_view,
+        uvec2(gl_GlobalInvocationID.xy),
+        v_depth
+    );
+
     vec3 color = vec3(0.0);
     {
+        vec3 base_color = vec3(1.0);
+        vec3 normal = base_normal;
         if (material_id != uint(-1)) {
             const material_t material = u_material_ptr.data[material_id];
             const mat3 tbn = make_tbn(world_grad, uv_grad, base_normal);
-            const vec3 base_color = load_base_color(material, uv_grad);
-            const vec3 normal = load_normal(material, uv_grad, tbn, base_normal);
-
-            const directional_light_t sun_dir_light = u_dir_light_ptr.data[0];
-            const vec3 light_dir = sun_dir_light.direction;
-            const float light_intensity = sun_dir_light.intensity;
-            const float light_ambient = 0.0125;
-            const float light_diffuse = max(dot(normal, light_dir), 0.0);
-            const float light_specular = pow(max(dot(reflect(-light_dir, normal), view_direction), 0.0), 64.0);
-            color += light_intensity * (light_ambient + light_diffuse + light_specular) * base_color;
+            base_color = load_base_color(material, uv_grad);
+            normal = load_normal(material, uv_grad, tbn, base_normal);
         }
+        const directional_light_t sun_dir_light = u_dir_light_ptr.data[0];
+        const vec3 light_dir = sun_dir_light.direction;
+        const float light_intensity = sun_dir_light.intensity;
+        const float light_ambient = 0.0125;
+        const float light_diffuse = max(dot(normal, light_dir), 0.0);
+        const float light_specular = pow(max(dot(reflect(-light_dir, normal), view_direction), 0.0), 64.0);
+        color += light_intensity * (light_ambient + light_diffuse + light_specular) * base_color;
+    }
+    const uint virtual_page_index = virtual_page.position.x + virtual_page.position.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
+    const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_SIZE * mod(virtual_page.uv.xy, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
+    color = 2.0 * hsv_to_rgb(vec3(float(virtual_page.position.z) * M_GOLDEN_CONJ, 0.875, 0.85));
+    color += 1.0 * hsv_to_rgb(vec3(float(virtual_page_index) * M_GOLDEN_CONJ, 0.875, 0.85));
+    if (
+        virtual_page_uv.x < 0.01 ||
+        virtual_page_uv.y < 0.01 ||
+        virtual_page_uv.x > 0.99 ||
+        virtual_page_uv.y > 0.99
+    ) {
+        color = vec3(1, 0, 0);
     }
 
     imageStore(u_output, ivec2(gl_GlobalInvocationID.xy), vec4(color, 1.0));

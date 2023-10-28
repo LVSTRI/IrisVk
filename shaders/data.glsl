@@ -1,5 +1,5 @@
-#ifndef IRIS_GLSL_DATA_HEADER
-#define IRIS_GLSL_DATA_HEADER
+#ifndef IRIS_DATA_HEADER
+#define IRIS_DATA_HEADER
 
 struct draw_mesh_tasks_indirect_command_t {
     uint x;
@@ -65,6 +65,12 @@ struct material_t {
 struct directional_light_t {
     vec3 direction;
     float intensity;
+};
+
+struct vsm_global_data_t {
+    float first_width;
+    float lod_bias;
+    uint clipmap_count;
 };
 
 #endif
