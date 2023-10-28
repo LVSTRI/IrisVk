@@ -130,7 +130,6 @@ namespace ir {
         options.SetGenerateDebugInfo();
         options.SetOptimizationLevel(shaderc_optimization_level_zero);
         options.SetSourceLanguage(shaderc_source_language_glsl);
-        options.SetForcedVersionProfile(460, shaderc_profile_core);
         options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
         options.SetTargetSpirv(shaderc_spirv_version_1_6);
         options.SetIncluder(std::make_unique<shader_includer_t>(std::move(include_path)));
