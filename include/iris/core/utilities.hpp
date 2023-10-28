@@ -98,7 +98,7 @@ namespace ir {
     }
 
     template <typename... Ts>
-        requires (std::is_trivial_v<Ts> && ...)
+        requires (std::is_trivial_v<std::remove_cvref_t<Ts>> && ...)
     IR_NODISCARD constexpr auto make_byte_bag(Ts&&... args) noexcept -> std::array<uint8, size_bytes_of_pack<Ts...>> {
         auto offset = 0_u64;
         auto data = std::array<uint8, size_bytes_of_pack<Ts...>>();

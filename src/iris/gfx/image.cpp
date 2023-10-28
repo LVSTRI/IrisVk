@@ -111,6 +111,8 @@ namespace ir {
         }
         if (_allocation) {
             vmaDestroyImage(device().allocator(), _handle, _allocation);
+        } else if (is_sparsely_bound()) {
+            vkDestroyImage(device().handle(), _handle, nullptr);
         }
         IR_LOG_INFO(device().logger(), "image {} destroyed", fmt::ptr(_handle));
     }

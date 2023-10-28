@@ -197,6 +197,30 @@ namespace ir {
         return *this;
     }
 
+    auto descriptor_set_builder_t::bind_combined_image_sampler(
+        uint32 binding,
+        std::span<std::reference_wrapper<const image_view_t>> views,
+        const sampler_t& sampler
+    ) noexcept -> self& {
+        IR_PROFILE_SCOPED();
+        auto infos = std::vector<descriptor_data>();
+        infos.reserve(views.size());
+        for (const auto& view : views) {
+            infos.emplace_back(image_info_t {
+                .sampler = sampler.handle(),
+                .view = view.get().handle(),
+                .layout = image_layout_t::e_shader_read_only_optimal,
+            });
+        }
+        _binding.bindings.emplace_back(descriptor_content_t {
+            .binding = binding,
+            .type = descriptor_type_t::e_combined_image_sampler,
+            .contents = { std::move(infos) }
+        });
+
+        return *this;
+    }
+
     auto descriptor_set_builder_t::build() const noexcept -> arc_ptr<descriptor_set_t> {
         IR_PROFILE_SCOPED();
         auto& device = _layout.get().device();

@@ -29,6 +29,7 @@ namespace ir {
     struct buffer_info_t {
         IR_NODISCARD constexpr auto operator ==(const buffer_info_t& other) const noexcept -> bool = default;
 
+        VkDeviceMemory memory = {};
         VkBuffer handle = {};
         uint64 offset = 0;
         uint64 size = whole_size;
@@ -100,6 +101,11 @@ namespace ir {
             image_layout_t layout = image_layout_t::e_shader_read_only_optimal
         ) noexcept -> self&;
         auto bind_combined_image_sampler(uint32 binding, const image_view_t& view, const sampler_t& sampler) noexcept -> self&;
+        auto bind_combined_image_sampler(
+            uint32 binding,
+            std::span<std::reference_wrapper<const image_view_t>> views,
+            const sampler_t& sampler
+        ) noexcept -> self&;
 
         auto build() const noexcept -> arc_ptr<descriptor_set_t>;
 
@@ -119,6 +125,7 @@ IR_MAKE_TRANSPARENT_EQUAL_TO_SPECIALIZATION(ir::buffer_info_t);
 IR_MAKE_AVALANCHING_TRANSPARENT_HASH_SPECIALIZATION(ir::buffer_info_t, ([](const auto& buffer) {
     IR_PROFILE_SCOPED();
     auto seed = std::size_t();
+    seed = ir::akl::hash<VkDeviceMemory>()(buffer.memory);
     seed = ir::akl::hash<VkBuffer>()(buffer.handle);
     seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::uint64>()(buffer.offset));
     seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::uint64>()(buffer.size));

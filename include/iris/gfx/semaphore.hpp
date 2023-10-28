@@ -37,7 +37,7 @@ namespace ir {
         IR_NODISCARD auto is_timeline() const noexcept -> bool;
         IR_NODISCARD auto device() const noexcept -> const device_t&;
 
-        auto increment(uint64 x = 0) noexcept -> uint64;
+        auto increment(uint64 x = 1) noexcept -> uint64;
 
     private:
         VkSemaphore _handle = {};

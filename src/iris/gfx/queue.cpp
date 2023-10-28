@@ -192,12 +192,6 @@ namespace ir {
         IR_PROFILE_SCOPED();
         auto semaphore_wait_values = std::vector<uint64>(info.wait_semaphores.size());
         auto semaphore_signal_values = std::vector<uint64>(info.signal_semaphores.size());
-        auto semaphore_submit_info = VkTimelineSemaphoreSubmitInfo();
-        semaphore_submit_info.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
-        semaphore_submit_info.waitSemaphoreValueCount = semaphore_wait_values.size();
-        semaphore_submit_info.pWaitSemaphoreValues = semaphore_wait_values.data();
-        semaphore_submit_info.signalSemaphoreValueCount = semaphore_signal_values.size();
-        semaphore_submit_info.pSignalSemaphoreValues = semaphore_signal_values.data();
 
         auto wait_semaphore_info = std::vector<VkSemaphore>();
         wait_semaphore_info.reserve(info.wait_semaphores.size());
@@ -213,19 +207,55 @@ namespace ir {
             semaphore_signal_values[index] = value == -1_u64 ? 0 : value;
         }
 
-        // TODO:
-        auto image_opaque_bind_info = VkSparseImageOpaqueMemoryBindInfo();
+        auto image_bind_info = std::vector<VkSparseImageMemoryBindInfo>();
+        image_bind_info.reserve(info.image_binds.size());
+        auto image_memory_bind_infos = std::vector<std::vector<VkSparseImageMemoryBind>>();
+        for (const auto& image_bind : info.image_binds) {
+            const auto& image = image_bind.image.get();
+            auto& image_memory_bind_info = image_memory_bind_infos.emplace_back(std::vector<VkSparseImageMemoryBind>());
+            image_memory_bind_info.reserve(image_bind.bindings.size());
+            for (const auto& sparse_bind : image_bind.bindings) {
+                auto bind = VkSparseImageMemoryBind();
+                bind.subresource.aspectMask = as_enum_counterpart(image.view().aspect());
+                bind.subresource.mipLevel = sparse_bind.level;
+                bind.subresource.arrayLayer = sparse_bind.layer;
+                bind.offset.x = sparse_bind.offset.x;
+                bind.offset.y = sparse_bind.offset.y;
+                bind.offset.z = sparse_bind.offset.z;
+                bind.extent.width = sparse_bind.extent.width;
+                bind.extent.height = sparse_bind.extent.height;
+                bind.extent.depth = sparse_bind.extent.depth;
+                bind.memory = sparse_bind.buffer.memory;
+                bind.memoryOffset = sparse_bind.buffer.offset;
+                image_memory_bind_info.emplace_back(bind);
+            }
+
+            auto bind_info = VkSparseImageMemoryBindInfo();
+            bind_info.image = image.handle();
+            bind_info.bindCount = image_memory_bind_info.size();
+            bind_info.pBinds = image_memory_bind_info.data();
+            image_bind_info.emplace_back(bind_info);
+        }
+
+        auto semaphore_submit_info = VkTimelineSemaphoreSubmitInfo();
+        semaphore_submit_info.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+        semaphore_submit_info.waitSemaphoreValueCount = semaphore_wait_values.size();
+        semaphore_submit_info.pWaitSemaphoreValues = semaphore_wait_values.data();
+        semaphore_submit_info.signalSemaphoreValueCount = semaphore_signal_values.size();
+        semaphore_submit_info.pSignalSemaphoreValues = semaphore_signal_values.data();
 
         auto bind_sparse_info = VkBindSparseInfo();
         bind_sparse_info.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
         bind_sparse_info.pNext = &semaphore_submit_info;
         bind_sparse_info.waitSemaphoreCount = wait_semaphore_info.size();
         bind_sparse_info.pWaitSemaphores = wait_semaphore_info.data();
-        // TODO: sparse binding buffers
+        // TODO: sparse binding buffers / opaque memory binds
         bind_sparse_info.bufferBindCount = 0;
         bind_sparse_info.pBufferBinds = nullptr;
-        bind_sparse_info.imageOpaqueBindCount = 1;
-        bind_sparse_info.pImageOpaqueBinds = &image_opaque_bind_info;
+        bind_sparse_info.imageBindCount = image_bind_info.size();
+        bind_sparse_info.pImageBinds = image_bind_info.data();
+        bind_sparse_info.imageOpaqueBindCount = 0;
+        bind_sparse_info.pImageOpaqueBinds = nullptr;
         bind_sparse_info.signalSemaphoreCount = signal_semaphore_info.size();
         bind_sparse_info.pSignalSemaphores = signal_semaphore_info.data();
         auto guard = std::lock_guard(_lock);

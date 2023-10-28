@@ -42,8 +42,8 @@ namespace ir {
         sampler_info.mipLodBias = info.lod_bias;
         sampler_info.anisotropyEnable = std::fpclassify(info.anisotropy) != FP_ZERO;
         sampler_info.maxAnisotropy = info.anisotropy;
-        sampler_info.compareEnable = false;
-        sampler_info.compareOp = {};
+        sampler_info.compareEnable = info.compare != compare_op_t::e_none;
+        sampler_info.compareOp = as_enum_counterpart(info.compare);
         sampler_info.minLod = 0.0f;
         sampler_info.maxLod = 16.0f;
         sampler_info.borderColor = as_enum_counterpart(info.border_color);

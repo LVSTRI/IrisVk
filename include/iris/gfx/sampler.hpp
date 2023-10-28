@@ -35,6 +35,7 @@ namespace ir {
         sampler_mipmap_mode_t mip_mode = {};
         sampler_address_mode_combo_t address_mode = {};
         sampler_border_color_t border_color = {};
+        compare_op_t compare = compare_op_t::e_none;
         std::optional<sampler_reduction_mode_t> reduction_mode = {};
         float32 lod_bias = 0.0f;
         float32 anisotropy = 0.0f;

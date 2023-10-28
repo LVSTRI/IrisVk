@@ -814,6 +814,7 @@ namespace ir {
         e_not_equal = VK_COMPARE_OP_NOT_EQUAL,
         e_greater_or_equal = VK_COMPARE_OP_GREATER_OR_EQUAL,
         e_always = VK_COMPARE_OP_ALWAYS,
+        e_none = 0x7fffffff,
     };
 
     // VkIndexType
@@ -824,6 +825,7 @@ namespace ir {
         e_uint8 = VK_INDEX_TYPE_UINT8_EXT,
     };
 
+    // VkFilter
     enum class sampler_filter_t : uint32 {
         e_nearest = VK_FILTER_NEAREST,
         e_linear = VK_FILTER_LINEAR,
@@ -831,11 +833,13 @@ namespace ir {
         e_cubic_img = VK_FILTER_CUBIC_IMG,
     };
 
+    // VkSamplerMipmapMode
     enum class sampler_mipmap_mode_t : uint32 {
         e_nearest = VK_SAMPLER_MIPMAP_MODE_NEAREST,
         e_linear = VK_SAMPLER_MIPMAP_MODE_LINEAR,
     };
 
+    // VkSamplerAddressMode
     enum class sampler_address_mode_t : uint32 {
         e_repeat = VK_SAMPLER_ADDRESS_MODE_REPEAT,
         e_mirrored_repeat = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
@@ -844,6 +848,7 @@ namespace ir {
         e_mirror_clamp_to_edge = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
     };
 
+    // VkBorderColor
     enum class sampler_border_color_t : uint32 {
         e_float_transparent_black = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
         e_int_transparent_black = VK_BORDER_COLOR_INT_TRANSPARENT_BLACK,
@@ -855,6 +860,7 @@ namespace ir {
         e_int_custom = VK_BORDER_COLOR_INT_CUSTOM_EXT,
     };
 
+    // VkSamplerReductionMode
     enum class sampler_reduction_mode_t : uint32 {
         e_weighted_average = VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT,
         e_min = VK_SAMPLER_REDUCTION_MODE_MIN_EXT,

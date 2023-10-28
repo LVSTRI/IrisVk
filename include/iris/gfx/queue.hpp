@@ -29,6 +29,19 @@ namespace ir {
         e_transfer,
     };
 
+    struct sparse_image_memory_bind_t {
+        uint32 level = 0;
+        uint32 layer = 0;
+        offset_3d_t offset = {};
+        extent_3d_t extent = {};
+        buffer_info_t buffer = {};
+    };
+
+    struct sparse_image_memory_bind_info_t {
+        std::reference_wrapper<const image_t> image;
+        std::vector<sparse_image_memory_bind_t> bindings;
+    };
+
     struct queue_create_info_t {
         queue_family_t family = {};
         queue_type_t type = {};
@@ -55,7 +68,7 @@ namespace ir {
     struct queue_bind_sparse_info_t {
         std::vector<queue_semaphore_stage_t> wait_semaphores;
         std::vector<queue_semaphore_stage_t> signal_semaphores;
-
+        std::vector<sparse_image_memory_bind_info_t> image_binds;
     };
 
     class queue_t : public enable_intrusive_refcount_t<queue_t> {

@@ -71,7 +71,12 @@ namespace ir {
         IR_NODISCARD auto data() noexcept -> T*;
         IR_NODISCARD auto data() const noexcept -> const T*;
 
-        IR_NODISCARD auto slice(uint64 offset = 0, uint64 size = whole_size) const noexcept -> buffer_info_t;
+        IR_NODISCARD auto as_span() noexcept -> std::span<T>;
+        IR_NODISCARD auto as_span() const noexcept -> std::span<const T>;
+
+        IR_NODISCARD auto as_vector() const noexcept -> std::vector<T>;
+
+        IR_NODISCARD auto slice(uint64 offset = 0, uint64 size = whole_size, bool null = false) const noexcept -> buffer_info_t;
         IR_NODISCARD auto info() const noexcept -> const buffer_create_info_t&;
         IR_NODISCARD auto device() const noexcept -> const device_t&;
 
@@ -251,15 +256,31 @@ namespace ir {
     }
 
     template <typename T>
-    auto buffer_t<T>::slice(uint64 offset, uint64 size) const noexcept -> buffer_info_t {
+    auto buffer_t<T>::as_span() noexcept -> std::span<T> {
+        return std::span<T>(data(), size());
+    }
+
+    template <typename T>
+    auto buffer_t<T>::as_span() const noexcept -> std::span<const T> {
+        return std::span<const T>(data(), size());
+    }
+
+    template <typename T>
+    auto buffer_t<T>::as_vector() const noexcept -> std::vector<T> {
+        return std::vector<T>(data(), data() + size());
+    }
+
+    template <typename T>
+    auto buffer_t<T>::slice(uint64 offset, uint64 size, bool null) const noexcept -> buffer_info_t {
         IR_PROFILE_SCOPED();
         return buffer_info_t {
-            _handle,
+            null ? VK_NULL_HANDLE : memory(),
+            null ? VK_NULL_HANDLE : handle(),
             offset * sizeof(T),
             size == whole_size ?
-                size_bytes() :
+                self::size_bytes() :
                 size * sizeof(T),
-            _address
+            null ? 0 : address(),
         };
     }
 
@@ -319,7 +340,7 @@ namespace ir {
         if (size + where > _capacity) {
             reserve(std::max(_capacity * 2, size + where + 1));
         }
-        std::memcpy(data() + where, ptr, bytes);
+        std::memcpy(reinterpret_cast<uint8*>(_data) + offset, ptr, bytes);
         _size = std::max(_size, size + where);
     }
 

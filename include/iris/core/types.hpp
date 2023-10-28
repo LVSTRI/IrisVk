@@ -103,4 +103,38 @@ namespace ir {
             return value * 1024 * 1024 * 1024;
         }
     }
+
+    struct offset_2d_t {
+        constexpr auto operator ==(const offset_2d_t& other) const noexcept -> bool = default;
+
+        int32 x = 0;
+        int32 y = 0;
+    };
+    constexpr static auto ignored_offset_2d = offset_2d_t { -1_i32, -1_i32 };
+
+    struct offset_3d_t {
+        constexpr auto operator ==(const offset_3d_t& other) const noexcept -> bool = default;
+
+        int32 x = 0;
+        int32 y = 0;
+        int32 z = 0;
+    };
+    constexpr static auto ignored_offset_3d = offset_3d_t { -1_i32, -1_i32, -1_i32 };
+
+    struct extent_2d_t {
+        constexpr auto operator ==(const extent_2d_t& other) const noexcept -> bool = default;
+
+        uint32 width = 0;
+        uint32 height = 0;
+    };
+    constexpr static auto ignored_extent_2d = extent_2d_t { -1_u32, -1_u32 };
+
+    struct extent_3d_t {
+        constexpr auto operator ==(const extent_3d_t& other) const noexcept -> bool = default;
+
+        uint32 width = 0;
+        uint32 height = 0;
+        uint32 depth = 0;
+    };
+    constexpr static auto ignored_extent_3d = extent_3d_t { -1_u32, -1_u32, -1_u32 };
 }
