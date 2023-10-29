@@ -23,11 +23,13 @@
 
 #include <vector>
 #include <chrono>
+#include <queue>
 
 #define IRIS_MAIN_VIEW_INDEX 0
 #define IRIS_SHADOW_VIEW_START 1
 
 #define IRIS_MAX_DIRECTIONAL_LIGHTS 4
+#define IRIS_MAX_SPARSE_BINDING_UPDATES 16384
 #define IRIS_VSM_VIRTUAL_BASE_SIZE 16384
 #define IRIS_VSM_VIRTUAL_BASE_RESOLUTION (IRIS_VSM_VIRTUAL_BASE_SIZE * IRIS_VSM_VIRTUAL_BASE_SIZE)
 #define IRIS_VSM_VIRTUAL_PAGE_SIZE 128
@@ -49,8 +51,12 @@ namespace test {
         glm::mat4 inv_projection = {};
         glm::mat4 view = {};
         glm::mat4 inv_view = {};
+        glm::mat4 stable_view = {};
+        glm::mat4 inv_stable_view = {};
         glm::mat4 proj_view = {};
         glm::mat4 inv_proj_view = {};
+        glm::mat4 stable_proj_view = {};
+        glm::mat4 inv_stable_proj_view = {};
         glm::vec4 eye_position = {};
         glm::vec4 frustum[6] = {};
         glm::vec2 resolution = {};
@@ -67,7 +73,7 @@ namespace test {
     };
 
     struct vsm_global_data_t {
-        float32 first_width = 8.0f;
+        float32 first_width = 4.0f;
         float32 lod_bias = -2.0f;
         uint32 clipmap_count = IRIS_VSM_CLIPMAP_COUNT;
     };
@@ -303,8 +309,6 @@ namespace test {
         std::vector<ir::arc_ptr<ir::fence_t>> _sparse_fence;
         ir::arc_ptr<ir::semaphore_t> _sparse_bind_semaphore;
 
-        ir::queue_bind_sparse_info_t _sparse_bind_info = {};
-
         struct {
             bool is_initialized = false;
             ir::arc_ptr<ir::image_t> ids;
@@ -328,10 +332,12 @@ namespace test {
             sparse_virtual_allocator_t<> allocator;
             ir::arc_ptr<ir::buffer_t<float32>> memory;
 
-            std::vector<hzb_t> hzbs;
+            hzb_t hzb;
             std::vector<virtual_shadow_map_t> images;
             std::vector<std::reference_wrapper<const ir::image_view_t>> image_views;
             ir::arc_ptr<ir::sampler_t> sampler;
+
+            std::queue<ir::queue_bind_sparse_info_t> sparse_binding_deferred_queue;
 
             readback_t<uint8> visible_pages_buffer;
 

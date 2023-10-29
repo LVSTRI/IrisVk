@@ -16,9 +16,10 @@
 
 struct virtual_page_info_t {
     uvec2 position;
-    uint clipmap_level;
+    uvec2 stable_position;
     vec2 uv;
     vec2 stable_uv;
+    uint clipmap_level;
     float depth;
 };
 
@@ -72,17 +73,20 @@ precise virtual_page_info_t virtual_page_info_from_depth(
     const uint unclamped_clipmap_level = uint(max(ceil(log2(projection_length / first_clipmap_texel_width) + vsm_data.lod_bias), 0.0));
     const uint clipmap_level = clamp(unclamped_clipmap_level, 0, vsm_data.clipmap_count - 1);
     const mat4 clipmap_proj_view = view_ptr.data[IRIS_SHADOW_VIEW_START_INDEX + clipmap_level].proj_view;
+    const mat4 clipmap_stable_proj_view = view_ptr.data[IRIS_SHADOW_VIEW_START_INDEX + clipmap_level].stable_proj_view;
     const vec4 shadow_position = clipmap_proj_view * vec4(world_position, 1.0);
-    const vec4 stable_shadow_position = make_stable_proj_view(clipmap_proj_view) * vec4(world_position, 1.0);
+    const vec4 stable_shadow_position = clipmap_stable_proj_view * vec4(world_position, 1.0);
     const vec2 virtual_shadow_uv = fract(shadow_position.xy * 0.5 + 0.5);
     const vec2 stable_virtual_shadow_uv = fract(stable_shadow_position.xy * 0.5 + 0.5);
     const uvec2 virtual_shadow_page = uvec2(virtual_shadow_uv * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
+    const uvec2 stable_virtual_shadow_page = uvec2(stable_virtual_shadow_uv * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
 
     return virtual_page_info_t(
         virtual_shadow_page,
-        clipmap_level,
+        stable_virtual_shadow_page,
         virtual_shadow_uv,
         stable_virtual_shadow_uv,
+        clipmap_level,
         shadow_position.z
     );
 }

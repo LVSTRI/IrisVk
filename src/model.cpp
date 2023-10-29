@@ -43,7 +43,7 @@ namespace test {
         };
         auto materials = std::vector<material_t>();
         auto textures = std::vector<texture_info_t>();
-        for (auto i = 0_u32; i < gltf->materials_count; ++i) {
+        /*for (auto i = 0_u32; i < gltf->materials_count; ++i) {
             const auto& material = gltf->materials[i];
             auto c_material = material_t();
             if (is_basisu_texture_valid(material.pbr_metallic_roughness.base_color_texture.texture)) {
@@ -87,7 +87,7 @@ namespace test {
                 material_cache[&material] = materials.size();
                 materials.push_back(c_material);
             }
-        }
+        }*/
 
         auto meshlet_id = 0_u32;
         auto vertex_offset = 0_u32;

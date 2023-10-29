@@ -37,7 +37,8 @@ namespace test {
         auto update(float32 dt) noexcept -> void;
 
     private:
-        glm::vec3 _position = { 0.0f, 0.0f, 20.0f };
+        //glm::vec3 _position = { 0.0f, 5.0f, 20.0f };
+        glm::vec3 _position = { 0.0f, 0.0f, 0.0f };
         glm::vec3 _front = { 0.0f, 0.0f, -1.0f };
         glm::vec3 _up = { 0.0f, 1.0f, 0.0f };
         glm::vec3 _right = { 1.0f, 0.0f, 0.0f };

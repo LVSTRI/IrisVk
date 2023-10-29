@@ -74,7 +74,7 @@ namespace test {
     auto application_t::_load_models() noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto paths = std::to_array<fs::path>({
-            "../models/compressed/intel_sponza/intel_sponza.glb",
+            "../models/compressed/bistro/bistro.glb",
         });
         auto models = std::vector<meshlet_model_t>();
         for (const auto& path : paths) {
@@ -249,12 +249,29 @@ namespace test {
         auto graphics_signal_semaphores = std::vector<ir::queue_semaphore_stage_t> {
             { std::cref(render_done), ir::pipeline_stage_t::e_none }
         };
-        if (!_sparse_bind_info.image_binds.empty()) {
+        if (!_vsm.sparse_binding_deferred_queue.empty()) {
+            auto sparse_bind_info = ir::queue_bind_sparse_info_t();
+            auto sparse_bind_count = 0_u32;
+            while (sparse_bind_count < IRIS_MAX_SPARSE_BINDING_UPDATES && !_vsm.sparse_binding_deferred_queue.empty()) {
+                const auto& current_sparse_bind_info = _vsm.sparse_binding_deferred_queue.front();
+                if (current_sparse_bind_info.image_binds.empty()) {
+                    _vsm.sparse_binding_deferred_queue.pop();
+                    continue;
+                }
+                sparse_bind_info.image_binds.insert(
+                    sparse_bind_info.image_binds.end(),
+                    current_sparse_bind_info.image_binds.begin(),
+                    current_sparse_bind_info.image_binds.end());
+                for (const auto& binding : current_sparse_bind_info.image_binds) {
+                    sparse_bind_count += binding.bindings.size();
+                }
+                _vsm.sparse_binding_deferred_queue.pop();
+            }
             sparse_timeline_value = _sparse_bind_semaphore->increment(2);
-            _sparse_bind_info.wait_semaphores = {
+            sparse_bind_info.wait_semaphores = {
                 { std::cref(*_sparse_bind_semaphore), {}, sparse_timeline_value }
             };
-            _sparse_bind_info.signal_semaphores = {
+            sparse_bind_info.signal_semaphores = {
                 { std::cref(*_sparse_bind_semaphore), {}, sparse_timeline_value + 1 }
             };
             graphics_wait_semaphores.emplace_back(
@@ -267,7 +284,7 @@ namespace test {
                 ir::pipeline_stage_t::e_bottom_of_pipe,
                 sparse_timeline_value + 2
             );
-            _device->compute_queue().bind_sparse(_sparse_bind_info);
+            _device->compute_queue().bind_sparse(sparse_bind_info);
         } else {
             sparse_timeline_value = _sparse_bind_semaphore->increment();
             graphics_signal_semaphores.emplace_back(
@@ -354,6 +371,9 @@ namespace test {
             if (_wsi.input().is_pressed(ir::keyboard_t::e_right)) {
                 azimuth += 25.0f * _delta_time;
             }
+            if (glm::epsilonEqual(elevation, 360.0f, 0.0001f)) {
+                elevation += 0.0002f;
+            }
             auto directional_light = directional_light_t();
             directional_light.direction = polar_to_cartesian(elevation, azimuth);
             directional_light.intensity = 1.0f;
@@ -381,41 +401,31 @@ namespace test {
 
         // write shadow views
         {
-            const auto main_view = views[IRIS_MAIN_VIEW_INDEX];
-            // compute frustum center
-            const auto corners = std::to_array({
-                main_view.inv_proj_view * glm::vec4(-1.0f, -1.0f, 0.01f, 1.0f),
-                main_view.inv_proj_view * glm::vec4( 1.0f, -1.0f, 0.01f, 1.0f),
-                main_view.inv_proj_view * glm::vec4(-1.0f,  1.0f, 0.01f, 1.0f),
-                main_view.inv_proj_view * glm::vec4( 1.0f,  1.0f, 0.01f, 1.0f),
-                main_view.inv_proj_view * glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f),
-                main_view.inv_proj_view * glm::vec4( 1.0f, -1.0f, 1.0f, 1.0f),
-                main_view.inv_proj_view * glm::vec4(-1.0f,  1.0f, 1.0f, 1.0f),
-                main_view.inv_proj_view * glm::vec4( 1.0f,  1.0f, 1.0f, 1.0f),
-            });
-            auto center = glm::vec3(0.0f);
-            for (const auto& corner : corners) {
-                center += glm::vec3(corner / corner.w);
-            }
-            center /= 8.0f;
-
             const auto& sun_dir_light = _state.directional_lights[0];
             for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
                 const auto width = _state.vsm_global_data.first_width * (1 << i) / 2.0f;
 
                 auto view = view_t();
-                view.projection = glm::ortho(-width, width, -width, width, -500.0f, 500.0f);
+                view.projection = glm::ortho(-width, width, -width, width, -2000.0f, 2000.0f);
                 view.projection[1][1] *= -1.0f;
                 view.inv_projection = glm::inverse(view.projection);
-                view.view = glm::lookAt(
-                    _camera.position() + sun_dir_light.direction,
-                    _camera.position(),
-                    glm::vec3(0.0f, 1.0f, 0.0f)
-                );
-                view.inv_view = glm::inverse(view.view);
-                view.proj_view = view.projection * view.view;
-                view.inv_proj_view = glm::inverse(view.proj_view);
+                view.stable_view = glm::lookAt(sun_dir_light.direction, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                view.inv_stable_view = glm::inverse(view.stable_view);
+                view.stable_proj_view = view.projection * view.stable_view;
+                view.inv_stable_proj_view = glm::inverse(view.stable_proj_view);
                 view.eye_position = {};
+
+                // calculate view matrix based on main camera position shift to center
+                {
+                    const auto center = glm::trunc(_camera.position());
+                    view.view = glm::lookAt(
+                        center + sun_dir_light.direction,
+                        center,
+                        glm::vec3(0.0f, 1.0f, 0.0f));
+                    view.inv_view = glm::inverse(view.view);
+                    view.proj_view = view.projection * view.view;
+                    view.inv_proj_view = glm::inverse(view.proj_view);
+                }
 
                 const auto frustum = make_perspective_frustum(view.proj_view);
                 std::memcpy(view.frustum, frustum.data(), sizeof(view.frustum));
@@ -439,19 +449,37 @@ namespace test {
     auto application_t::_update_sparse_bindings() noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto& vsm_visible_pages_buffer = *_vsm.visible_pages_buffer.host[_frame_index];
-        _sparse_bind_info = {};
+        auto current_sparse_bind_update_count = 0_u32;
+        auto sparse_image_infos = std::vector<ir::sparse_image_memory_bind_info_t>();
+        auto sparse_image_bindings = std::vector<ir::sparse_image_memory_bind_t>();
         for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
             const auto requests = vsm_visible_pages_buffer.as_span();
             const auto bindings = _vsm.images[i].make_updated_sparse_bindings(requests.subspan(
                 i * IRIS_VSM_VIRTUAL_PAGE_COUNT,
                 IRIS_VSM_VIRTUAL_PAGE_COUNT
             ));
-            if (!bindings.empty()) {
-                _sparse_bind_info.image_binds.emplace_back(ir::sparse_image_memory_bind_info_t {
+            auto sparse_image_memory_binds = std::vector<ir::sparse_image_memory_bind_t>();
+            sparse_image_bindings.insert(sparse_image_bindings.end(), bindings.begin(), bindings.end());
+            if (!sparse_image_bindings.empty()) {
+                current_sparse_bind_update_count += sparse_image_bindings.size();
+                sparse_image_infos.emplace_back(ir::sparse_image_memory_bind_info_t {
                     .image = std::cref(_vsm.images[i].image()),
-                    .bindings = std::move(bindings),
+                    .bindings = std::move(sparse_image_bindings),
                 });
+                if (current_sparse_bind_update_count > IRIS_MAX_SPARSE_BINDING_UPDATES) {
+                    _vsm.sparse_binding_deferred_queue.push(ir::queue_bind_sparse_info_t {
+                        .image_binds = { std::move(sparse_image_infos) },
+                    });
+                    sparse_image_infos.clear();
+                    current_sparse_bind_update_count = 0;
+                }
+                sparse_image_bindings.clear();
             }
+        }
+        if (!sparse_image_infos.empty()) {
+            _vsm.sparse_binding_deferred_queue.push(ir::queue_bind_sparse_info_t {
+                .image_binds = { std::move(sparse_image_infos) },
+            });
         }
     }
 
@@ -662,31 +690,31 @@ namespace test {
                 .flags = ir::buffer_flag_t::e_mapped,
                 .capacity = 1,
             });
-            _vsm.hzbs.reserve(IRIS_VSM_CLIPMAP_COUNT);
+            _vsm.hzb.image = ir::image_t::make(*_device, {
+                .width = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
+                .height = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
+                .levels = 1 + glm::log2<uint32>(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE),
+                .layers = IRIS_VSM_CLIPMAP_COUNT,
+                .usage =
+                    ir::image_usage_t::e_storage |
+                    ir::image_usage_t::e_sampled |
+                    ir::image_usage_t::e_transfer_dst,
+                .format = ir::resource_format_t::e_r8_uint,
+                .view = ir::default_image_view_info,
+            });
             _vsm.images.reserve(IRIS_VSM_CLIPMAP_COUNT);
             _vsm.image_views.reserve(IRIS_VSM_CLIPMAP_COUNT);
             for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
-                auto hzb = hzb_t();
-                hzb.image = ir::image_t::make(*_device, {
-                    .width = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
-                    .height = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
-                    .levels = 1 + glm::log2<uint32>(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE),
-                    .usage =
-                        ir::image_usage_t::e_storage |
-                        ir::image_usage_t::e_sampled |
-                        ir::image_usage_t::e_transfer_dst,
-                    .format = ir::resource_format_t::e_r8_uint,
-                    .view = ir::default_image_view_info,
-                });
-                for (auto j = 0_u32; j < hzb.image->levels(); ++j) {
-                    hzb.views.emplace_back(ir::image_view_t::make(*hzb.image, {
+                for (auto j = 0_u32; j < _vsm.hzb.image->levels(); ++j) {
+                    _vsm.hzb.views.emplace_back(ir::image_view_t::make(*_vsm.hzb.image, {
                         .subresource = {
                             .level = j,
                             .level_count = 1,
+                            .layer = i,
+                            .layer_count = 1,
                         }
                     }));
                 }
-                _vsm.hzbs.emplace_back(std::move(hzb));
                 _vsm.images.emplace_back(virtual_shadow_map_t::make(*_device, _vsm.allocator, *_vsm.memory));
                 _vsm.image_views.emplace_back(std::cref(_vsm.images.back().image().view()));
             }
@@ -767,17 +795,15 @@ namespace test {
             });
 
             _device->graphics_queue().submit([this](ir::command_buffer_t& commands) {
-                for (const auto& hzb : _vsm.hzbs) {
-                    commands.image_barrier({
-                        .image = std::cref(*hzb.image),
-                        .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
-                        .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-                        .source_access = ir::resource_access_t::e_none,
-                        .dest_access = ir::resource_access_t::e_shader_storage_read,
-                        .old_layout = ir::image_layout_t::e_undefined,
-                        .new_layout = ir::image_layout_t::e_general,
-                    });
-                }
+                commands.image_barrier({
+                    .image = std::cref(*_vsm.hzb.image),
+                    .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .source_access = ir::resource_access_t::e_none,
+                    .dest_access = ir::resource_access_t::e_shader_storage_read,
+                    .old_layout = ir::image_layout_t::e_undefined,
+                    .new_layout = ir::image_layout_t::e_general,
+                });
             });
         }
     }
@@ -1052,27 +1078,35 @@ namespace test {
         });
         for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
             command_buffer.image_barrier({
-                .image = std::cref(*_vsm.hzbs[i].image),
+                .image = std::cref(*_vsm.hzb.image),
                 .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
                 .dest_stage = ir::pipeline_stage_t::e_transfer,
                 .source_access = ir::resource_access_t::e_none,
                 .dest_access = ir::resource_access_t::e_transfer_write,
                 .old_layout = ir::image_layout_t::e_undefined,
                 .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
+                .subresource = {
+                    .level = 0,
+                    .level_count = 1,
+                    .layer = i,
+                    .layer_count = 1,
+                }
             });
             command_buffer.copy_buffer_to_image(
                 _vsm.visible_pages_buffer.device->slice(
                     i * IRIS_VSM_VIRTUAL_PAGE_COUNT,
                     IRIS_VSM_VIRTUAL_PAGE_COUNT
                 ),
-                *_vsm.hzbs[i].image,
+                *_vsm.hzb.image,
                 {
                     .level = 0,
                     .level_count = 1,
+                    .layer = i,
+                    .layer_count = 1,
                 }
             );
             command_buffer.image_barrier({
-                .image = std::cref(*_vsm.hzbs[i].image),
+                .image = std::cref(*_vsm.hzb.image),
                 .source_stage = ir::pipeline_stage_t::e_transfer,
                 .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                 .source_access = ir::resource_access_t::e_transfer_write,
@@ -1081,6 +1115,12 @@ namespace test {
                     ir::resource_access_t::e_shader_storage_write,
                 .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
                 .new_layout = ir::image_layout_t::e_general,
+                .subresource = {
+                    .level = 0,
+                    .level_count = 1,
+                    .layer = i,
+                    .layer_count = 1,
+                }
             });
         }
         command_buffer.buffer_barrier({

@@ -18,8 +18,12 @@ struct view_t {
     mat4 inv_projection;
     mat4 view;
     mat4 inv_view;
+    mat4 stable_view;
+    mat4 inv_stable_view;
     mat4 proj_view;
     mat4 inv_proj_view;
+    mat4 stable_proj_view;
+    mat4 inv_stable_proj_view;
     vec4 eye_position;
     vec4[6] frustum;
     vec2 resolution;

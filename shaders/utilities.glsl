@@ -64,12 +64,4 @@ vec4 vec4_from_float(in float[4] v) {
     return vec4(v[0], v[1], v[2], v[3]);
 }
 
-mat4 make_stable_proj_view(in mat4 proj_view) {
-    mat4 stable_proj_view = proj_view;
-    stable_proj_view[3][0] = 0.0;
-    stable_proj_view[3][1] = 0.0;
-    stable_proj_view[3][2] = 0.0;
-    return stable_proj_view;
-}
-
 #endif
