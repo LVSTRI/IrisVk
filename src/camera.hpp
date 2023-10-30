@@ -35,6 +35,7 @@ namespace test {
         IR_NODISCARD auto projection(bool infinite = true, bool reverse_z = true) const noexcept -> glm::mat4;
 
         auto update(float32 dt) noexcept -> void;
+        auto update_aspect(float32 width, float32 height) noexcept -> void;
 
     private:
         //glm::vec3 _position = { 0.0f, 5.0f, 20.0f };
@@ -48,6 +49,9 @@ namespace test {
         float32 _fov = 60.0f;
         float32 _near = 0.1f;
         float32 _far = 512.0f;
+
+        float32 _width = 0.0f;
+        float32 _height = 0.0f;
 
         std::reference_wrapper<ir::wsi_platform_t> _window;
     };

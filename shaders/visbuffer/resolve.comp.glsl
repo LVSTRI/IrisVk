@@ -20,8 +20,7 @@ layout (set = 0, binding = 0) uniform texture2D u_depth;
 layout (r32ui, set = 0, binding = 1) restrict readonly uniform uimage2D u_visbuffer;
 layout (rgba32f, set = 0, binding = 2) restrict writeonly uniform image2D u_output;
 
-layout (set = 0, binding = 3) uniform sampler2DShadow[16] u_vsm;
-layout (set = 0, binding = 4) uniform sampler2D[] u_textures;
+layout (set = 0, binding = 3) uniform sampler2D[] u_textures;
 
 layout (scalar, push_constant) restrict uniform u_push_constants_block {
     restrict b_view_block u_view_ptr;
@@ -201,36 +200,17 @@ void main() {
         const float light_intensity = sun_dir_light.intensity;
         const float light_diffuse = max(dot(normal, light_dir), 0.0);
         const float light_specular = pow(max(dot(reflect(-light_dir, normal), view_direction), 0.0), 64.0);
-        float shadow_factor = 0.0;
-        {
-            const float texel_size = 1.0 / (IRIS_VSM_VIRTUAL_BASE_SIZE * (clipmap_level + 1));
-            for (uint i = 0; i < 32; ++i) {
-                float shadow_depth = 0.0;
-                const int x = int(i) % 4 - 2;
-                const int y = int(i) / 4 - 2;
-                const vec2 uv = virtual_page.uv + vec2(x, y) * texel_size;
-                const float z = virtual_page.depth;
-                const int residency = sparseTextureLodARB(u_vsm[clipmap_level], vec3(uv, z), 0, shadow_depth);
-                if (!sparseTexelsResidentARB(residency)) {
-                    shadow_depth = 1.0;
-                }
-                shadow_factor += shadow_depth;
-            }
-            shadow_factor /= 32.0;
-        }
-
-        color = base_color * light_ambient;
-        color += light_intensity * (light_diffuse + light_specular) * base_color * shadow_factor;
+        color += light_intensity * (light_ambient + light_diffuse + light_specular) * base_color;
     }
-    color *= _debug_clipmap_colors[clipmap_level];
+    /*color *= _debug_clipmap_colors[clipmap_level];
     const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
     if (
-        virtual_page_uv.x < 0.02 ||
-        virtual_page_uv.y < 0.02 ||
-        virtual_page_uv.x > 0.98 ||
-        virtual_page_uv.y > 0.98
+        virtual_page_uv.x < 0.01 ||
+        virtual_page_uv.y < 0.01 ||
+        virtual_page_uv.x > 0.99 ||
+        virtual_page_uv.y > 0.99
     ) {
         color = vec3(1.0, 0.0125, 0.0125);
-    }
+    }*/
     imageStore(u_output, ivec2(gl_GlobalInvocationID.xy), vec4(color, 1.0));
 }

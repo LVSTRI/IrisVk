@@ -45,9 +45,10 @@ namespace test {
     }
 
     application_t::application_t() noexcept
-        : _camera(_wsi) {
+        : _camera(*_wsi) {
         IR_PROFILE_SCOPED();
         _initialize();
+        _initialize_imgui();
         _initialize_sync();
         _initialize_visbuffer_pass();
         _initialize_vsm_pass();
@@ -58,11 +59,14 @@ namespace test {
     application_t::~application_t() noexcept {
         IR_PROFILE_SCOPED();
         _device->wait_idle();
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
     }
 
     auto application_t::run() noexcept -> void {
         IR_PROFILE_SCOPED();
-        while (!_wsi.should_close()) {
+        while (!_wsi->should_close()) {
             _update();
             _update_frame_data();
             _render();
@@ -189,8 +193,7 @@ namespace test {
             *_command_buffers[_frame_index],
             *_image_available[_frame_index],
             *_render_done[_frame_index],
-            *_frame_fence[_frame_index],
-            *_sparse_fence[_frame_index]
+            *_frame_fence[_frame_index]
         );
     }
 
@@ -208,9 +211,9 @@ namespace test {
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
+        command_buffer.pool().reset();
 
         auto [image_index, should_resize] = _swapchain->acquire_next_image(image_available);
         if (should_resize) {
@@ -218,91 +221,40 @@ namespace test {
             return;
         }
 
-        command_buffer.pool().reset();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui_ImplVulkan_NewFrame();
+        ImGui::NewFrame();
+
         command_buffer.begin();
         _clear_buffer_pass();
         _visbuffer_pass();
-        _vsm_mark_visible_pages_pass();
-        command_buffer.end();
-
-        _device->graphics_queue().submit({
-            .command_buffers = { std::cref(command_buffer) },
-            .wait_semaphores = {},
-            .signal_semaphores = {},
-        }, &sparse_fence);
-        sparse_fence.wait();
-        sparse_fence.reset();
-        _update_sparse_bindings();
-
-        command_buffer.pool().reset();
-        command_buffer.begin();
-        _vsm_hardware_rasterize_pass();
         _visbuffer_resolve_pass();
         _visbuffer_tonemap_pass();
+        _vsm_mark_visible_pages_pass();
+        _gui_main_pass();
         _swapchain_copy_pass(image_index);
         command_buffer.end();
 
-        auto sparse_timeline_value = 0_u64;
-        auto graphics_wait_semaphores = std::vector<ir::queue_semaphore_stage_t> {
-            { std::cref(image_available), ir::pipeline_stage_t::e_transfer }
-        };
-        auto graphics_signal_semaphores = std::vector<ir::queue_semaphore_stage_t> {
-            { std::cref(render_done), ir::pipeline_stage_t::e_none }
-        };
-        if (!_vsm.sparse_binding_deferred_queue.empty()) {
-            auto sparse_bind_info = ir::queue_bind_sparse_info_t();
-            auto sparse_bind_count = 0_u32;
-            while (sparse_bind_count < IRIS_MAX_SPARSE_BINDING_UPDATES && !_vsm.sparse_binding_deferred_queue.empty()) {
-                const auto& current_sparse_bind_info = _vsm.sparse_binding_deferred_queue.front();
-                if (current_sparse_bind_info.image_binds.empty()) {
-                    _vsm.sparse_binding_deferred_queue.pop();
-                    continue;
-                }
-                sparse_bind_info.image_binds.insert(
-                    sparse_bind_info.image_binds.end(),
-                    current_sparse_bind_info.image_binds.begin(),
-                    current_sparse_bind_info.image_binds.end());
-                for (const auto& binding : current_sparse_bind_info.image_binds) {
-                    sparse_bind_count += binding.bindings.size();
-                }
-                _vsm.sparse_binding_deferred_queue.pop();
-            }
-            sparse_timeline_value = _sparse_bind_semaphore->increment(2);
-            sparse_bind_info.wait_semaphores = {
-                { std::cref(*_sparse_bind_semaphore), {}, sparse_timeline_value }
-            };
-            sparse_bind_info.signal_semaphores = {
-                { std::cref(*_sparse_bind_semaphore), {}, sparse_timeline_value + 1 }
-            };
-            graphics_wait_semaphores.emplace_back(
-                std::cref(*_sparse_bind_semaphore),
-                ir::pipeline_stage_t::e_top_of_pipe,
-                sparse_timeline_value + 1
-            );
-            graphics_signal_semaphores.emplace_back(
-                std::cref(*_sparse_bind_semaphore),
-                ir::pipeline_stage_t::e_bottom_of_pipe,
-                sparse_timeline_value + 2
-            );
-            _device->compute_queue().bind_sparse(sparse_bind_info);
-        } else {
-            sparse_timeline_value = _sparse_bind_semaphore->increment();
-            graphics_signal_semaphores.emplace_back(
-                std::cref(*_sparse_bind_semaphore),
-                ir::pipeline_stage_t::e_bottom_of_pipe,
-                sparse_timeline_value + 1
-            );
-        }
         _device->graphics_queue().submit({
             .command_buffers = { std::cref(command_buffer) },
-            .wait_semaphores = std::move(graphics_wait_semaphores),
-            .signal_semaphores = std::move(graphics_signal_semaphores),
+            .wait_semaphores = {
+                { std::cref(image_available), ir::pipeline_stage_t::e_transfer }
+            },
+            .signal_semaphores = {
+                { std::cref(render_done), ir::pipeline_stage_t::e_none }
+            },
         }, &frame_fence);
+
         should_resize = _device->graphics_queue().present({
             .swapchain = std::cref(*_swapchain),
             .wait_semaphores = { std::cref(render_done) },
             .image = image_index,
         });
+        if (_gui.should_resize) {
+            _resize_main_viewport();
+            _gui.should_resize = false;
+            return;
+        }
         if (should_resize) {
             _resize();
             return;
@@ -315,19 +267,18 @@ namespace test {
         const auto current_time = ch::steady_clock::now();
         _delta_time = ch::duration<float32>(current_time - _last_frame).count();
         _last_frame = current_time;
-        auto [viewport_width, viewport_height] = _wsi.update_viewport();
+        auto [viewport_width, viewport_height] = _wsi->update_viewport();
         while (viewport_width == 0 || viewport_height == 0) {
             ir::wsi_platform_t::wait_events();
-            std::tie(viewport_width, viewport_height) = _wsi.update_viewport();
+            std::tie(viewport_width, viewport_height) = _wsi->update_viewport();
         }
-        _wsi.input().capture();
-        if (_wsi.input().is_pressed_once(ir::mouse_t::e_right_button)) {
-            _wsi.capture_cursor();
+        _wsi->input().capture();
+        if (_wsi->input().is_pressed_once(ir::mouse_t::e_right_button)) {
+            _wsi->capture_cursor();
         }
-        if (_wsi.input().is_released_once(ir::mouse_t::e_right_button)) {
-            _wsi.release_cursor();
+        if (_wsi->input().is_released_once(ir::mouse_t::e_right_button)) {
+            _wsi->release_cursor();
         }
-
         _camera.update(_delta_time);
         _device->tick();
     }
@@ -338,8 +289,7 @@ namespace test {
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
 
         frame_fence.wait();
@@ -359,16 +309,16 @@ namespace test {
         {
             static auto elevation = 240.0f;
             static auto azimuth = 30.0f;
-            if (_wsi.input().is_pressed(ir::keyboard_t::e_up)) {
+            if (_wsi->input().is_pressed(ir::keyboard_t::e_up)) {
                 elevation += 25.0f * _delta_time;
             }
-            if (_wsi.input().is_pressed(ir::keyboard_t::e_down)) {
+            if (_wsi->input().is_pressed(ir::keyboard_t::e_down)) {
                 elevation -= 25.0f * _delta_time;
             }
-            if (_wsi.input().is_pressed(ir::keyboard_t::e_left)) {
+            if (_wsi->input().is_pressed(ir::keyboard_t::e_left)) {
                 azimuth -= 25.0f * _delta_time;
             }
-            if (_wsi.input().is_pressed(ir::keyboard_t::e_right)) {
+            if (_wsi->input().is_pressed(ir::keyboard_t::e_right)) {
                 azimuth += 25.0f * _delta_time;
             }
             if (glm::epsilonEqual(elevation, 360.0f, 0.0001f)) {
@@ -395,7 +345,7 @@ namespace test {
 
             const auto frustum = make_perspective_frustum(view.proj_view);
             std::memcpy(view.frustum, frustum.data(), sizeof(view.frustum));
-            view.resolution = glm::vec2(_swapchain->width(), _swapchain->height());
+            view.resolution = glm::vec2(_gui.main_viewport_resolution);
             views[IRIS_MAIN_VIEW_INDEX] = view;
         }
 
@@ -404,28 +354,24 @@ namespace test {
             const auto& sun_dir_light = _state.directional_lights[0];
             for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
                 const auto width = _state.vsm_global_data.first_width * (1 << i) / 2.0f;
+                const auto center = glm::trunc(_camera.position());
 
                 auto view = view_t();
                 view.projection = glm::ortho(-width, width, -width, width, -2000.0f, 2000.0f);
                 view.projection[1][1] *= -1.0f;
                 view.inv_projection = glm::inverse(view.projection);
+                view.view = glm::lookAt(
+                    center + sun_dir_light.direction,
+                    center,
+                    glm::vec3(0.0f, 1.0f, 0.0f));
+                view.inv_view = glm::inverse(view.view);
                 view.stable_view = glm::lookAt(sun_dir_light.direction, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
                 view.inv_stable_view = glm::inverse(view.stable_view);
+                view.proj_view = view.projection * view.view;
+                view.inv_proj_view = glm::inverse(view.proj_view);
                 view.stable_proj_view = view.projection * view.stable_view;
                 view.inv_stable_proj_view = glm::inverse(view.stable_proj_view);
                 view.eye_position = {};
-
-                // calculate view matrix based on main camera position shift to center
-                {
-                    const auto center = glm::trunc(_camera.position());
-                    view.view = glm::lookAt(
-                        center + sun_dir_light.direction,
-                        center,
-                        glm::vec3(0.0f, 1.0f, 0.0f));
-                    view.inv_view = glm::inverse(view.view);
-                    view.proj_view = view.projection * view.view;
-                    view.inv_proj_view = glm::inverse(view.proj_view);
-                }
 
                 const auto frustum = make_perspective_frustum(view.proj_view);
                 std::memcpy(view.frustum, frustum.data(), sizeof(view.frustum));
@@ -446,54 +392,27 @@ namespace test {
         }
     }
 
-    auto application_t::_update_sparse_bindings() noexcept -> void {
-        IR_PROFILE_SCOPED();
-        const auto& vsm_visible_pages_buffer = *_vsm.visible_pages_buffer.host[_frame_index];
-        auto current_sparse_bind_update_count = 0_u32;
-        auto sparse_image_infos = std::vector<ir::sparse_image_memory_bind_info_t>();
-        auto sparse_image_bindings = std::vector<ir::sparse_image_memory_bind_t>();
-        for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
-            const auto requests = vsm_visible_pages_buffer.as_span();
-            const auto bindings = _vsm.images[i].make_updated_sparse_bindings(requests.subspan(
-                i * IRIS_VSM_VIRTUAL_PAGE_COUNT,
-                IRIS_VSM_VIRTUAL_PAGE_COUNT
-            ));
-            auto sparse_image_memory_binds = std::vector<ir::sparse_image_memory_bind_t>();
-            sparse_image_bindings.insert(sparse_image_bindings.end(), bindings.begin(), bindings.end());
-            if (!sparse_image_bindings.empty()) {
-                current_sparse_bind_update_count += sparse_image_bindings.size();
-                sparse_image_infos.emplace_back(ir::sparse_image_memory_bind_info_t {
-                    .image = std::cref(_vsm.images[i].image()),
-                    .bindings = std::move(sparse_image_bindings),
-                });
-                if (current_sparse_bind_update_count > IRIS_MAX_SPARSE_BINDING_UPDATES) {
-                    _vsm.sparse_binding_deferred_queue.push(ir::queue_bind_sparse_info_t {
-                        .image_binds = { std::move(sparse_image_infos) },
-                    });
-                    sparse_image_infos.clear();
-                    current_sparse_bind_update_count = 0;
-                }
-                sparse_image_bindings.clear();
-            }
-        }
-        if (!sparse_image_infos.empty()) {
-            _vsm.sparse_binding_deferred_queue.push(ir::queue_bind_sparse_info_t {
-                .image_binds = { std::move(sparse_image_infos) },
-            });
-        }
-    }
-
     auto application_t::_resize() noexcept -> void {
         IR_PROFILE_SCOPED();
         _device->wait_idle();
         _swapchain.reset();
-        _swapchain = ir::swapchain_t::make(*_device, _wsi, {
+        _wsi->update_viewport();
+        _swapchain = ir::swapchain_t::make(*_device, *_wsi, {
             .vsync = false,
             .srgb = false,
         });
         _initialize_sync();
-        _initialize_visbuffer_pass();
+        _initialize_imgui();
         _frame_index = 0;
+    }
+
+    auto application_t::_resize_main_viewport() noexcept -> void {
+        _device->wait_idle();
+        const auto width = _gui.main_viewport_resolution.x;
+        const auto height = _gui.main_viewport_resolution.y;
+        _initialize_sync();
+        _initialize_visbuffer_pass();
+        _camera.update_aspect(width, height);
     }
 
     auto application_t::_initialize() noexcept -> void {
@@ -512,7 +431,7 @@ namespace test {
                 .image_atomics_64 = true,
             }
         });
-        _swapchain = ir::swapchain_t::make(*_device, _wsi, {
+        _swapchain = ir::swapchain_t::make(*_device, *_wsi, {
             .vsync = false,
             .srgb = false,
         });
@@ -526,8 +445,159 @@ namespace test {
             }));
         }
 
-        _camera = camera_t::make(_wsi);
+        _camera = camera_t::make(*_wsi);
         _camera.update(1 / 144.0f);
+    }
+
+    auto application_t::_initialize_imgui() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        if (!_gui.is_initialized) {
+            _gui.is_initialized = true;
+            IMGUI_CHECKVERSION();
+            _gui.main_pass = ir::render_pass_t::make(*_device, {
+                .attachments = {
+                    {
+                        .layout = {
+                            .final = ir::image_layout_t::e_transfer_src_optimal
+                        },
+                        .format = ir::resource_format_t::e_r8g8b8a8_unorm,
+                        .load_op = ir::attachment_load_op_t::e_clear,
+                        .store_op = ir::attachment_store_op_t::e_store,
+                    }
+                },
+                .subpasses = {
+                    {
+                        .color_attachments = { 0 }
+                    }
+                },
+                .dependencies = {
+                    {
+                        .source = ir::external_subpass,
+                        .dest = 0,
+                        .source_stage = ir::pipeline_stage_t::e_color_attachment_output,
+                        .dest_stage = ir::pipeline_stage_t::e_color_attachment_output,
+                        .source_access = ir::resource_access_t::e_none,
+                        .dest_access = ir::resource_access_t::e_color_attachment_write,
+                    }, {
+                        .source = 0,
+                        .dest = ir::external_subpass,
+                        .source_stage = ir::pipeline_stage_t::e_color_attachment_output,
+                        .dest_stage = ir::pipeline_stage_t::e_transfer,
+                        .source_access = ir::resource_access_t::e_color_attachment_write,
+                        .dest_access = ir::resource_access_t::e_transfer_read
+                    }
+                }
+            });
+
+            ImGui::CreateContext();
+            auto& io = ImGui::GetIO();
+            io.ConfigFlags =
+                ImGuiConfigFlags_NavEnableKeyboard |
+                ImGuiConfigFlags_DockingEnable;
+            io.Fonts->AddFontFromFileTTF("../fonts/RobotoCondensed-Regular.ttf", 18);
+            auto& style = ImGui::GetStyle();
+            style.WindowPadding = ImVec2(12, 12);
+            style.WindowRounding = 5.0f;
+            style.FramePadding = ImVec2(4, 4);
+            style.FrameRounding = 4.0f;
+            style.ItemSpacing = ImVec2(8, 8);
+            style.ItemInnerSpacing = ImVec2(4, 4);
+            style.IndentSpacing = 16.0f;
+            style.ScrollbarSize = 16.0f;
+            style.ScrollbarRounding = 8.0f;
+            style.GrabMinSize = 4.0f;
+            style.GrabRounding = 3.0f;
+    
+            style.Colors[ImGuiCol_Text] = ImVec4(0.80f, 0.80f, 0.83f, 1.00f);
+            style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
+            style.Colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+            style.Colors[ImGuiCol_ChildBg] = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
+            style.Colors[ImGuiCol_PopupBg] = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
+            style.Colors[ImGuiCol_Border] = ImVec4(0.20f, 0.20f, 0.23f, 0.88f);
+            style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.92f, 0.91f, 0.88f, 0.00f);
+            style.Colors[ImGuiCol_FrameBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+            style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
+            style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+            style.Colors[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+            style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(1.00f, 0.98f, 0.95f, 0.75f);
+            style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
+            style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+            style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+            style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
+            style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+            style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+            style.Colors[ImGuiCol_CheckMark] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
+            style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
+            style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+            style.Colors[ImGuiCol_Button] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+            style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
+            style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+            style.Colors[ImGuiCol_Header] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
+            style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+            style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+            style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+            style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
+            style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
+            style.Colors[ImGuiCol_PlotLines] = ImVec4(0.40f, 0.39f, 0.38f, 0.63f);
+            style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.25f, 1.00f, 0.00f, 1.00f);
+            style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.40f, 0.39f, 0.38f, 0.63f);
+            style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.25f, 1.00f, 0.00f, 1.00f);
+            style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.25f, 1.00f, 0.00f, 0.43f);
+
+            ImGui_ImplGlfw_InitForVulkan(static_cast<GLFWwindow*>(_wsi->window_handle()), true);
+            auto imgui_vulkan_info = ImGui_ImplVulkan_InitInfo();
+            imgui_vulkan_info.Instance = _instance->handle();
+            imgui_vulkan_info.PhysicalDevice = _device->gpu();
+            imgui_vulkan_info.Device = _device->handle();
+            imgui_vulkan_info.QueueFamily = _device->graphics_queue().family();
+            imgui_vulkan_info.Queue = _device->graphics_queue().handle();
+            imgui_vulkan_info.PipelineCache = nullptr;
+            imgui_vulkan_info.DescriptorPool = _device->descriptor_pool().handle();
+            imgui_vulkan_info.Subpass = 0;
+            imgui_vulkan_info.MinImageCount = 2;
+            imgui_vulkan_info.ImageCount = _swapchain->images().size();
+            imgui_vulkan_info.MSAASamples = ir::as_enum_counterpart(ir::sample_count_t::e_1);
+            imgui_vulkan_info.Allocator = nullptr;
+            imgui_vulkan_info.CheckVkResultFn = [](VkResult result) {
+                if (result != VK_SUCCESS) {
+                    spdlog::error("ImGui Vulkan error: {}", ir::as_string(result));
+                }
+            };
+            ImGui_ImplVulkan_LoadFunctions([](const char* name, void* data) {
+                return vkGetInstanceProcAddr((VkInstance)data, name);
+            }, _instance->handle());
+            ImGui_ImplVulkan_Init(&imgui_vulkan_info, _gui.main_pass->handle());
+            _device->graphics_queue().submit([](ir::command_buffer_t& commands) {
+                ImGui_ImplVulkan_CreateFontsTexture(commands.handle());
+            });
+            ImGui_ImplVulkan_DestroyFontUploadObjects();
+        }
+        _gui.main_image = ir::image_t::make_from_attachment(*_device, _gui.main_pass->attachment(0), {
+            .width = _swapchain->width(),
+            .height = _swapchain->height(),
+            .usage = ir::image_usage_t::e_color_attachment | ir::image_usage_t::e_transfer_src,
+            .view = ir::default_image_view_info,
+        });
+        _gui.main_framebuffer = ir::framebuffer_t::make(*_gui.main_pass, {
+            .attachments = { _gui.main_image },
+            .width = _swapchain->width(),
+            .height = _swapchain->height(),
+        });
+        _gui.main_layout = ir::descriptor_layout_t::make(*_device, std::to_array<ir::descriptor_binding_t>({
+            {
+                .set = 0,
+                .binding = 0,
+                .count = 1,
+                .type = ir::descriptor_type_t::e_combined_image_sampler,
+                .stage = ir::shader_stage_t::e_fragment,
+            }
+        }));
+        _gui.main_sampler = ir::sampler_t::make(*_device, {
+            .filter = { ir::sampler_filter_t::e_nearest },
+            .mip_mode = ir::sampler_mipmap_mode_t::e_nearest,
+            .address_mode = { ir::sampler_address_mode_t::e_repeat },
+            .border_color = ir::sampler_border_color_t::e_float_opaque_black,
+        });
     }
 
     auto application_t::_initialize_sync() noexcept -> void {
@@ -535,11 +605,6 @@ namespace test {
         _image_available = ir::semaphore_t::make(*_device, frames_in_flight, {});
         _render_done = ir::semaphore_t::make(*_device, frames_in_flight, {});
         _frame_fence = ir::fence_t::make(*_device, frames_in_flight);
-        _sparse_fence = ir::fence_t::make(*_device, frames_in_flight, false);
-        _sparse_bind_semaphore = ir::semaphore_t::make(*_device, {
-            .counter = 0,
-            .timeline = true,
-        });
     }
 
     auto application_t::_initialize_visbuffer_pass() noexcept -> void {
@@ -625,29 +690,31 @@ namespace test {
                 .compute = "../shaders/visbuffer/tonemap.comp.glsl",
             });
         }
+        const auto main_viewport_width = _gui.main_viewport_resolution.x;
+        const auto main_viewport_height = _gui.main_viewport_resolution.y;
         _visbuffer.ids = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(0), {
-            .width = _swapchain->width(),
-            .height = _swapchain->height(),
+            .width = main_viewport_width,
+            .height = main_viewport_height,
             .usage = ir::image_usage_t::e_color_attachment | ir::image_usage_t::e_storage,
             .view = ir::default_image_view_info,
         });
         _visbuffer.depth = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(1), {
-            .width = _swapchain->width(),
-            .height = _swapchain->height(),
+            .width = main_viewport_width,
+            .height = main_viewport_height,
             .usage = ir::image_usage_t::e_depth_stencil_attachment | ir::image_usage_t::e_sampled,
             .view = ir::default_image_view_info,
         });
         _visbuffer.color = ir::image_t::make(*_device, {
-            .width = _swapchain->width(),
-            .height = _swapchain->height(),
+            .width = main_viewport_width,
+            .height = main_viewport_height,
             .usage = ir::image_usage_t::e_storage,
             .format = ir::resource_format_t::e_r32g32b32a32_sfloat,
             .view = ir::default_image_view_info,
         });
         _visbuffer.final = ir::image_t::make(*_device, {
-            .width = _swapchain->width(),
-            .height = _swapchain->height(),
-            .usage = ir::image_usage_t::e_storage | ir::image_usage_t::e_transfer_src,
+            .width = main_viewport_width,
+            .height = main_viewport_height,
+            .usage = ir::image_usage_t::e_storage | ir::image_usage_t::e_sampled,
             .format = ir::resource_format_t::e_r8g8b8a8_unorm,
             .view = ir::default_image_view_info,
         });
@@ -656,18 +723,14 @@ namespace test {
                 _visbuffer.ids,
                 _visbuffer.depth,
             },
-            .width = _swapchain->width(),
-            .height = _swapchain->height(),
+            .width = main_viewport_width,
+            .height = main_viewport_height,
         });
     }
 
     auto application_t::_initialize_vsm_pass() noexcept -> void {
         if (!_vsm.is_initialized) {
             _vsm.is_initialized = true;
-            _vsm.memory = ir::buffer_t<float32>::make(*_device, {
-                .memory = { ir::memory_property_t::e_device_local },
-                .capacity = IRIS_VSM_PHYSICAL_BASE_RESOLUTION
-            });
             _vsm.visible_pages_buffer.device = ir::buffer_t<uint8>::make(*_device, {
                 .usage =
                     ir::buffer_usage_t::e_storage_buffer |
@@ -702,8 +765,6 @@ namespace test {
                 .format = ir::resource_format_t::e_r8_uint,
                 .view = ir::default_image_view_info,
             });
-            _vsm.images.reserve(IRIS_VSM_CLIPMAP_COUNT);
-            _vsm.image_views.reserve(IRIS_VSM_CLIPMAP_COUNT);
             for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
                 for (auto j = 0_u32; j < _vsm.hzb.image->levels(); ++j) {
                     _vsm.hzb.views.emplace_back(ir::image_view_t::make(*_vsm.hzb.image, {
@@ -715,81 +776,7 @@ namespace test {
                         }
                     }));
                 }
-                _vsm.images.emplace_back(virtual_shadow_map_t::make(*_device, _vsm.allocator, *_vsm.memory));
-                _vsm.image_views.emplace_back(std::cref(_vsm.images.back().image().view()));
             }
-            _vsm.sampler = ir::sampler_t::make(*_device, {
-                .filter = { ir::sampler_filter_t::e_linear },
-                .mip_mode = ir::sampler_mipmap_mode_t::e_nearest,
-                .address_mode = { ir::sampler_address_mode_t::e_repeat },
-                .border_color = ir::sampler_border_color_t::e_float_opaque_white,
-                .compare = ir::compare_op_t::e_less,
-            });
-            _vsm.rasterize_pass = ir::render_pass_t::make(*_device, {
-                .attachments = {
-                    {
-                        .layout = {
-                            .final = ir::image_layout_t::e_shader_read_only_optimal
-                        },
-                        .format = ir::resource_format_t::e_d32_sfloat,
-                        .load_op = ir::attachment_load_op_t::e_clear,
-                        .store_op = ir::attachment_store_op_t::e_store,
-                    }
-                },
-                .subpasses = {
-                    {
-                        .depth_stencil_attachment = 0
-                    }
-                },
-                .dependencies = {
-                    {
-                        .source = ir::external_subpass,
-                        .dest = 0,
-                        .source_stage =
-                            ir::pipeline_stage_t::e_early_fragment_tests |
-                            ir::pipeline_stage_t::e_late_fragment_tests,
-                        .dest_stage =
-                            ir::pipeline_stage_t::e_early_fragment_tests |
-                            ir::pipeline_stage_t::e_late_fragment_tests,
-                        .source_access = ir::resource_access_t::e_none,
-                        .dest_access = ir::resource_access_t::e_depth_stencil_attachment_write,
-                    }, {
-                        .source = 0,
-                        .dest = ir::external_subpass,
-                        .source_stage =
-                            ir::pipeline_stage_t::e_early_fragment_tests |
-                            ir::pipeline_stage_t::e_late_fragment_tests,
-                        .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-                        .source_access = ir::resource_access_t::e_depth_stencil_attachment_write,
-                        .dest_access = ir::resource_access_t::e_shader_sampled_read
-                    }
-                }
-            });
-            _vsm.rasterize_framebuffers.reserve(IRIS_VSM_CLIPMAP_COUNT);
-            for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
-                const auto& image = _vsm.images[i].image();
-                _vsm.rasterize_framebuffers.emplace_back(ir::framebuffer_t::make(*_vsm.rasterize_pass, {
-                    .attachments = {
-                        image.as_intrusive_ptr(),
-                    },
-                    .width = image.width(),
-                    .height = image.height(),
-                }));
-            }
-            _vsm.rasterize_hardware = ir::pipeline_t::make(*_device, *_vsm.rasterize_pass, {
-                .mesh = "../shaders/vsm/rasterize_hardware.mesh.glsl",
-                .fragment = "../shaders/vsm/rasterize_hardware.frag.glsl",
-                .blend = {},
-                .dynamic_states = {
-                    ir::dynamic_state_t::e_viewport,
-                    ir::dynamic_state_t::e_scissor,
-                },
-                .depth_flags =
-                    ir::depth_state_flag_t::e_enable_test |
-                    ir::depth_state_flag_t::e_enable_write |
-                    ir::depth_state_flag_t::e_enable_clamp,
-                .cull_mode = ir::cull_mode_t::e_front,
-            });
             _vsm.mark_visible_pages = ir::pipeline_t::make(*_device, {
                 .compute = "../shaders/vsm/mark_visible_pages.comp.glsl",
             });
@@ -814,8 +801,7 @@ namespace test {
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
 
         command_buffer.begin_debug_marker("clear_buffer_pass");
@@ -858,8 +844,7 @@ namespace test {
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
 
         const auto& [
@@ -873,12 +858,12 @@ namespace test {
             ir::make_clear_depth(0.0f, 0),
         });
         command_buffer.set_viewport({
-            .width = static_cast<float32>(_swapchain->width()),
-            .height = static_cast<float32>(_swapchain->height()),
+            .width = static_cast<float32>(_visbuffer.color->width()),
+            .height = static_cast<float32>(_visbuffer.color->height()),
         });
         command_buffer.set_scissor({
-            .width = _swapchain->width(),
-            .height = _swapchain->height(),
+            .width = _visbuffer.color->width(),
+            .height = _visbuffer.color->height(),
         });
         command_buffer.bind_pipeline(*_visbuffer.main);
         {
@@ -904,8 +889,7 @@ namespace test {
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
 
         const auto& [
@@ -921,12 +905,11 @@ namespace test {
             .bind_sampled_image(0, _visbuffer.depth->view())
             .bind_storage_image(1, _visbuffer.ids->view())
             .bind_storage_image(2, _visbuffer.color->view())
-            .bind_combined_image_sampler(3, _vsm.image_views, *_vsm.sampler)
-            .bind_textures(4, _scene.textures)
+            .bind_textures(3, _scene.textures)
             .build();
         const auto resolve_dispatch = dispatch_work_group_size({
-            _swapchain->width(),
-            _swapchain->height(),
+            _visbuffer.color->width(),
+            _visbuffer.color->height(),
         }, {
             16,
             16,
@@ -979,8 +962,7 @@ namespace test {
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
 
         const auto set = ir::descriptor_set_builder_t(*_visbuffer.tonemap, 0)
@@ -988,8 +970,8 @@ namespace test {
             .bind_storage_image(1, _visbuffer.final->view())
             .build();
         const auto tonemap_dispatch = dispatch_work_group_size({
-            _swapchain->width(),
-            _swapchain->height(),
+            _visbuffer.color->width(),
+            _visbuffer.color->height(),
         }, {
             16,
             16,
@@ -1011,11 +993,11 @@ namespace test {
         command_buffer.image_barrier({
             .image = std::cref(*_visbuffer.final),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
-            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
             .source_access = ir::resource_access_t::e_shader_storage_write,
-            .dest_access = ir::resource_access_t::e_transfer_read,
+            .dest_access = ir::resource_access_t::e_shader_sampled_read,
             .old_layout = ir::image_layout_t::e_general,
-            .new_layout = ir::image_layout_t::e_transfer_src_optimal,
+            .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
         });
         command_buffer.end_debug_marker();
     }
@@ -1026,8 +1008,7 @@ namespace test {
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
 
         const auto& [
@@ -1039,8 +1020,8 @@ namespace test {
         const auto& vsm_visible_pages_buffer = *_vsm.visible_pages_buffer.host[_frame_index];
 
         const auto mark_page_dispatch = dispatch_work_group_size({
-            _swapchain->width(),
-            _swapchain->height(),
+            _visbuffer.color->width(),
+            _visbuffer.color->height(),
         }, {
             16,
             16,
@@ -1151,68 +1132,70 @@ namespace test {
         command_buffer.end_debug_marker();
     }
 
-    auto application_t::_vsm_hardware_rasterize_pass() noexcept -> void {
+    auto application_t::_gui_main_pass() noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto& [
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
 
-        const auto& [
-            view_buffer,
-            transform_buffer
-        ] = _current_frame_buffers();
-
-        command_buffer.begin_debug_marker("vsm_hardware_rasterize_pass");
-        for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
-            command_buffer.begin_debug_marker("vsm_hardware_rasterize_clipmap_pass");
-            if (_vsm.images[i].is_empty()) {
-                command_buffer.image_barrier({
-                    .image = std::cref(_vsm.images[i].image()),
-                    .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
-                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-                    .source_access = ir::resource_access_t::e_none,
-                    .dest_access = ir::resource_access_t::e_shader_sampled_read,
-                    .old_layout = ir::image_layout_t::e_undefined,
-                    .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
-                });
-                command_buffer.end_debug_marker();
-                continue;
-            }
-            const auto& current = _vsm.images[i].image();
-            command_buffer.begin_render_pass(*_vsm.rasterize_framebuffers[i], {
-                ir::make_clear_depth(1.0f, 0),
-            });
-            command_buffer.set_viewport({
-                .width = static_cast<float32>(current.width()),
-                .height = static_cast<float32>(current.height()),
-            });
-            command_buffer.set_scissor({
-                .width = current.width(),
-                .height = current.height(),
-            });
-            command_buffer.bind_pipeline(*_vsm.rasterize_hardware);
+        {
+            const auto* main_viewport = ImGui::GetMainViewport();
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2());
+            ImGui::SetNextWindowPos(main_viewport->Pos);
+            ImGui::SetNextWindowSize(main_viewport->Size);
+            ImGui::SetNextWindowViewport(main_viewport->ID);
             {
-                const auto addresses = std::to_array({
-                    view_buffer.address(),
-                    _buffer.meshlet_instances->address(),
-                    _buffer.meshlets->address(),
-                    transform_buffer.address(),
-                    _buffer.vertices->address(),
-                    _buffer.indices->address(),
-                    _buffer.primitives->address(),
-                });
-                const auto push_constants = ir::make_byte_bag(addresses, i);
-                command_buffer.push_constants(ir::shader_stage_t::e_mesh, 0, sizeof(push_constants), &push_constants);
+                const auto flags =
+                    ImGuiWindowFlags_NoTitleBar |
+                    ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoBringToFrontOnFocus |
+                    ImGuiWindowFlags_NoNavFocus;
+                if (ImGui::Begin("main_dock_space", nullptr, flags)) {
+                    ImGui::DockSpace(ImGui::GetID("main_dock_space"));
+                }
+                ImGui::End();
             }
-            command_buffer.draw_mesh_tasks(_buffer.meshlet_instances->size());
-            command_buffer.end_render_pass();
-            command_buffer.end_debug_marker();
+            ImGui::SetNextWindowSizeConstraints({ 64, 64 }, { 8192, 8192 });
+            if (ImGui::Begin("main_viewport")) {
+                if (!ImGui::IsAnyMouseDown()) {
+                    const auto resolution = ImGui::GetContentRegionAvail();
+                    if (resolution.x != _gui.main_viewport_resolution.x ||
+                        resolution.y != _gui.main_viewport_resolution.y
+                    ) {
+                        _gui.main_viewport_resolution = glm::vec2(
+                            resolution.x,
+                            resolution.y);
+                        _gui.should_resize = true;
+                    }
+                }
+                const auto image_set = ir::descriptor_set_builder_t(*_gui.main_layout)
+                    .bind_combined_image_sampler(
+                        0,
+                        _visbuffer.final->view(),
+                        *_gui.main_sampler)
+                    .build();
+                const auto size = ImVec2(_visbuffer.final->width(), _visbuffer.final->height());
+                ImGui::Image(image_set->handle(), size);
+            }
+            ImGui::End();
+            ImGui::PopStyleVar(3);
+            ImGui::ShowDemoWindow();
+            ImGui::ShowMetricsWindow();
         }
-        command_buffer.end_debug_marker();
+
+        ImGui::Render();
+        command_buffer.begin_render_pass(*_gui.main_framebuffer, {
+            ir::make_clear_color({ 0.0f, 0.0f, 0.0f, 1.0f }),
+        });
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffer.handle());
+        command_buffer.end_render_pass();
     }
 
     auto application_t::_swapchain_copy_pass(uint32 image_index) noexcept -> void {
@@ -1221,8 +1204,7 @@ namespace test {
             command_buffer,
             image_available,
             render_done,
-            frame_fence,
-            sparse_fence
+            frame_fence
         ] = _current_frame_data();
 
         command_buffer.begin_debug_marker("copy_to_swapchain");
@@ -1235,7 +1217,7 @@ namespace test {
             .old_layout = ir::image_layout_t::e_undefined,
             .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
         });
-        command_buffer.blit_image(*_visbuffer.final, _swapchain->image(image_index), {});
+        command_buffer.blit_image(*_gui.main_image, _swapchain->image(image_index), {});
         command_buffer.image_barrier({
             .image = std::cref(_swapchain->image(image_index)),
             .source_stage = ir::pipeline_stage_t::e_transfer,

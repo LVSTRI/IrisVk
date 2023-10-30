@@ -62,7 +62,7 @@ namespace test {
 
     auto camera_t::aspect() const noexcept -> float32 {
         IR_PROFILE_SCOPED();
-        return _window.get().width() / static_cast<float32>(_window.get().height());
+        return _width / _height;
     }
 
     auto camera_t::near() const noexcept -> float32 {
@@ -153,6 +153,12 @@ namespace test {
             glm::cos(r_pitch) * glm::sin(r_yaw)));
         _right = glm::normalize(glm::cross(_front, { 0.0f, 1.0f, 0.0f }));
         _up = glm::normalize(glm::cross(_right, _front));
+    }
+
+    auto camera_t::update_aspect(float32 width, float32 height) noexcept -> void {
+        IR_PROFILE_SCOPED();
+        _width = width;
+        _height = height;
     }
 
     IR_NODISCARD auto make_perspective_frustum(const glm::mat4& pv) noexcept -> std::array<glm::vec4, 6> {
