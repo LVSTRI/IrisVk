@@ -19,41 +19,27 @@ namespace ir {
         }
     };
 
-    wsi_platform_t::wsi_platform_t() noexcept
-        : _input(*this) {
-        IR_PROFILE_SCOPED();
-    }
+    wsi_platform_t::wsi_platform_t() noexcept = default;
 
     wsi_platform_t::~wsi_platform_t() noexcept = default;
 
-    wsi_platform_t::wsi_platform_t(self&& other) noexcept : self() {
-        IR_PROFILE_SCOPED();
-        swap(*this, other);
-    }
-
-    auto wsi_platform_t::operator =(self other) noexcept -> self& {
-        IR_PROFILE_SCOPED();
-        swap(*this, other);
-        return *this;
-    }
-
-    auto wsi_platform_t::make(uint32 width, uint32 height, std::string_view title) noexcept -> self {
+    auto wsi_platform_t::make(uint32 width, uint32 height, std::string_view title) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         static auto __glfw_manager = __glfw_manager_t();
         auto logger = spdlog::stdout_color_mt("wsi");
-        auto platform = self();
-        platform._width = width;
-        platform._height = height;
-        platform._title = title;
-        platform._logger = logger;
+        auto platform = arc_ptr<self>(new self());
+        platform->_width = width;
+        platform->_height = height;
+        platform->_title = title;
+        platform->_logger = logger;
         IR_LOG_INFO(logger, "initializing window (width: {}, height: {}, title: \"{}\")", width, height, title);
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        platform._window_handle = reinterpret_cast<platform_window_handle>(
+        platform->_window_handle = reinterpret_cast<platform_window_handle>(
             glfwCreateWindow(width, height, title.data(), nullptr, nullptr));
-        glfwSetWindowUserPointer(reinterpret_cast<GLFWwindow*>(platform._window_handle), &platform);
-        IR_ASSERT(platform._window_handle, "failed to make wsi platform");
-
+        glfwSetWindowUserPointer(reinterpret_cast<GLFWwindow*>(platform->_window_handle), &platform);
+        IR_ASSERT(platform->_window_handle, "failed to make wsi platform");
+        platform->_input = input_t::make(*platform);
         return platform;
     }
 
@@ -89,7 +75,7 @@ namespace ir {
 
     auto wsi_platform_t::input() noexcept -> input_t& {
         IR_PROFILE_SCOPED();
-        return _input;
+        return *_input;
     }
 
     auto wsi_platform_t::poll_events() noexcept -> void {
@@ -110,14 +96,14 @@ namespace ir {
     auto wsi_platform_t::capture_cursor() noexcept -> void {
         IR_PROFILE_SCOPED();
         glfwSetInputMode(reinterpret_cast<GLFWwindow*>(_window_handle), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-        _input.reset_cursor();
+        _input->reset_cursor();
         _is_cursor_captured = true;
     }
 
     auto wsi_platform_t::release_cursor() noexcept -> void {
         IR_PROFILE_SCOPED();
         glfwSetInputMode(reinterpret_cast<GLFWwindow*>(_window_handle), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        _input.reset_cursor();
+        _input->reset_cursor();
         _is_cursor_captured = false;
     }
 
@@ -126,6 +112,9 @@ namespace ir {
         auto width = 0_i32;
         auto height = 0_i32;
         glfwGetFramebufferSize(reinterpret_cast<GLFWwindow*>(_window_handle), &width, &height);
+        if (width != _width || height != _height) {
+            _input->reset_cursor();
+        }
         _width = static_cast<uint32>(width);
         _height = static_cast<uint32>(height);
         return { _width, _height };
@@ -147,15 +136,5 @@ namespace ir {
             nullptr,
             &surface));
         return static_cast<gfx_api_object_handle>(surface);
-    }
-
-    auto swap(wsi_platform_t& lhs, wsi_platform_t& rhs) noexcept -> void {
-        IR_PROFILE_SCOPED();
-        using std::swap;
-        swap(lhs._window_handle, rhs._window_handle);
-        swap(lhs._width, rhs._width);
-        swap(lhs._height, rhs._height);
-        swap(lhs._title, rhs._title);
-        swap(lhs._logger, rhs._logger);
     }
 }

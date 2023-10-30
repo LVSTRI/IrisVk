@@ -145,19 +145,16 @@ namespace ir {
         float32 y = 0.0f;
     };
 
-    class input_t {
+    class input_t : public enable_intrusive_refcount_t<input_t> {
     public:
         using self = input_t;
 
-        input_t(wsi_platform_t& platform) noexcept;
+        input_t(const wsi_platform_t& platform) noexcept;
         ~input_t() noexcept;
 
-        input_t(const self&) = delete;
-        input_t(self&&) noexcept = default;
-        auto operator=(const self&) -> self& = delete;
-        auto operator=(self&&) noexcept -> self& = default;
+        IR_NODISCARD static auto make(const wsi_platform_t& platform) noexcept -> arc_ptr<self>;
 
-        IR_NODISCARD auto platform() const noexcept -> wsi_platform_t&;
+        IR_NODISCARD auto platform() const noexcept -> const wsi_platform_t&;
 
         IR_NODISCARD auto is_pressed(keyboard_t key) const noexcept -> bool;
         IR_NODISCARD auto is_released(keyboard_t key) const noexcept -> bool;
@@ -183,9 +180,11 @@ namespace ir {
         int32 _old_mouse[as_underlying(mouse_t::e_count)] = {};
         int32 _new_mouse[as_underlying(mouse_t::e_count)] = {};
 
-        cursor_position_t _old_cursor = {};
-        cursor_position_t _new_cursor = {};
+        bool _previous_is_cursor_captured = false;
+        bool _current_is_cursor_captured = false;
 
-        std::reference_wrapper<wsi_platform_t> _platform;
+        cursor_position_t _cursor_position = {};
+
+        std::reference_wrapper<const wsi_platform_t> _platform;
     };
 }

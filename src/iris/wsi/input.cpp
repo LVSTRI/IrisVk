@@ -4,14 +4,20 @@
 #include <array>
 
 namespace ir {
-    input_t::input_t(wsi_platform_t& platform) noexcept
-        : _platform(std::ref(platform)) {
+    input_t::input_t(const wsi_platform_t& platform) noexcept
+        : _platform(std::cref(platform)) {
         IR_PROFILE_SCOPED();
     }
 
     input_t::~input_t() noexcept = default;
 
-    auto input_t::platform() const noexcept -> wsi_platform_t& {
+    auto input_t::make(const wsi_platform_t& platform) noexcept -> arc_ptr<input_t::self> {
+        auto input = arc_ptr<self>(new self(platform));
+        input->reset_cursor();
+        return input;
+    }
+
+    auto input_t::platform() const noexcept -> const wsi_platform_t& {
         IR_PROFILE_SCOPED();
         return _platform.get();
     }
@@ -66,31 +72,38 @@ namespace ir {
 
     auto input_t::cursor_position() const noexcept -> cursor_position_t {
         IR_PROFILE_SCOPED();
-        return _new_cursor;
+        return _cursor_position;
     }
 
     auto input_t::cursor_delta() noexcept -> cursor_position_t {
         IR_PROFILE_SCOPED();
-        if (_old_cursor.x == 0 && _old_cursor.y == 0) {
-            _old_cursor = _new_cursor;
-        }
+        const auto half_width = _platform.get().width() / 2.0;
+        const auto half_height = _platform.get().height() / 2.0;
         return {
-            _new_cursor.x - _old_cursor.x,
+            static_cast<float32>(_cursor_position.x - half_width),
             // flipped
-            _old_cursor.y - _new_cursor.y
+            static_cast<float32>(half_height - _cursor_position.y)
         };
     }
 
     auto input_t::reset_cursor() noexcept -> void {
         IR_PROFILE_SCOPED();
-        _old_cursor = _new_cursor = {};
+        const auto half_width = _platform.get().width() / 2.0;
+        const auto half_height = _platform.get().height() / 2.0;
+        _cursor_position = {
+            static_cast<float32>(half_width),
+            static_cast<float32>(half_height)
+        };
+        if (_platform.get().is_cursor_captured()) {
+            glfwSetCursorPos(static_cast<GLFWwindow*>(_platform.get().window_handle()), half_width, half_height);
+        }
     }
 
     auto input_t::capture() noexcept -> void {
         IR_PROFILE_SCOPED();
         std::memcpy(_old_keys, _new_keys, sizeof(_old_keys));
-        std::memcpy(&_old_cursor, &_new_cursor, sizeof(_old_cursor));
         std::memcpy(_old_mouse, _new_mouse, sizeof(_old_mouse));
+        _previous_is_cursor_captured = _current_is_cursor_captured;
 
         constexpr static auto keys = std::to_array({
             keyboard_t::e_space,
@@ -219,7 +232,7 @@ namespace ir {
             mouse_t::e_right_button,
             mouse_t::e_middle_button,
         });
-        auto* window = reinterpret_cast<GLFWwindow*>(_platform.get().window_handle());
+        auto* window = static_cast<GLFWwindow*>(_platform.get().window_handle());
         for (const auto& key : keys) {
             _new_keys[as_underlying(key)] = glfwGetKey(window, as_underlying(key));
         }
@@ -227,11 +240,15 @@ namespace ir {
             _new_mouse[as_underlying(button)] = glfwGetMouseButton(window, as_underlying(button));
         }
         if (_platform.get().is_cursor_captured()) {
+            _current_is_cursor_captured = true;
             auto x = 0.0;
             auto y = 0.0;
+            const auto half_width = _platform.get().width() / 2.0;
+            const auto half_height = _platform.get().height() / 2.0;
             glfwGetCursorPos(window, &x, &y);
-            _new_cursor.x = static_cast<float32>(x);
-            _new_cursor.y = static_cast<float32>(y);
+            glfwSetCursorPos(static_cast<GLFWwindow*>(_platform.get().window_handle()), half_width, half_height);
+            _cursor_position.x = static_cast<float32>(x);
+            _cursor_position.y = static_cast<float32>(y);
         }
     }
 }

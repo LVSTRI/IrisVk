@@ -97,12 +97,17 @@ namespace ir {
         return *_layout;
     }
 
-    descriptor_set_builder_t::descriptor_set_builder_t(pipeline_t& pipeline, uint32 set) noexcept
-        : _layout(std::cref(pipeline.descriptor_layout(set))) {
+    descriptor_set_builder_t::descriptor_set_builder_t(const descriptor_layout_t& layout) noexcept
+        : _layout(std::cref(layout)) {
         IR_PROFILE_SCOPED();
-        _binding.pool = pipeline.device().descriptor_pool().handle();
-        _binding.layout = pipeline.descriptor_layout(set).handle();
+        _binding.pool = layout.device().descriptor_pool().handle();
+        _binding.layout = layout.handle();
         _binding.bindings.reserve(1024);
+    }
+
+    descriptor_set_builder_t::descriptor_set_builder_t(const pipeline_t& pipeline, uint32 set) noexcept
+        : self(pipeline.descriptor_layout(set)) {
+        IR_PROFILE_SCOPED();
     }
 
     auto descriptor_set_builder_t::bind_uniform_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self& {

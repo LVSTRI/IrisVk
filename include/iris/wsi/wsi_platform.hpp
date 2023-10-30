@@ -12,18 +12,14 @@
 
 namespace ir {
     // Supports only GLFW, could be extended
-    class wsi_platform_t {
+    class wsi_platform_t : public enable_intrusive_refcount_t<wsi_platform_t> {
     public:
         using self = wsi_platform_t;
 
         wsi_platform_t() noexcept;
         ~wsi_platform_t() noexcept;
 
-        wsi_platform_t(const self&) noexcept = delete;
-        wsi_platform_t(self&& other) noexcept;
-        auto operator =(self other) noexcept -> self&;
-
-        IR_NODISCARD static auto make(uint32 width, uint32 height, std::string_view title) noexcept -> self;
+        IR_NODISCARD static auto make(uint32 width, uint32 height, std::string_view title) noexcept -> arc_ptr<self>;
 
         static auto poll_events() noexcept -> void;
         static auto wait_events() noexcept -> void;
@@ -48,8 +44,6 @@ namespace ir {
 
         IR_NODISCARD auto make_surface(gfx_api_object_handle instance) const noexcept -> gfx_api_object_handle;
 
-        friend auto swap(self& lhs, self& rhs) noexcept -> void;
-
     private:
         platform_window_handle _window_handle = {};
         uint32 _width = 0;
@@ -58,7 +52,7 @@ namespace ir {
 
         bool _is_cursor_captured = false;
 
-        input_t _input;
+        arc_ptr<input_t> _input;
 
         std::shared_ptr<spdlog::logger> _logger;
     };

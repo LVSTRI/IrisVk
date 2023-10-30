@@ -88,7 +88,8 @@ namespace ir {
     public:
         using self = descriptor_set_builder_t;
 
-        descriptor_set_builder_t(pipeline_t& pipeline, uint32 set) noexcept;
+        descriptor_set_builder_t(const descriptor_layout_t& layout) noexcept;
+        descriptor_set_builder_t(const pipeline_t& pipeline, uint32 set) noexcept;
 
         auto bind_uniform_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self&;
         auto bind_storage_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self&;
