@@ -164,4 +164,3 @@ namespace ir::det {
             return (f)(x);                                                                      \
         }                                                                                       \
     }                                                                                           \
-

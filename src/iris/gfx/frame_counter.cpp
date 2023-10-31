@@ -32,6 +32,8 @@ namespace ir {
         _current_frame.store(0, std::memory_order_release);
     }
 
+    frame_counter_t::frame_counter_t() noexcept = default;
+
     frame_counter_t::frame_counter_t(const master_frame_counter_t& master) noexcept
         : _master(master.as_intrusive_ptr()) {
         IR_PROFILE_SCOPED();

@@ -95,16 +95,16 @@ namespace ir {
 
     auto wsi_platform_t::capture_cursor() noexcept -> void {
         IR_PROFILE_SCOPED();
+        _is_cursor_captured = true;
         glfwSetInputMode(reinterpret_cast<GLFWwindow*>(_window_handle), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
         _input->reset_cursor();
-        _is_cursor_captured = true;
     }
 
     auto wsi_platform_t::release_cursor() noexcept -> void {
         IR_PROFILE_SCOPED();
+        _is_cursor_captured = false;
         glfwSetInputMode(reinterpret_cast<GLFWwindow*>(_window_handle), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         _input->reset_cursor();
-        _is_cursor_captured = false;
     }
 
     auto wsi_platform_t::update_viewport() noexcept -> std::pair<uint32, uint32> {
@@ -113,10 +113,10 @@ namespace ir {
         auto height = 0_i32;
         glfwGetFramebufferSize(reinterpret_cast<GLFWwindow*>(_window_handle), &width, &height);
         if (width != _width || height != _height) {
+            _width = static_cast<uint32>(width);
+            _height = static_cast<uint32>(height);
             _input->reset_cursor();
         }
-        _width = static_cast<uint32>(width);
-        _height = static_cast<uint32>(height);
         return { _width, _height };
     }
 

@@ -5,6 +5,8 @@
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/queue.hpp>
 
+#include <iris/nvidia/ngx_wrapper.hpp>
+
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 namespace ir {
@@ -19,6 +21,7 @@ namespace ir {
 
     device_t::~device_t() noexcept {
         IR_PROFILE_SCOPED();
+        _ngx.reset();
         _samplers.clear();
         _descriptor_layouts.clear();
         _descriptor_sets.clear();
@@ -155,6 +158,28 @@ namespace ir {
                 extensions.emplace_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
                 extensions.emplace_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
             }
+
+#if defined(IRIS_NVIDIA_DLSS)
+            const auto ngx_common_info = make_ngx_feature_common_info();
+            const auto ngx_feature_discovery_info = make_ngx_feature_discovery_info(ngx_common_info);
+            if (info.features.dlss) {
+                auto ngx_extension_count = 0_u32;
+                auto* ngx_extension_ptr = static_cast<VkExtensionProperties*>(nullptr);
+                NVSDK_NGX_VULKAN_GetFeatureDeviceExtensionRequirements(
+                    instance.handle(),
+                    device->_gpu,
+                    &ngx_feature_discovery_info,
+                    &ngx_extension_count,
+                    &ngx_extension_ptr);
+                std::transform(
+                    ngx_extension_ptr,
+                    ngx_extension_ptr + ngx_extension_count,
+                    std::back_inserter(extensions),
+                    [](const auto& each) {
+                        return each.extensionName;
+                    });
+            }
+#endif
 
             auto features_11 = VkPhysicalDeviceVulkan11Features();
             features_11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
@@ -330,6 +355,9 @@ namespace ir {
             device->_features_11 = features_11;
             device->_features_12 = features_12;
             device->_features_13 = features_13;
+            device->_info = info;
+            device->_instance = instance.as_intrusive_ptr();
+            device->_logger = logger;
         }
         // VMA initialization
         {
@@ -357,13 +385,17 @@ namespace ir {
             IR_LOG_INFO(logger, "main allocator initialized");
         }
 
-        device->_frame_counter = master_frame_counter_t::make();
-
-        device->_info = info;
-        device->_instance = instance.as_intrusive_ptr();
-        device->_logger = std::move(logger);
+        // DLSS
+#if defined(IRIS_NVIDIA_DLSS)
+        {
+            if (info.features.dlss) {
+                device->_ngx = ngx_wrapper_t::make(*device);
+            }
+        }
+#endif
 
         device->_descriptor_pool = descriptor_pool_t::make(device.as_ref(), 128);
+        device->_frame_counter = master_frame_counter_t::make();
 
         return device;
     }
@@ -392,6 +424,13 @@ namespace ir {
         IR_PROFILE_SCOPED();
         return _memory_properties.memoryProperties;
     }
+
+#if defined(IRIS_NVIDIA_DLSS)
+    auto device_t::ngx() noexcept -> ngx_wrapper_t& {
+        IR_PROFILE_SCOPED();
+        return *_ngx;
+    }
+#endif
 
     auto device_t::graphics_queue() noexcept -> queue_t& {
         IR_PROFILE_SCOPED();

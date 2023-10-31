@@ -39,6 +39,7 @@ namespace ir {
     public:
         using self = frame_counter_t;
 
+        frame_counter_t() noexcept;
         frame_counter_t(const master_frame_counter_t& master) noexcept;
         ~frame_counter_t() noexcept;
 

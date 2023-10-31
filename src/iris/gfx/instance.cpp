@@ -2,6 +2,8 @@
 
 #include <iris/gfx/instance.hpp>
 
+#include <iris/nvidia/ngx_wrapper.hpp>
+
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 #include <array>
@@ -32,6 +34,26 @@ namespace ir {
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 #endif
+
+#if defined(IRIS_NVIDIA_DLSS)
+        const auto ngx_common_info = make_ngx_feature_common_info();
+        const auto ngx_feature_discovery_info = make_ngx_feature_discovery_info(ngx_common_info);
+
+        auto ngx_extension_count = 0_u32;
+        auto* ngx_extension_ptr = static_cast<VkExtensionProperties*>(nullptr);
+        NVSDK_NGX_VULKAN_GetFeatureInstanceExtensionRequirements(
+            &ngx_feature_discovery_info,
+            &ngx_extension_count,
+            &ngx_extension_ptr);
+        std::transform(
+            ngx_extension_ptr,
+            ngx_extension_ptr + ngx_extension_count,
+            std::back_inserter(extensions),
+            [](const auto& each) {
+                return each.extensionName;
+            });
+#endif
+
         auto api_version = 0_u32;
         IR_VULKAN_CHECK(logger, vkEnumerateInstanceVersion(&api_version));
 

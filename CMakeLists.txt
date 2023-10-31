@@ -5,6 +5,7 @@ option(IRIS_ENABLE_DEBUG_LOGGER "Enables internal debug logger" ON)
 option(IRIS_ENABLE_DEBUG_PROFILER "Enables profiling with Tracy" OFF)
 option(IRIS_ENABLE_VALIDATION_LAYERS "Enables internal Vulkan Validation Layers" OFF)
 option(IRIS_ENABLE_VULKAN_BETA_EXTENSIONS "Enables Vulkan Beta Extensions" OFF)
+option(IRIS_ENABLE_NVIDIA_DLSS "Enables support for NVIDIA DLSS" OFF)
 
 # Vulkan setup
 find_package(Vulkan REQUIRED)
@@ -137,6 +138,8 @@ set(IRIS_MAIN_HEADERS
     include/iris/gfx/swapchain.hpp
     include/iris/gfx/texture.hpp
 
+    include/iris/nvidia/ngx_wrapper.hpp
+
     include/iris/wsi/input.hpp
     include/iris/wsi/wsi_platform.hpp
 
@@ -164,6 +167,8 @@ set(IRIS_MAIN_SOURCES
     src/iris/gfx/swapchain.cpp
     src/iris/gfx/texture.cpp
 
+    src/iris/nvidia/ngx_wrapper.cpp
+
     src/iris/wsi/input.cpp
     src/iris/wsi/wsi_platform.cpp
 )
@@ -185,6 +190,7 @@ target_compile_definitions(IrisVk PUBLIC
     $<$<BOOL:${IRIS_ENABLE_DEBUG_PROFILER}>:IRIS_DEBUG_PROFILER>
     $<$<BOOL:${IRIS_ENABLE_VALIDATION_LAYERS}>:IRIS_VALIDATION_LAYERS>
     $<$<BOOL:${IRIS_ENABLE_VULKAN_BETA_EXTENSIONS}>:VK_ENABLE_BETA_EXTENSIONS>
+    $<$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>:IRIS_NVIDIA_DLSS>
 
     VK_NO_PROTOTYPES
 
@@ -212,15 +218,15 @@ target_link_libraries(IrisVk PUBLIC
     TracyClient
     unordered_dense
     spirv-cross-glsl
-    $<$<CONFIG:Debug>:nvsdk_ngx_d_dbg>
-    $<$<CONFIG:Release>:nvsdk_ngx_d>
-    $<$<CONFIG:RelWithDebInfo>:nvsdk_ngx_d>
+    $<$<AND:$<CONFIG:Debug>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d_dbg>
+    $<$<AND:$<CONFIG:Release>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d>
+    $<$<AND:$<CONFIG:RelWithDebInfo>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d>
 )
 
 target_include_directories(IrisVk PUBLIC
     include
-    deps/DLSS/include
     ${Vulkan_INCLUDE_DIRS}
+    $<$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>:${CMAKE_CURRENT_SOURCE_DIR}/deps/DLSS/include>
 )
 
 set(IRIS_VECTOR_COMPILER_OPTIONS -march=native)

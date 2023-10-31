@@ -136,6 +136,8 @@ namespace ir {
     class sampler_t;
     class texture_t;
 
+    class ngx_wrapper_t;
+
     class wsi_platform_t;
     class input_t;
 }

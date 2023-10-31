@@ -29,6 +29,9 @@ namespace ir {
         bool image_atomics_64 = false;
         bool fragment_shading_rate = false;
         bool ray_tracing = false;
+#if defined(IRIS_NVIDIA_DLSS)
+        bool dlss = false;
+#endif
     };
 
     struct device_create_info_t {
@@ -57,6 +60,10 @@ namespace ir {
 
         IR_NODISCARD auto properties() const noexcept -> const VkPhysicalDeviceProperties&;
         IR_NODISCARD auto memory_properties() const noexcept -> const VkPhysicalDeviceMemoryProperties&;
+
+#if defined(IRIS_NVIDIA_DLSS)
+        IR_NODISCARD auto ngx() noexcept -> ngx_wrapper_t&;
+#endif
 
         IR_NODISCARD auto graphics_queue() noexcept -> queue_t&;
         IR_NODISCARD auto graphics_queue() const noexcept -> const queue_t&;
@@ -101,6 +108,10 @@ namespace ir {
         VkPhysicalDeviceVulkan11Features _features_11 = {};
         VkPhysicalDeviceVulkan12Features _features_12 = {};
         VkPhysicalDeviceVulkan13Features _features_13 = {};
+
+#if defined(IRIS_NVIDIA_DLSS)
+        std::unique_ptr<ngx_wrapper_t> _ngx;
+#endif
 
         arc_ptr<queue_t> _graphics;
         arc_ptr<queue_t> _compute;
