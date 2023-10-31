@@ -448,6 +448,15 @@ namespace test {
         if (_state.dlss.is_initialized) {
             return false;
         }
+        _state.dlss.render_resolution = {
+            _gui.main_viewport_resolution.x * _state.dlss.scaling_ratio,
+            _gui.main_viewport_resolution.y * _state.dlss.scaling_ratio,
+        };
+        IR_LOG_WARN(
+            _device->logger(),
+            "DLSS reinit | render resolution {}x{} | output resolution {}x{}",
+            _state.dlss.render_resolution.x, _state.dlss.render_resolution.y,
+            _gui.main_viewport_resolution.x, _gui.main_viewport_resolution.y);
         const auto width = _gui.main_viewport_resolution.x;
         const auto height = _gui.main_viewport_resolution.y;
         _initialize_sync();
@@ -1385,10 +1394,6 @@ namespace test {
                         ImGui::EndCombo();
                     }
                     ImGui::Checkbox("Reset", &_state.dlss.reset);
-                    _state.dlss.render_resolution = {
-                        _gui.main_viewport_resolution.x * _state.dlss.scaling_ratio,
-                        _gui.main_viewport_resolution.y * _state.dlss.scaling_ratio,
-                    };
                 }
                 ImGui::Separator();
             }
