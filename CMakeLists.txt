@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.26)
 project(IrisVkTests)
 
 set(IRIS_ENABLE_DEBUG_PROFILER OFF CACHE BOOL "" FORCE)
+set(IRIS_ENABLE_NVIDIA_DLSS ON CACHE BOOL "" FORCE)
 add_subdirectory(deps/IrisVk)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -45,6 +46,18 @@ target_include_directories(imgui PUBLIC deps/imgui)
 target_link_libraries(imgui PUBLIC glfw volk)
 target_compile_definitions(imgui PUBLIC VK_NO_PROTOTYPES)
 
+add_library(implot
+    deps/implot/implot.cpp
+    deps/implot/implot.h
+    deps/implot/implot_demo.cpp
+    deps/implot/implot_internal.h
+    deps/implot/implot_items.cpp
+)
+target_include_directories(implot PUBLIC
+    deps/imgui
+    deps/implot
+)
+
 add_executable(IrisVkTests
     src/application.hpp
     src/application.cpp
@@ -56,6 +69,6 @@ add_executable(IrisVkTests
 
     src/main.cpp)
 
-target_link_libraries(IrisVkTests PRIVATE IrisVk cgltf meshoptimizer imgui)
+target_link_libraries(IrisVkTests PRIVATE IrisVk cgltf meshoptimizer imgui implot)
 
 target_include_directories(IrisVkTests PRIVATE src)

@@ -15,13 +15,19 @@ struct compute_indirect_command_t {
 
 struct view_t {
     mat4 projection;
+    mat4 prev_projection;
     mat4 inv_projection;
+    mat4 inv_prev_projection;
     mat4 view;
+    mat4 prev_view;
     mat4 inv_view;
+    mat4 inv_prev_view;
     mat4 stable_view;
     mat4 inv_stable_view;
     mat4 proj_view;
+    mat4 prev_proj_view;
     mat4 inv_proj_view;
+    mat4 inv_prev_proj_view;
     mat4 stable_proj_view;
     mat4 inv_stable_proj_view;
     vec4 eye_position;
@@ -38,6 +44,7 @@ struct vertex_format_t {
     vec3 position;
     vec3 normal;
     vec2 uv;
+    vec4 tangent;
 };
 
 struct meshlet_t {

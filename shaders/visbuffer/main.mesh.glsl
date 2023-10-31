@@ -20,6 +20,9 @@ layout (triangles, max_vertices = CLUSTER_MAX_VERTICES, max_primitives = CLUSTER
 
 layout (location = 0) out o_vertex_data_block {
     flat uint meshlet_id;
+    vec4 clip_position;
+    vec4 prev_clip_position;
+    vec2 resolution;
 } o_vertex_data[];
 
 layout (scalar, push_constant) restrict readonly uniform u_push_constants_block {
@@ -30,6 +33,7 @@ layout (scalar, push_constant) restrict readonly uniform u_push_constants_block 
     restrict readonly b_vertex_block u_vertex_ptr;
     restrict readonly b_index_block u_index_ptr;
     restrict readonly b_primitive_block u_primitive_ptr;
+    vec2 u_jitter;
 };
 
 shared uint vertex_offset;
@@ -37,7 +41,9 @@ shared uint index_offset;
 shared uint primitive_offset;
 shared uint index_count;
 shared uint primitive_count;
+shared vec2 resolution;
 shared mat4 pvm;
+shared mat4 prev_pvm;
 
 void main() {
     const uint thread_index = gl_LocalInvocationID.x;
@@ -50,12 +56,15 @@ void main() {
 
         const meshlet_t meshlet = u_meshlet_ptr.data[meshlet_id];
         const mat4 transform = u_transform_ptr.data[instance_id].model;
+        const mat4 prev_transform = u_transform_ptr.data[instance_id].prev_model;
         vertex_offset = meshlet.vertex_offset;
         index_offset = meshlet.index_offset;
         primitive_offset = meshlet.primitive_offset;
         index_count = meshlet.index_count;
         primitive_count = meshlet.primitive_count;
+        resolution = main_view.resolution;
         pvm = main_view.proj_view * transform;
+        prev_pvm = main_view.prev_proj_view * prev_transform;
         SetMeshOutputsEXT(index_count, primitive_count);
     }
     barrier();
@@ -64,9 +73,13 @@ void main() {
         // avoid branching, get pipelined memory loads
         const uint index = min(thread_index + i * WORK_GROUP_SIZE, index_count - 1);
         const vec3 position = u_vertex_ptr.data[vertex_offset + u_index_ptr.data[index_offset + index]].position;
+        const vec4 clip_position = pvm * vec4(position, 1.0);
 
-        gl_MeshVerticesEXT[index].gl_Position = pvm * vec4(position, 1.0);
         o_vertex_data[index].meshlet_id = meshlet_instance_id;
+        o_vertex_data[index].clip_position = clip_position;
+        o_vertex_data[index].prev_clip_position = prev_pvm * vec4(position, 1.0);
+        o_vertex_data[index].resolution = resolution;
+        gl_MeshVerticesEXT[index].gl_Position = clip_position + vec4(2.0 * u_jitter / resolution, 0.0, 0.0) * clip_position.w;
     }
 
     for (uint i = 0; i < MAX_PRIMITIVES_PER_THREAD; i++) {

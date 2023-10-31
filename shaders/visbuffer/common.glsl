@@ -51,9 +51,12 @@ partial_derivatives_t compute_derivatives(in vec4[3] clip_position, in vec2 ndc_
         interp_w * (delta_v.x * result.ddx.z + delta_v.y * result.ddy.z));
 
     result.ddx *= 2.0 / resolution.x;
-    result.ddy *= -2.0 / resolution.y;
+    result.ddy *= 2.0 / resolution.y;
     ddx_sum *= 2.0 / resolution.x;
-    ddy_sum *= -2.0 / resolution.y;
+    ddy_sum *= 2.0 / resolution.y;
+
+    /*result.ddy *= -1.0;
+    ddy_sum *= -1.0;*/
 
     const float interp_w_ddx = 1.0 / (interp_inv_w.x + ddx_sum);
     const float interp_w_ddy = 1.0 / (interp_inv_w.x + ddy_sum);

@@ -88,6 +88,14 @@ vec2[3] load_vertex_uv(in meshlet_t meshlet, in uint[3] primitive) {
     );
 }
 
+vec4[3] load_vertex_tangent(in meshlet_t meshlet, in uint[3] primitive) {
+    return vec4[3](
+        vec4(u_vertex_ptr.data[meshlet.vertex_offset + u_index_ptr.data[meshlet.index_offset + primitive[0]]].tangent),
+        vec4(u_vertex_ptr.data[meshlet.vertex_offset + u_index_ptr.data[meshlet.index_offset + primitive[1]]].tangent),
+        vec4(u_vertex_ptr.data[meshlet.vertex_offset + u_index_ptr.data[meshlet.index_offset + primitive[2]]].tangent)
+    );
+}
+
 vec3 load_base_color(in material_t material, in gradient_vec2_t uv_grad) {
     vec3 color = material.base_color_factor;
     if (material.base_color_texture != uint(-1)) {
@@ -115,10 +123,11 @@ vec3 load_normal(in material_t material, in gradient_vec2_t uv_grad, in mat3 tbn
     return normal;
 }
 
-mat3 make_tbn(in gradient_vec3_t world_grad, in gradient_vec2_t uv_grad, in vec3 normal) {
-    const vec3 N = normal;
-    const vec3 T = normalize(world_grad.ddx * uv_grad.ddy.y - world_grad.ddy * uv_grad.ddx.y);
-    const vec3 B = -normalize(cross(N, T));
+mat3 make_tbn(in mat3 transform, in vec3 normal, in vec4 tangent) {
+    const vec3 bitangent = cross(normal, tangent.xyz) * tangent.w;
+    const vec3 T = normalize(transform * tangent.xyz);
+    const vec3 B = normalize(transform * bitangent);
+    const vec3 N = normalize(transform * normal);
     return mat3(T, B, N);
 }
 
@@ -149,6 +158,7 @@ void main() {
     const vec3[] vertex_positions = load_vertex_position(meshlet, primitive_indices);
     const vec3[] vertex_normals = load_vertex_normal(meshlet, primitive_indices);
     const vec2[] vertex_uvs = load_vertex_uv(meshlet, primitive_indices);
+    const vec4[] vertex_tangents = load_vertex_tangent(meshlet, primitive_indices);
 
     const vec3[] world_position = vec3[](
         vec3(transform * vec4(vertex_positions[0], 1.0)),
@@ -167,12 +177,17 @@ void main() {
     const gradient_vec3_t world_grad = make_gradient_vec3(derivatives, world_position);
     const gradient_vec2_t uv_grad = make_gradient_vec2(derivatives, vertex_uvs);
 
-    const vec3[] world_normal = vec3[](
-        normalize(normal_transform * vertex_normals[0]),
-        normalize(normal_transform * vertex_normals[1]),
-        normalize(normal_transform * vertex_normals[2])
-    );
-    const vec3 base_normal = normalize(interpolate(derivatives, world_normal));
+    const vec3 base_normal = normalize(interpolate(derivatives, vec3[](
+        vertex_normals[0],
+        vertex_normals[1],
+        vertex_normals[2]
+    )));
+
+    const vec4 base_tangent = interpolate(derivatives, vec4[](
+        vertex_tangents[0],
+        vertex_tangents[1],
+        vertex_tangents[2]
+    ));
 
     const virtual_page_info_t virtual_page = virtual_page_info_from_depth(
         u_view_ptr,
@@ -188,19 +203,21 @@ void main() {
     vec3 color = vec3(0.0);
     {
         vec3 base_color = vec3(1.0);
-        vec3 normal = base_normal;
+        vec3 normal = normalize(normal_transform * base_normal);
         if (material_id != uint(-1)) {
             const material_t material = u_material_ptr.data[material_id];
-            const mat3 tbn = make_tbn(world_grad, uv_grad, base_normal);
+            const mat3 tbn = make_tbn(normal_transform, base_normal, base_tangent);
             base_color = load_base_color(material, uv_grad);
-            normal = load_normal(material, uv_grad, tbn, base_normal);
+            normal = load_normal(material, uv_grad, tbn, normal);
         }
         const directional_light_t sun_dir_light = u_dir_light_ptr.data[0];
         const vec3 light_dir = sun_dir_light.direction;
         const float light_intensity = sun_dir_light.intensity;
-        const float light_diffuse = max(dot(normal, light_dir), 0.0);
-        const float light_specular = pow(max(dot(reflect(-light_dir, normal), view_direction), 0.0), 64.0);
+        const float light_diffuse = saturate(dot(normal, light_dir));
+        const float light_specular = pow(saturate(dot(reflect(-light_dir, normal), view_direction)), 64.0);
         color += light_intensity * (light_ambient + light_diffuse + light_specular) * base_color;
+        //color = base_color;
+        //color = vec3(normal * 0.5 + 0.5);
     }
     /*color *= _debug_clipmap_colors[clipmap_level];
     const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);

@@ -20,9 +20,14 @@
 #include <iris/gfx/fence.hpp>
 #include <iris/gfx/texture.hpp>
 
+#if defined(IRIS_NVIDIA_DLSS)
+    #include <iris/nvidia/ngx_wrapper.hpp>
+#endif
+
 #include <iris/wsi/wsi_platform.hpp>
 
 #include <imgui.h>
+#include <implot.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
 
@@ -52,13 +57,19 @@
 namespace test {
     struct view_t {
         glm::mat4 projection = {};
+        glm::mat4 prev_projection = {};
         glm::mat4 inv_projection = {};
+        glm::mat4 inv_prev_projection = {};
         glm::mat4 view = {};
+        glm::mat4 prev_view = {};
         glm::mat4 inv_view = {};
+        glm::mat4 inv_prev_view = {};
         glm::mat4 stable_view = {};
         glm::mat4 inv_stable_view = {};
         glm::mat4 proj_view = {};
+        glm::mat4 prev_proj_view = {};
         glm::mat4 inv_proj_view = {};
+        glm::mat4 inv_prev_proj_view = {};
         glm::mat4 stable_proj_view = {};
         glm::mat4 inv_stable_proj_view = {};
         glm::vec4 eye_position = {};
@@ -68,7 +79,7 @@ namespace test {
 
     struct transform_t {
         glm::mat4 model = {};
-        glm::mat4 prev_model = {};
+        glm::mat4 prev_model = model;
     };
 
     struct directional_light_t {
@@ -110,9 +121,10 @@ namespace test {
         auto _update() noexcept -> void;
         auto _update_frame_data() noexcept -> void;
         auto _resize() noexcept -> void;
-        auto _resize_main_viewport() noexcept -> void;
+        auto _resize_main_viewport() noexcept -> bool;
 
         auto _initialize() noexcept -> void;
+        auto _initialize_dlss() noexcept -> void;
         auto _initialize_imgui() noexcept -> void;
         auto _initialize_sync() noexcept -> void;
         auto _initialize_visbuffer_pass() noexcept -> void;
@@ -121,6 +133,7 @@ namespace test {
         auto _clear_buffer_pass() noexcept -> void;
         auto _visbuffer_pass() noexcept -> void;
         auto _visbuffer_resolve_pass() noexcept -> void;
+        auto _visbuffer_dlss_pass() noexcept -> void;
         auto _visbuffer_tonemap_pass() noexcept -> void;
         auto _vsm_mark_visible_pages_pass() noexcept -> void;
         auto _gui_main_pass() noexcept -> void;
@@ -140,20 +153,20 @@ namespace test {
         struct {
             bool is_initialized = false;
             ir::arc_ptr<ir::image_t> ids;
+            ir::arc_ptr<ir::image_t> velocity;
             ir::arc_ptr<ir::image_t> depth;
             ir::arc_ptr<ir::image_t> color;
+            ir::arc_ptr<ir::image_t> color_resolve;
             ir::arc_ptr<ir::image_t> final;
             ir::arc_ptr<ir::render_pass_t> pass;
             ir::arc_ptr<ir::framebuffer_t> framebuffer;
             ir::arc_ptr<ir::pipeline_t> main;
             ir::arc_ptr<ir::pipeline_t> resolve;
             ir::arc_ptr<ir::pipeline_t> tonemap;
+
+            glm::mat4 prev_projection = {};
+            glm::mat4 prev_view = {};
         } _visbuffer;
-
-        struct {
-            bool is_initialized = false;
-
-        } _taa;
 
         struct {
             bool is_initialized = false;
@@ -174,8 +187,7 @@ namespace test {
             ir::arc_ptr<ir::descriptor_layout_t> main_layout;
             ir::arc_ptr<ir::sampler_t> main_sampler;
 
-            bool should_resize = false;
-            glm::uvec2 main_viewport_resolution = { 64, 64 };
+            glm::uvec2 main_viewport_resolution = { 1280, 720 };
         } _gui;
 
         struct {
@@ -199,7 +211,22 @@ namespace test {
         struct state_t {
             vsm_global_data_t vsm_global_data = {};
             std::vector<directional_light_t> directional_lights = {};
+
+            struct {
+                ir::dlss_quality_preset_t quality = ir::dlss_quality_preset_t::e_native;
+                float32 scaling_ratio = ir::dlss_preset_native_scaling_ratio;
+                bool reset = false;
+
+                bool is_initialized = false;
+                glm::uvec2 render_resolution = { 1280, 720 };
+            } dlss;
+
+            struct {
+                std::deque<float32> frame_times = {};
+            } performance;
         } _state;
+
+        std::array<glm::vec2, 16> _jitter_offsets;
 
         camera_t _camera;
 

@@ -93,6 +93,33 @@ namespace test {
         auto transforms = std::vector<transform_t>();
         auto materials = std::vector<material_t>();
         auto meshlet_offset = 0_u32;
+
+        {
+            auto meshlets_count = 0_u32;
+            auto meshlet_instances_count = 0_u32;
+            auto vertices_count = 0_u32;
+            auto indices_count = 0_u32;
+            auto primitives_count = 0_u32;
+            auto transforms_count = 0_u32;
+            auto materials_count = 0_u32;
+            for (const auto& model : models) {
+                meshlets_count += model.meshlets().size();
+                meshlet_instances_count += model.meshlet_instances().size();
+                vertices_count += model.vertices().size();
+                indices_count += model.indices().size();
+                primitives_count += model.primitives().size();
+                transforms_count += model.transforms().size();
+                materials_count += model.materials().size();
+            }
+            meshlets.reserve(meshlets_count);
+            meshlet_instances.reserve(meshlet_instances_count);
+            vertices.reserve(vertices_count);
+            indices.reserve(indices_count);
+            primitives.reserve(primitives_count);
+            transforms.reserve(transforms_count);
+            materials.reserve(materials_count);
+        }
+
         for (auto& model : models) {
             for (const auto textures = model.textures(); const auto& [_, type, file] : textures) {
                 _scene.textures.emplace_back(ir::texture_t::make(*_device, file, {
@@ -213,8 +240,12 @@ namespace test {
             render_done,
             frame_fence
         ] = _current_frame_data();
-        command_buffer.pool().reset();
 
+        if (_resize_main_viewport()) {
+            return;
+        }
+
+        command_buffer.pool().reset();
         auto [image_index, should_resize] = _swapchain->acquire_next_image(image_available);
         if (should_resize) {
             _resize();
@@ -229,6 +260,7 @@ namespace test {
         _clear_buffer_pass();
         _visbuffer_pass();
         _visbuffer_resolve_pass();
+        _visbuffer_dlss_pass();
         _visbuffer_tonemap_pass();
         _vsm_mark_visible_pages_pass();
         _gui_main_pass();
@@ -250,11 +282,6 @@ namespace test {
             .wait_semaphores = { std::cref(render_done) },
             .image = image_index,
         });
-        if (_gui.should_resize) {
-            _resize_main_viewport();
-            _gui.should_resize = false;
-            return;
-        }
         if (should_resize) {
             _resize();
             return;
@@ -272,13 +299,15 @@ namespace test {
             ir::wsi_platform_t::wait_events();
             std::tie(viewport_width, viewport_height) = _wsi->update_viewport();
         }
-        _wsi->input().capture();
         if (_wsi->input().is_pressed_once(ir::mouse_t::e_right_button)) {
             _wsi->capture_cursor();
         }
         if (_wsi->input().is_released_once(ir::mouse_t::e_right_button)) {
             _wsi->release_cursor();
         }
+        _wsi->input().capture();
+        _state.performance.frame_times.pop_front();
+        _state.performance.frame_times.push_back(_delta_time * 1000.0f);
         _camera.update(_delta_time);
         _device->tick();
     }
@@ -336,17 +365,26 @@ namespace test {
         {
             auto view = view_t();
             view.projection = _camera.projection();
+            view.prev_projection = _visbuffer.prev_projection;
             view.inv_projection = glm::inverse(view.projection);
+            view.inv_prev_projection = glm::inverse(view.prev_projection);
             view.view = _camera.view();
+            view.prev_view = _visbuffer.prev_view;
             view.inv_view = glm::inverse(view.view);
+            view.inv_prev_view = glm::inverse(view.prev_view);
             view.proj_view = view.projection * view.view;
+            view.prev_proj_view = view.prev_projection * view.prev_view;
             view.inv_proj_view = glm::inverse(view.proj_view);
+            view.inv_prev_proj_view = glm::inverse(view.prev_proj_view);
             view.eye_position = glm::make_vec4(_camera.position());
 
             const auto frustum = make_perspective_frustum(view.proj_view);
             std::memcpy(view.frustum, frustum.data(), sizeof(view.frustum));
-            view.resolution = glm::vec2(_gui.main_viewport_resolution);
+            view.resolution = glm::vec2(_state.dlss.render_resolution);
             views[IRIS_MAIN_VIEW_INDEX] = view;
+
+            _visbuffer.prev_projection = view.projection;
+            _visbuffer.prev_view = view.view;
         }
 
         // write shadow views
@@ -396,7 +434,6 @@ namespace test {
         IR_PROFILE_SCOPED();
         _device->wait_idle();
         _swapchain.reset();
-        _wsi->update_viewport();
         _swapchain = ir::swapchain_t::make(*_device, *_wsi, {
             .vsync = false,
             .srgb = false,
@@ -406,13 +443,19 @@ namespace test {
         _frame_index = 0;
     }
 
-    auto application_t::_resize_main_viewport() noexcept -> void {
+    auto application_t::_resize_main_viewport() noexcept -> bool {
         _device->wait_idle();
+        if (_state.dlss.is_initialized) {
+            return false;
+        }
         const auto width = _gui.main_viewport_resolution.x;
         const auto height = _gui.main_viewport_resolution.y;
         _initialize_sync();
+        _initialize_dlss();
         _initialize_visbuffer_pass();
         _camera.update_aspect(width, height);
+        _state.dlss.is_initialized = true;
+        return true;
     }
 
     auto application_t::_initialize() noexcept -> void {
@@ -429,6 +472,7 @@ namespace test {
                 .swapchain = true,
                 .mesh_shader = true,
                 .image_atomics_64 = true,
+                .dlss = true,
             }
         });
         _swapchain = ir::swapchain_t::make(*_device, *_wsi, {
@@ -447,6 +491,43 @@ namespace test {
 
         _camera = camera_t::make(*_wsi);
         _camera.update(1 / 144.0f);
+
+        _jitter_offsets = std::to_array<glm::vec2>({
+            glm::vec2(0.500000f, 0.333333f) - 0.5f,
+            glm::vec2(0.250000f, 0.666667f) - 0.5f,
+            glm::vec2(0.750000f, 0.111111f) - 0.5f,
+            glm::vec2(0.125000f, 0.444444f) - 0.5f,
+            glm::vec2(0.625000f, 0.777778f) - 0.5f,
+            glm::vec2(0.375000f, 0.222222f) - 0.5f,
+            glm::vec2(0.875000f, 0.555556f) - 0.5f,
+            glm::vec2(0.062500f, 0.888889f) - 0.5f,
+            glm::vec2(0.562500f, 0.037037f) - 0.5f,
+            glm::vec2(0.312500f, 0.370370f) - 0.5f,
+            glm::vec2(0.812500f, 0.703704f) - 0.5f,
+            glm::vec2(0.187500f, 0.148148f) - 0.5f,
+            glm::vec2(0.687500f, 0.481481f) - 0.5f,
+            glm::vec2(0.437500f, 0.814815f) - 0.5f,
+            glm::vec2(0.937500f, 0.259259f) - 0.5f,
+            glm::vec2(0.031250f, 0.592593f) - 0.5f,
+        });
+        _state.performance.frame_times.resize(512);
+    }
+
+    auto application_t::_initialize_dlss() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto render_width = _state.dlss.render_resolution.x;
+        const auto render_height = _state.dlss.render_resolution.y;
+        const auto output_width = _gui.main_viewport_resolution.x;
+        const auto output_height = _gui.main_viewport_resolution.y;
+        _device->ngx().initialize_dlss({
+            .render_resolution = { render_width, render_height },
+            .output_resolution = { output_width, output_height },
+            .quality = _state.dlss.quality,
+            .depth_scale = 1.0f,
+            .is_hdr = true,
+            .is_reverse_depth = true,
+            .enable_auto_exposure = false,
+        });
     }
 
     auto application_t::_initialize_imgui() noexcept -> void {
@@ -490,60 +571,28 @@ namespace test {
             });
 
             ImGui::CreateContext();
+            ImPlot::CreateContext();
             auto& io = ImGui::GetIO();
             io.ConfigFlags =
                 ImGuiConfigFlags_NavEnableKeyboard |
                 ImGuiConfigFlags_DockingEnable;
             io.Fonts->AddFontFromFileTTF("../fonts/RobotoCondensed-Regular.ttf", 18);
-            auto& style = ImGui::GetStyle();
-            style.WindowPadding = ImVec2(12, 12);
-            style.WindowRounding = 5.0f;
-            style.FramePadding = ImVec2(4, 4);
-            style.FrameRounding = 4.0f;
-            style.ItemSpacing = ImVec2(8, 8);
-            style.ItemInnerSpacing = ImVec2(4, 4);
-            style.IndentSpacing = 16.0f;
-            style.ScrollbarSize = 16.0f;
-            style.ScrollbarRounding = 8.0f;
-            style.GrabMinSize = 4.0f;
-            style.GrabRounding = 3.0f;
-    
-            style.Colors[ImGuiCol_Text] = ImVec4(0.80f, 0.80f, 0.83f, 1.00f);
-            style.Colors[ImGuiCol_TextDisabled] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
-            style.Colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
-            style.Colors[ImGuiCol_ChildBg] = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
-            style.Colors[ImGuiCol_PopupBg] = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
-            style.Colors[ImGuiCol_Border] = ImVec4(0.20f, 0.20f, 0.23f, 0.88f);
-            style.Colors[ImGuiCol_BorderShadow] = ImVec4(0.92f, 0.91f, 0.88f, 0.00f);
-            style.Colors[ImGuiCol_FrameBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
-            style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
-            style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
-            style.Colors[ImGuiCol_TitleBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
-            style.Colors[ImGuiCol_TitleBgCollapsed] = ImVec4(1.00f, 0.98f, 0.95f, 0.75f);
-            style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.07f, 0.07f, 0.09f, 1.00f);
-            style.Colors[ImGuiCol_MenuBarBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
-            style.Colors[ImGuiCol_ScrollbarBg] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
-            style.Colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
-            style.Colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
-            style.Colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
-            style.Colors[ImGuiCol_CheckMark] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
-            style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.80f, 0.80f, 0.83f, 0.31f);
-            style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
-            style.Colors[ImGuiCol_Button] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
-            style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.24f, 0.23f, 0.29f, 1.00f);
-            style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
-            style.Colors[ImGuiCol_Header] = ImVec4(0.10f, 0.09f, 0.12f, 1.00f);
-            style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
-            style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
-            style.Colors[ImGuiCol_ResizeGrip] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-            style.Colors[ImGuiCol_ResizeGripHovered] = ImVec4(0.56f, 0.56f, 0.58f, 1.00f);
-            style.Colors[ImGuiCol_ResizeGripActive] = ImVec4(0.06f, 0.05f, 0.07f, 1.00f);
-            style.Colors[ImGuiCol_PlotLines] = ImVec4(0.40f, 0.39f, 0.38f, 0.63f);
-            style.Colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.25f, 1.00f, 0.00f, 1.00f);
-            style.Colors[ImGuiCol_PlotHistogram] = ImVec4(0.40f, 0.39f, 0.38f, 0.63f);
-            style.Colors[ImGuiCol_PlotHistogramHovered] = ImVec4(0.25f, 1.00f, 0.00f, 1.00f);
-            style.Colors[ImGuiCol_TextSelectedBg] = ImVec4(0.25f, 1.00f, 0.00f, 0.43f);
-
+            ImGui::StyleColorsDark();
+            ImPlot::StyleColorsDark();
+            {
+                auto& style = ImGui::GetStyle();
+                style.WindowPadding = ImVec2(12, 12);
+                style.WindowRounding = 0.0f;
+                style.FramePadding = ImVec2(4, 4);
+                style.FrameRounding = 0.0f;
+                style.ItemSpacing = ImVec2(8, 8);
+                style.ItemInnerSpacing = ImVec2(4, 4);
+                style.IndentSpacing = 16.0f;
+                style.ScrollbarSize = 16.0f;
+                style.ScrollbarRounding = 8.0f;
+                style.GrabMinSize = 4.0f;
+                style.GrabRounding = 3.0f;
+            }
             ImGui_ImplGlfw_InitForVulkan(static_cast<GLFWwindow*>(_wsi->window_handle()), true);
             auto imgui_vulkan_info = ImGui_ImplVulkan_InitInfo();
             imgui_vulkan_info.Instance = _instance->handle();
@@ -623,6 +672,14 @@ namespace test {
                     },
                     {
                         .layout = {
+                            .final = ir::image_layout_t::e_general
+                        },
+                        .format = ir::resource_format_t::e_r16g16_sfloat,
+                        .load_op = ir::attachment_load_op_t::e_clear,
+                        .store_op = ir::attachment_store_op_t::e_store,
+                    },
+                    {
+                        .layout = {
                             .final = ir::image_layout_t::e_shader_read_only_optimal
                         },
                         .format = ir::resource_format_t::e_d32_sfloat,
@@ -632,8 +689,8 @@ namespace test {
                 },
                 .subpasses = {
                     {
-                        .color_attachments = { 0 },
-                        .depth_stencil_attachment = 1
+                        .color_attachments = { 0, 1 },
+                        .depth_stencil_attachment = 2
                     }
                 },
                 .dependencies = {
@@ -671,7 +728,8 @@ namespace test {
                 .mesh = "../shaders/visbuffer/main.mesh.glsl",
                 .fragment = "../shaders/visbuffer/main.frag.glsl",
                 .blend = {
-                    ir::attachment_blend_t::e_disabled
+                    ir::attachment_blend_t::e_disabled,
+                    ir::attachment_blend_t::e_disabled,
                 },
                 .dynamic_states = {
                     ir::dynamic_state_t::e_viewport,
@@ -690,45 +748,77 @@ namespace test {
                 .compute = "../shaders/visbuffer/tonemap.comp.glsl",
             });
         }
+        const auto render_viewport_width = _state.dlss.render_resolution.x;
+        const auto render_viewport_height = _state.dlss.render_resolution.y;
         const auto main_viewport_width = _gui.main_viewport_resolution.x;
         const auto main_viewport_height = _gui.main_viewport_resolution.y;
         _visbuffer.ids = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(0), {
-            .width = main_viewport_width,
-            .height = main_viewport_height,
-            .usage = ir::image_usage_t::e_color_attachment | ir::image_usage_t::e_storage,
+            .width = render_viewport_width,
+            .height = render_viewport_height,
+            .usage =
+                ir::image_usage_t::e_color_attachment |
+                ir::image_usage_t::e_storage,
             .view = ir::default_image_view_info,
         });
-        _visbuffer.depth = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(1), {
-            .width = main_viewport_width,
-            .height = main_viewport_height,
-            .usage = ir::image_usage_t::e_depth_stencil_attachment | ir::image_usage_t::e_sampled,
+        _visbuffer.velocity = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(1), {
+            .width = render_viewport_width,
+            .height = render_viewport_height,
+            .usage =
+                ir::image_usage_t::e_color_attachment |
+                ir::image_usage_t::e_sampled,
+            .view = ir::default_image_view_info,
+        });
+        _visbuffer.depth = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(2), {
+            .width = render_viewport_width,
+            .height = render_viewport_height,
+            .usage =
+                ir::image_usage_t::e_depth_stencil_attachment |
+                ir::image_usage_t::e_sampled,
             .view = ir::default_image_view_info,
         });
         _visbuffer.color = ir::image_t::make(*_device, {
+            .width = render_viewport_width,
+            .height = render_viewport_height,
+            .usage =
+                ir::image_usage_t::e_sampled |
+                ir::image_usage_t::e_storage,
+            .format = ir::resource_format_t::e_r32g32b32a32_sfloat,
+            .view = ir::default_image_view_info,
+        });
+        _visbuffer.color_resolve = ir::image_t::make(*_device, {
             .width = main_viewport_width,
             .height = main_viewport_height,
-            .usage = ir::image_usage_t::e_storage,
+            .usage =
+                ir::image_usage_t::e_transfer_dst |
+                ir::image_usage_t::e_sampled |
+                ir::image_usage_t::e_storage,
             .format = ir::resource_format_t::e_r32g32b32a32_sfloat,
             .view = ir::default_image_view_info,
         });
         _visbuffer.final = ir::image_t::make(*_device, {
             .width = main_viewport_width,
             .height = main_viewport_height,
-            .usage = ir::image_usage_t::e_storage | ir::image_usage_t::e_sampled,
+            .usage =
+                ir::image_usage_t::e_sampled |
+                ir::image_usage_t::e_storage,
             .format = ir::resource_format_t::e_r8g8b8a8_unorm,
             .view = ir::default_image_view_info,
         });
         _visbuffer.framebuffer = ir::framebuffer_t::make(*_visbuffer.pass, {
             .attachments = {
                 _visbuffer.ids,
+                _visbuffer.velocity,
                 _visbuffer.depth,
             },
-            .width = main_viewport_width,
-            .height = main_viewport_height,
+            .width = render_viewport_width,
+            .height = render_viewport_height,
         });
+        _visbuffer.prev_projection = _camera.projection();
+        _visbuffer.prev_view = _camera.view();
     }
 
     auto application_t::_initialize_vsm_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
         if (!_vsm.is_initialized) {
             _vsm.is_initialized = true;
             _vsm.visible_pages_buffer.device = ir::buffer_t<uint8>::make(*_device, {
@@ -855,6 +945,7 @@ namespace test {
         command_buffer.begin_debug_marker("visbuffer_pass");
         command_buffer.begin_render_pass(*_visbuffer.framebuffer, {
             ir::make_clear_color({ -1_u32 }),
+            ir::make_clear_color({ 0.0_f32 }),
             ir::make_clear_depth(0.0f, 0),
         });
         command_buffer.set_viewport({
@@ -867,7 +958,7 @@ namespace test {
         });
         command_buffer.bind_pipeline(*_visbuffer.main);
         {
-            const auto push_constants = ir::make_byte_bag(std::to_array({
+            const auto addresses = std::to_array({
                 view_buffer.address(),
                 _buffer.meshlet_instances->address(),
                 _buffer.meshlets->address(),
@@ -875,7 +966,9 @@ namespace test {
                 _buffer.vertices->address(),
                 _buffer.indices->address(),
                 _buffer.primitives->address(),
-            }));
+            });
+            const auto jitter = _jitter_offsets[_device->frame_counter().current() % _jitter_offsets.size()];
+            const auto push_constants = ir::make_byte_bag(addresses, jitter);
             command_buffer.push_constants(ir::shader_stage_t::e_mesh, 0, sizeof(push_constants), &push_constants);
         }
         command_buffer.draw_mesh_tasks(_buffer.meshlet_instances->size());
@@ -956,6 +1049,57 @@ namespace test {
         command_buffer.end_debug_marker();
     }
 
+    auto application_t::_visbuffer_dlss_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        const auto current_jitter = _jitter_offsets[_device->frame_counter().current() % _jitter_offsets.size()];
+
+        command_buffer.begin_debug_marker("visbuffer_dlss_pass");
+        command_buffer.image_barrier({
+            .image = std::cref(*_visbuffer.color_resolve),
+            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .dest_stage =
+                ir::pipeline_stage_t::e_transfer |
+                ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access =
+                ir::resource_access_t::e_shader_write |
+                ir::resource_access_t::e_transfer_write,
+            .old_layout = ir::image_layout_t::e_undefined,
+            .new_layout = ir::image_layout_t::e_general,
+        });
+        _device->ngx().evaluate({
+            .commands = std::ref(command_buffer),
+            .color = std::ref(*_visbuffer.color),
+            .depth = std::ref(*_visbuffer.depth),
+            .velocity = std::ref(*_visbuffer.velocity),
+            .output = std::ref(*_visbuffer.color_resolve),
+            .jitter_offset = current_jitter,
+            .reset = _state.dlss.reset,
+        });
+        command_buffer.image_barrier({
+            .image = std::cref(*_visbuffer.color_resolve),
+            .source_stage =
+                ir::pipeline_stage_t::e_transfer |
+                ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access =
+                ir::resource_access_t::e_shader_write |
+                ir::resource_access_t::e_transfer_write,
+            .dest_access =  ir::resource_access_t::e_shader_storage_read,
+            .old_layout = ir::image_layout_t::e_general,
+            .new_layout = ir::image_layout_t::e_general,
+        });
+
+        command_buffer.end_debug_marker();
+    }
+
     auto application_t::_visbuffer_tonemap_pass() noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto& [
@@ -966,12 +1110,12 @@ namespace test {
         ] = _current_frame_data();
 
         const auto set = ir::descriptor_set_builder_t(*_visbuffer.tonemap, 0)
-            .bind_storage_image(0, _visbuffer.color->view())
+            .bind_storage_image(0, _visbuffer.color_resolve->view())
             .bind_storage_image(1, _visbuffer.final->view())
             .build();
         const auto tonemap_dispatch = dispatch_work_group_size({
-            _visbuffer.color->width(),
-            _visbuffer.color->height(),
+            _visbuffer.color_resolve->width(),
+            _visbuffer.color_resolve->height(),
         }, {
             16,
             16,
@@ -1163,39 +1307,119 @@ namespace test {
                 ImGui::End();
             }
             ImGui::SetNextWindowSizeConstraints({ 64, 64 }, { 8192, 8192 });
-            if (ImGui::Begin("main_viewport")) {
+            if (ImGui::Begin("Viewport")) {
                 if (!ImGui::IsAnyMouseDown()) {
                     const auto resolution = ImGui::GetContentRegionAvail();
-                    if (resolution.x != _gui.main_viewport_resolution.x ||
-                        resolution.y != _gui.main_viewport_resolution.y
-                    ) {
-                        _gui.main_viewport_resolution = glm::vec2(
-                            resolution.x,
-                            resolution.y);
-                        _gui.should_resize = true;
+                    if (resolution.x != _gui.main_viewport_resolution.x || resolution.y != _gui.main_viewport_resolution.y) {
+                        _state.dlss.is_initialized = false;
                     }
+                    _gui.main_viewport_resolution = glm::vec2(
+                        resolution.x,
+                        resolution.y
+                    );
                 }
                 const auto image_set = ir::descriptor_set_builder_t(*_gui.main_layout)
-                    .bind_combined_image_sampler(
-                        0,
-                        _visbuffer.final->view(),
-                        *_gui.main_sampler)
+                    .bind_combined_image_sampler(0, _visbuffer.final->view(), *_gui.main_sampler)
                     .build();
-                const auto size = ImVec2(_visbuffer.final->width(), _visbuffer.final->height());
+                const auto size = ImVec2(
+                    _gui.main_viewport_resolution.x,
+                    _gui.main_viewport_resolution.y
+                );
                 ImGui::Image(image_set->handle(), size);
             }
             ImGui::End();
             ImGui::PopStyleVar(3);
-            ImGui::ShowDemoWindow();
-            ImGui::ShowMetricsWindow();
-        }
 
+            if (ImGui::Begin("Settings")) {
+                if (ImGui::CollapsingHeader("DLSS Settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
+                    constexpr static auto presets = std::to_array<const char*>({
+                        "Performance",
+                        "Balanced",
+                        "Quality",
+                        "DLAA"
+                    });
+                    const auto* current = presets[3];
+                    switch (_state.dlss.quality) {
+                        case ir::dlss_quality_preset_t::e_performance:
+                            current = presets[0];
+                            break;
+                        case ir::dlss_quality_preset_t::e_balanced:
+                            current = presets[1];
+                            break;
+                        case ir::dlss_quality_preset_t::e_quality:
+                            current = presets[2];
+                            break;
+                        case ir::dlss_quality_preset_t::e_native:
+                            current = presets[3];
+                            break;
+                    }
+                    if (ImGui::BeginCombo("DLSS Quality Preset", current)) {
+                        for (auto i = 0_u32; i < presets.size(); ++i) {
+                            const auto is_selected = current == presets[i];
+                            if (ImGui::Selectable(presets[i], is_selected)) {
+                                current = presets[i];
+                                switch (i) {
+                                    case 0:
+                                        _state.dlss.quality = ir::dlss_quality_preset_t::e_performance;
+                                        _state.dlss.scaling_ratio = ir::dlss_preset_performance_scaling_ratio;
+                                        break;
+                                    case 1:
+                                        _state.dlss.quality = ir::dlss_quality_preset_t::e_balanced;
+                                        _state.dlss.scaling_ratio = ir::dlss_preset_balanced_scaling_ratio;
+                                        break;
+                                    case 2:
+                                        _state.dlss.quality = ir::dlss_quality_preset_t::e_quality;
+                                        _state.dlss.scaling_ratio = ir::dlss_preset_quality_scaling_ratio;
+                                        break;
+                                    case 3:
+                                        _state.dlss.quality = ir::dlss_quality_preset_t::e_native;
+                                        _state.dlss.scaling_ratio = ir::dlss_preset_native_scaling_ratio;
+                                        break;
+                                }
+                                _state.dlss.is_initialized = false;
+                            }
+                            if (is_selected) {
+                                ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::Checkbox("Reset", &_state.dlss.reset);
+                    _state.dlss.render_resolution = {
+                        _gui.main_viewport_resolution.x * _state.dlss.scaling_ratio,
+                        _gui.main_viewport_resolution.y * _state.dlss.scaling_ratio,
+                    };
+                }
+                ImGui::Separator();
+            }
+            ImGui::End();
+
+            if (ImGui::Begin("Performance")) {
+                ImGui::Text("FPS: %d - ms: %.4f", (uint32)(1.0f / _delta_time), _delta_time * 1000.0f);
+                ImGui::Separator();
+                if (ImPlot::BeginPlot("Frame Time", { -1, 0 }, ImPlotFlags_Crosshairs)) {
+                    const auto axes_flags =
+                        ImPlotAxisFlags_AutoFit |
+                        ImPlotAxisFlags_RangeFit |
+                        ImPlotAxisFlags_NoInitialFit;
+                    ImPlot::SetupAxes("Frame", "ms", axes_flags, axes_flags);
+                    auto time = std::vector<float32>(_state.performance.frame_times.size());
+                    std::iota(time.begin(), time.end(), 0);
+                    auto history = std::vector(_state.performance.frame_times.begin(), _state.performance.frame_times.end());
+                    ImPlot::PlotLine("Delta Time", time.data(), history.data(), time.size());
+                    ImPlot::EndPlot();
+                }
+            }
+            ImGui::End();
+        }
         ImGui::Render();
+        command_buffer.begin_debug_marker("gui_draw");D
         command_buffer.begin_render_pass(*_gui.main_framebuffer, {
             ir::make_clear_color({ 0.0f, 0.0f, 0.0f, 1.0f }),
         });
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffer.handle());
         command_buffer.end_render_pass();
+        command_buffer.end_debug_marker();
     }
 
     auto application_t::_swapchain_copy_pass(uint32 image_index) noexcept -> void {

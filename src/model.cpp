@@ -43,7 +43,7 @@ namespace test {
         };
         auto materials = std::vector<material_t>();
         auto textures = std::vector<texture_info_t>();
-        /*for (auto i = 0_u32; i < gltf->materials_count; ++i) {
+        for (auto i = 0_u32; i < gltf->materials_count; ++i) {
             const auto& material = gltf->materials[i];
             auto c_material = material_t();
             if (is_basisu_texture_valid(material.pbr_metallic_roughness.base_color_texture.texture)) {
@@ -87,7 +87,7 @@ namespace test {
                 material_cache[&material] = materials.size();
                 materials.push_back(c_material);
             }
-        }*/
+        }
 
         auto meshlet_id = 0_u32;
         auto vertex_offset = 0_u32;
@@ -104,6 +104,7 @@ namespace test {
                 const auto* position_ptr = (glm::vec3*)(nullptr);
                 const auto* normal_ptr = (glm::vec3*)(nullptr);
                 const auto* uv_ptr = (glm::vec2*)(nullptr);
+                const auto* tangent_ptr = (glm::vec4*)(nullptr);
 
                 auto vertices = std::vector<meshlet_vertex_format_t>();
                 auto vertex_count = 0_u32;
@@ -130,6 +131,10 @@ namespace test {
                             }
                             break;
 
+                        case cgltf_attribute_type_tangent:
+                            tangent_ptr = reinterpret_cast<const glm::vec4*>(data_ptr + buffer_view.offset + accessor.offset);
+                            break;
+
                         default: break;
                     }
                 }
@@ -145,6 +150,9 @@ namespace test {
                     }
                     if (uv_ptr) {
                         std::memcpy(&vertex.uv, &uv_ptr[k], sizeof(vertex.uv));
+                    }
+                    if (tangent_ptr) {
+                        std::memcpy(&vertex.tangent, &tangent_ptr[k], sizeof(vertex.tangent));
                     }
                 }
                 auto indices = std::vector<uint32>();
