@@ -1413,7 +1413,7 @@ namespace test {
             ImGui::End();
         }
         ImGui::Render();
-        command_buffer.begin_debug_marker("gui_draw");D
+        command_buffer.begin_debug_marker("gui_draw");
         command_buffer.begin_render_pass(*_gui.main_framebuffer, {
             ir::make_clear_color({ 0.0f, 0.0f, 0.0f, 1.0f }),
         });
