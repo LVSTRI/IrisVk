@@ -48,10 +48,6 @@ vec3 uv_to_world(in mat4 inv_proj_view, in vec2 uv, in float depth) {
     return world.xyz / world.w;
 }
 
-vec2 uv_flip_y(in vec2 uv) {
-    return vec2(uv.x, 1.0 - uv.y);
-}
-
 vec2 vec2_from_float(in float[2] v) {
     return vec2(v[0], v[1]);
 }

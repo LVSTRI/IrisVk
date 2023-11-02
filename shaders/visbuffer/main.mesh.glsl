@@ -22,7 +22,6 @@ layout (location = 0) out o_vertex_data_block {
     flat uint meshlet_id;
     vec4 clip_position;
     vec4 prev_clip_position;
-    vec2 resolution;
 } o_vertex_data[];
 
 layout (scalar, push_constant) restrict readonly uniform u_push_constants_block {
@@ -33,7 +32,6 @@ layout (scalar, push_constant) restrict readonly uniform u_push_constants_block 
     restrict readonly b_vertex_block u_vertex_ptr;
     restrict readonly b_index_block u_index_ptr;
     restrict readonly b_primitive_block u_primitive_ptr;
-    vec2 u_jitter;
 };
 
 shared uint vertex_offset;
@@ -44,6 +42,11 @@ shared uint primitive_count;
 shared vec2 resolution;
 shared mat4 pvm;
 shared mat4 prev_pvm;
+shared mat4 jittered_pvm;
+
+mat4 make_jittered_proj_view(in view_t view) {
+    return view.jittered_projection * view.view;
+}
 
 void main() {
     const uint thread_index = gl_LocalInvocationID.x;
@@ -65,6 +68,7 @@ void main() {
         resolution = main_view.resolution;
         pvm = main_view.proj_view * transform;
         prev_pvm = main_view.prev_proj_view * prev_transform;
+        jittered_pvm = make_jittered_proj_view(main_view) * transform;
         SetMeshOutputsEXT(index_count, primitive_count);
     }
     barrier();
@@ -74,12 +78,12 @@ void main() {
         const uint index = min(thread_index + i * WORK_GROUP_SIZE, index_count - 1);
         const vec3 position = u_vertex_ptr.data[vertex_offset + u_index_ptr.data[index_offset + index]].position;
         const vec4 clip_position = pvm * vec4(position, 1.0);
+        const vec4 prev_clip_position = prev_pvm * vec4(position, 1.0);
 
         o_vertex_data[index].meshlet_id = meshlet_instance_id;
         o_vertex_data[index].clip_position = clip_position;
-        o_vertex_data[index].prev_clip_position = prev_pvm * vec4(position, 1.0);
-        o_vertex_data[index].resolution = resolution;
-        gl_MeshVerticesEXT[index].gl_Position = clip_position + vec4(2.0 * u_jitter / resolution, 0.0, 0.0) * clip_position.w;
+        o_vertex_data[index].prev_clip_position = prev_clip_position;
+        gl_MeshVerticesEXT[index].gl_Position = jittered_pvm * vec4(position, 1.0);
     }
 
     for (uint i = 0; i < MAX_PRIMITIVES_PER_THREAD; i++) {

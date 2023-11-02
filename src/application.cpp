@@ -12,10 +12,12 @@
 
 namespace test {
     static auto dispatch_work_group_size(uint32 size, uint32 wg) noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
         return (size + wg - 1) / wg;
     }
 
     static auto dispatch_work_group_size(glm::uvec2 size = { 1, 1 }, glm::uvec2 wg = { 1, 1 }) noexcept -> glm::uvec2 {
+        IR_PROFILE_SCOPED();
         return glm::uvec2(
             (size.x + wg.x - 1) / wg.x,
             (size.y + wg.y - 1) / wg.y
@@ -23,6 +25,7 @@ namespace test {
     }
 
     static auto dispatch_work_group_size(glm::uvec3 size = { 1, 1, 1 }, glm::uvec3 wg = { 1, 1, 1 }) noexcept -> glm::uvec3 {
+        IR_PROFILE_SCOPED();
         return glm::uvec3(
             (size.x + wg.x - 1) / wg.x,
             (size.y + wg.y - 1) / wg.y,
@@ -31,10 +34,190 @@ namespace test {
     }
 
     static auto previous_power_2(uint32 value) noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
         return 1 << (32 - std::countl_zero(value - 1));
     }
 
+    static auto next_power_2(uint32 value) noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
+        return 1 << (32 - std::countl_zero(value));
+    }
+
+    static auto calculate_jitter_count(glm::uvec2 render_resolution, glm::uvec2 output_resolution) noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
+        const auto ratio =
+            static_cast<float32>(output_resolution.y) /
+            static_cast<float32>(render_resolution.y);
+        return previous_power_2(glm::round(8.0f * ratio * ratio));
+    }
+
+    static auto calculate_dlss_lod_bias(glm::uvec2 render_resolution, glm::uvec2 output_resolution) noexcept -> float32 {
+        IR_PROFILE_SCOPED();
+        const auto ratio =
+            static_cast<float32>(render_resolution.x) /
+            static_cast<float32>(output_resolution.x);
+        return glm::log2(ratio) - 1.0f;
+    }
+
+    static auto sample_jitter(uint32 index, uint32 max_count) noexcept -> glm::vec2 {
+        IR_PROFILE_SCOPED();
+        constexpr static auto jitter_8 = std::to_array<std::pair<float32, float32>>({
+            std::make_pair(0.3943534f, 0.13569258f),
+            std::make_pair(0.8943534f, 0.46902591f),
+            std::make_pair(0.1443534f, 0.80235925f),
+            std::make_pair(0.6443534f, 0.24680369f),
+            std::make_pair(0.2693534f, 0.58013703f),
+            std::make_pair(0.7693534f, 0.91347036f),
+            std::make_pair(0.0193534f, 0.02458147f),
+            std::make_pair(0.5193534f, 0.35791480f),
+        });
+
+        constexpr static auto jitter_16 = std::to_array<std::pair<float32, float32>>({
+            std::make_pair(0.40445187f, 0.74515006f),
+            std::make_pair(0.90445187f, 0.41181672f),
+            std::make_pair(0.15445187f, 0.07848339f),
+            std::make_pair(0.65445187f, 0.85626117f),
+            std::make_pair(0.27945187f, 0.52292784f),
+            std::make_pair(0.77945187f, 0.18959450f),
+            std::make_pair(0.02945187f, 0.96737228f),
+            std::make_pair(0.52945187f, 0.63403895f),
+            std::make_pair(0.46695187f, 0.30070561f),
+            std::make_pair(0.96695187f, 0.70811302f),
+            std::make_pair(0.21695187f, 0.37477969f),
+            std::make_pair(0.71695187f, 0.04144635f),
+            std::make_pair(0.34195187f, 0.81922413f),
+            std::make_pair(0.84195187f, 0.48589080f),
+            std::make_pair(0.09195187f, 0.15255747f),
+            std::make_pair(0.59195187f, 0.93033524f),
+        });
+
+        constexpr static auto jitter_32 = std::to_array<std::pair<float32, float32>>({
+            std::make_pair(0.37816233f, 0.37421190f),
+            std::make_pair(0.87816233f, 0.70754523f),
+            std::make_pair(0.12816233f, 0.04087857f),
+            std::make_pair(0.62816233f, 0.59643412f),
+            std::make_pair(0.25316233f, 0.92976745f),
+            std::make_pair(0.75316233f, 0.26310079f),
+            std::make_pair(0.00316233f, 0.48532301f),
+            std::make_pair(0.50316233f, 0.81865634f),
+            std::make_pair(0.44066233f, 0.15198968f),
+            std::make_pair(0.94066233f, 0.33717486f),
+            std::make_pair(0.19066233f, 0.67050820f),
+            std::make_pair(0.69066233f, 0.00384153f),
+            std::make_pair(0.31566233f, 0.55939708f),
+            std::make_pair(0.81566233f, 0.89273042f),
+            std::make_pair(0.06566233f, 0.22606375f),
+            std::make_pair(0.56566233f, 0.44828597f),
+            std::make_pair(0.40941233f, 0.78161931f),
+            std::make_pair(0.90941233f, 0.11495264f),
+            std::make_pair(0.15941233f, 0.41124894f),
+            std::make_pair(0.65941233f, 0.74458227f),
+            std::make_pair(0.28441233f, 0.07791560f),
+            std::make_pair(0.78441233f, 0.63347116f),
+            std::make_pair(0.03441233f, 0.96680449f),
+            std::make_pair(0.53441233f, 0.30013782f),
+            std::make_pair(0.47191233f, 0.52236005f),
+            std::make_pair(0.97191233f, 0.85569338f),
+            std::make_pair(0.22191233f, 0.18902671f),
+            std::make_pair(0.72191233f, 0.38655758f),
+            std::make_pair(0.34691233f, 0.71989091f),
+            std::make_pair(0.84691233f, 0.05322424f),
+            std::make_pair(0.09691233f, 0.60877980f),
+            std::make_pair(0.59691233f, 0.94211313f)
+        });
+
+        constexpr static auto jitter_64 = std::to_array<std::pair<float32, float32>>({
+            std::make_pair(0.72876747f, 0.87253339f),
+            std::make_pair(0.22876747f, 0.53920006f),
+            std::make_pair(0.97876747f, 0.20586673f),
+            std::make_pair(0.47876747f, 0.76142228f),
+            std::make_pair(0.60376747f, 0.42808895f),
+            std::make_pair(0.10376747f, 0.09475562f),
+            std::make_pair(0.85376747f, 0.98364450f),
+            std::make_pair(0.35376747f, 0.65031117f),
+            std::make_pair(0.66626747f, 0.31697784f),
+            std::make_pair(0.16626747f, 0.83549636f),
+            std::make_pair(0.91626747f, 0.50216302f),
+            std::make_pair(0.41626747f, 0.16882969f),
+            std::make_pair(0.54126747f, 0.72438525f),
+            std::make_pair(0.04126747f, 0.39105191f),
+            std::make_pair(0.79126747f, 0.05771858f),
+            std::make_pair(0.29126747f, 0.94660747f),
+            std::make_pair(0.69751747f, 0.61327413f),
+            std::make_pair(0.19751747f, 0.27994080f),
+            std::make_pair(0.94751747f, 0.79845932f),
+            std::make_pair(0.44751747f, 0.46512599f),
+            std::make_pair(0.57251747f, 0.13179265f),
+            std::make_pair(0.07251747f, 0.68734821f),
+            std::make_pair(0.82251747f, 0.35401487f),
+            std::make_pair(0.32251747f, 0.02068154f),
+            std::make_pair(0.63501747f, 0.90957043f),
+            std::make_pair(0.13501747f, 0.57623710f),
+            std::make_pair(0.88501747f, 0.24290376f),
+            std::make_pair(0.38501747f, 0.86018771f),
+            std::make_pair(0.51001747f, 0.52685438f),
+            std::make_pair(0.01001747f, 0.19352105f),
+            std::make_pair(0.76001747f, 0.74907660f),
+            std::make_pair(0.26001747f, 0.41574327f),
+            std::make_pair(0.74439247f, 0.08240994f),
+            std::make_pair(0.24439247f, 0.97129883f),
+            std::make_pair(0.99439247f, 0.63796549f),
+            std::make_pair(0.49439247f, 0.30463216f),
+            std::make_pair(0.61939247f, 0.82315068f),
+            std::make_pair(0.11939247f, 0.48981734f),
+            std::make_pair(0.86939247f, 0.15648401f),
+            std::make_pair(0.36939247f, 0.71203957f),
+            std::make_pair(0.68189247f, 0.37870623f),
+            std::make_pair(0.18189247f, 0.04537290f),
+            std::make_pair(0.93189247f, 0.93426179f),
+            std::make_pair(0.43189247f, 0.60092846f),
+            std::make_pair(0.55689247f, 0.26759512f),
+            std::make_pair(0.05689247f, 0.78611364f),
+            std::make_pair(0.80689247f, 0.45278031f),
+            std::make_pair(0.30689247f, 0.11944697f),
+            std::make_pair(0.71314247f, 0.67500253f),
+            std::make_pair(0.21314247f, 0.34166920f),
+            std::make_pair(0.96314247f, 0.00833586f),
+            std::make_pair(0.46314247f, 0.89722475f),
+            std::make_pair(0.58814247f, 0.56389142f),
+            std::make_pair(0.08814247f, 0.23055808f),
+            std::make_pair(0.83814247f, 0.88487907f),
+            std::make_pair(0.33814247f, 0.55154574f),
+            std::make_pair(0.65064247f, 0.21821241f),
+            std::make_pair(0.15064247f, 0.77376796f),
+            std::make_pair(0.90064247f, 0.44043463f),
+            std::make_pair(0.40064247f, 0.10710129f),
+            std::make_pair(0.52564247f, 0.99599018f),
+            std::make_pair(0.02564247f, 0.66265685f),
+            std::make_pair(0.77564247f, 0.32932352f),
+            std::make_pair(0.27564247f, 0.84784204f)
+        });
+
+        if (max_count == 0) {
+            return {};
+        }
+        index = index % max_count;
+        if (max_count <= 8) {
+            const auto [x, y] = jitter_8[index];
+            return glm::vec2(x, y) - 0.5f;
+        }
+        if (max_count <= 16) {
+            const auto [x, y] = jitter_16[index];
+            return glm::vec2(x, y) - 0.5f;
+        }
+        if (max_count <= 32) {
+            const auto [x, y] = jitter_32[index];
+            return glm::vec2(x, y) - 0.5f;
+        }
+        if (max_count <= 64) {
+            const auto [x, y] = jitter_64[index];
+            return glm::vec2(x, y) - 0.5f;
+        }
+        return {};
+    }
+
     static auto polar_to_cartesian(float32 elevation, float32 azimuth) noexcept -> glm::vec3 {
+        IR_PROFILE_SCOPED();
         elevation = glm::radians(elevation);
         azimuth = glm::radians(azimuth);
         return glm::normalize(-glm::vec3(
@@ -132,12 +315,6 @@ namespace test {
                         }
                         IR_UNREACHABLE();
                     }(),
-                    .sampler = {
-                        .filter = { ir::sampler_filter_t::e_linear },
-                        .mip_mode = ir::sampler_mipmap_mode_t::e_linear,
-                        .address_mode = { ir::sampler_address_mode_t::e_repeat },
-                        .anisotropy = 16.0f,
-                    }
                 }));
             }
 
@@ -160,49 +337,59 @@ namespace test {
             vertices.insert(vertices.end(), model.vertices().begin(), model.vertices().end());
             indices.insert(indices.end(), model.indices().begin(), model.indices().end());
             primitives.insert(primitives.end(), model.primitives().begin(), model.primitives().end());
-            transforms.insert(transforms.end(), model.transforms().begin(), model.transforms().end());
+            std::transform(model.transforms().begin(), model.transforms().end(), std::back_inserter(transforms), [](const auto& model) {
+                return transform_t { model };
+            });
             materials.insert(materials.end(), model.materials().begin(), model.materials().end());
             meshlet_offset += meshlets.size();
             model = {};
         }
         _scene.materials = std::move(materials);
-
+        _scene.main_sampler = ir::sampler_t::make(*_device, {
+            .name = "main_texture_sampler",
+            .filter = { ir::sampler_filter_t::e_linear },
+            .mip_mode = ir::sampler_mipmap_mode_t::e_linear,
+            .address_mode = { ir::sampler_address_mode_t::e_repeat },
+            .border_color = ir::sampler_border_color_t::e_float_opaque_white,
+            .anisotropy = 16.0f,
+        });
         _buffer.meshlets = ir::upload_buffer<base_meshlet_t>(*_device, meshlets, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_meshlet_buffer",
         });
         _buffer.meshlet_instances = ir::upload_buffer<meshlet_instance_t>(*_device, meshlet_instances, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_meshlet_instance_buffer",
         });
         _buffer.vertices = ir::upload_buffer<meshlet_vertex_format_t>(*_device, vertices, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_meshlet_vertex_buffer",
         });
         _buffer.indices = ir::upload_buffer<uint32>(*_device, indices, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_meshlet_index_buffer",
         });
         _buffer.primitives = ir::upload_buffer<uint8>(*_device, primitives, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_meshlet_primitive_buffer",
         });
         _buffer.transforms = ir::buffer_t<transform_t>::make(*_device, frames_in_flight, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_transform_buffer",
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = transforms.size(),
         });
         _buffer.materials = ir::buffer_t<material_t>::make(*_device, frames_in_flight, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_material_buffer",
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = 4096,
         });
         _buffer.directional_lights = ir::buffer_t<directional_light_t>::make(*_device, frames_in_flight, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_directional_light_buffer",
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = IRIS_MAX_DIRECTIONAL_LIGHTS,
         });
         _buffer.views = ir::buffer_t<view_t>::make(*_device, frames_in_flight, {
-            .usage = ir::buffer_usage_t::e_storage_buffer,
+            .name = "main_camera_view_buffer",
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = 128,
         });
         _buffer.atomics = ir::buffer_t<uint64>::make(*_device, {
+            .name = "main_atomic_counter_buffer",
             .usage =
                 ir::buffer_usage_t::e_storage_buffer |
                 ir::buffer_usage_t::e_transfer_dst,
@@ -263,6 +450,7 @@ namespace test {
         _visbuffer_dlss_pass();
         _visbuffer_tonemap_pass();
         _vsm_mark_visible_pages_pass();
+        _vsm_request_pages_pass();
         _gui_main_pass();
         _swapchain_copy_pass(image_index);
         command_buffer.end();
@@ -336,25 +524,23 @@ namespace test {
         // write directional lights
         _state.directional_lights = std::vector<directional_light_t>(IRIS_MAX_DIRECTIONAL_LIGHTS);
         {
-            static auto elevation = 240.0f;
-            static auto azimuth = 30.0f;
             if (_wsi->input().is_pressed(ir::keyboard_t::e_up)) {
-                elevation += 25.0f * _delta_time;
+                _state.vsm.elevation += 25.0f * _delta_time;
             }
             if (_wsi->input().is_pressed(ir::keyboard_t::e_down)) {
-                elevation -= 25.0f * _delta_time;
+                _state.vsm.elevation -= 25.0f * _delta_time;
             }
             if (_wsi->input().is_pressed(ir::keyboard_t::e_left)) {
-                azimuth -= 25.0f * _delta_time;
+                _state.vsm.azimuth -= 25.0f * _delta_time;
             }
             if (_wsi->input().is_pressed(ir::keyboard_t::e_right)) {
-                azimuth += 25.0f * _delta_time;
+                _state.vsm.azimuth += 25.0f * _delta_time;
             }
-            if (glm::epsilonEqual(elevation, 360.0f, 0.0001f)) {
-                elevation += 0.0002f;
+            if (glm::epsilonEqual(_state.vsm.elevation, 360.0f, 0.0001f)) {
+                _state.vsm.elevation += 0.0002f;
             }
             auto directional_light = directional_light_t();
-            directional_light.direction = polar_to_cartesian(elevation, azimuth);
+            directional_light.direction = polar_to_cartesian(_state.vsm.elevation, _state.vsm.azimuth);
             directional_light.intensity = 1.0f;
             _state.directional_lights[0] = directional_light;
         }
@@ -363,11 +549,16 @@ namespace test {
         // write main view
         auto views = std::vector<view_t>(128);
         {
+            const auto jitter = sample_jitter(_device->frame_counter().current(), _state.dlss.jitter_count);
+            const auto jitter_translation = glm::vec3(2.0f * jitter / glm::vec2(_state.dlss.render_resolution), 0.0f);
+            const auto jitter_matrix = glm::translate(glm::mat4(1.0f), jitter_translation);
+
             auto view = view_t();
             view.projection = _camera.projection();
             view.prev_projection = _visbuffer.prev_projection;
             view.inv_projection = glm::inverse(view.projection);
             view.inv_prev_projection = glm::inverse(view.prev_projection);
+            view.jittered_projection = jitter_matrix * view.projection;
             view.view = _camera.view();
             view.prev_view = _visbuffer.prev_view;
             view.inv_view = glm::inverse(view.view);
@@ -426,6 +617,7 @@ namespace test {
 
         // write VSM info
         {
+            _state.vsm_global_data.resolution_lod_bias = calculate_dlss_lod_bias(_state.dlss.render_resolution, _gui.main_viewport_resolution);
             vsm_globals_buffer.insert(_state.vsm_global_data);
         }
     }
@@ -448,9 +640,10 @@ namespace test {
         if (_state.dlss.is_initialized) {
             return false;
         }
+        const auto scaling_ratio = ir::dlss_scaling_ratio_from_preset(_state.dlss.quality);
         _state.dlss.render_resolution = {
-            _gui.main_viewport_resolution.x * _state.dlss.scaling_ratio,
-            _gui.main_viewport_resolution.y * _state.dlss.scaling_ratio,
+            _gui.main_viewport_resolution.x * scaling_ratio,
+            _gui.main_viewport_resolution.y * scaling_ratio,
         };
         IR_LOG_WARN(
             _device->logger(),
@@ -477,6 +670,7 @@ namespace test {
             .wsi_extensions = ir::wsi_platform_t::context_extensions(),
         });
         _device = ir::device_t::make(*_instance, {
+            .name = "main_device",
             .features = {
                 .swapchain = true,
                 .mesh_shader = true,
@@ -485,15 +679,18 @@ namespace test {
             }
         });
         _swapchain = ir::swapchain_t::make(*_device, *_wsi, {
+            .name = "main_swapchain",
             .vsync = false,
             .srgb = false,
         });
         _command_pools = ir::command_pool_t::make(*_device, frames_in_flight, {
+            .name = "main_command_pool",
             .queue = ir::queue_type_t::e_graphics,
             .flags = ir::command_pool_flag_t::e_transient,
         });
-        for (const auto& pool : _command_pools) {
+        for (auto i = 0_u32; const auto& pool : _command_pools) {
             _command_buffers.emplace_back(ir::command_buffer_t::make(*pool, {
+                .name = std::format("main_command_buffer_{}", i++),
                 .primary = true,
             }));
         }
@@ -501,29 +698,15 @@ namespace test {
         _camera = camera_t::make(*_wsi);
         _camera.update(1 / 144.0f);
 
-        _jitter_offsets = std::to_array<glm::vec2>({
-            glm::vec2(0.500000f, 0.333333f) - 0.5f,
-            glm::vec2(0.250000f, 0.666667f) - 0.5f,
-            glm::vec2(0.750000f, 0.111111f) - 0.5f,
-            glm::vec2(0.125000f, 0.444444f) - 0.5f,
-            glm::vec2(0.625000f, 0.777778f) - 0.5f,
-            glm::vec2(0.375000f, 0.222222f) - 0.5f,
-            glm::vec2(0.875000f, 0.555556f) - 0.5f,
-            glm::vec2(0.062500f, 0.888889f) - 0.5f,
-            glm::vec2(0.562500f, 0.037037f) - 0.5f,
-            glm::vec2(0.312500f, 0.370370f) - 0.5f,
-            glm::vec2(0.812500f, 0.703704f) - 0.5f,
-            glm::vec2(0.187500f, 0.148148f) - 0.5f,
-            glm::vec2(0.687500f, 0.481481f) - 0.5f,
-            glm::vec2(0.437500f, 0.814815f) - 0.5f,
-            glm::vec2(0.937500f, 0.259259f) - 0.5f,
-            glm::vec2(0.031250f, 0.592593f) - 0.5f,
-        });
         _state.performance.frame_times.resize(512);
     }
 
     auto application_t::_initialize_dlss() noexcept -> void {
         IR_PROFILE_SCOPED();
+        auto sampler_info = _scene.main_sampler->info();
+        sampler_info.lod_bias = calculate_dlss_lod_bias(_state.dlss.render_resolution, _gui.main_viewport_resolution);
+        _state.dlss.jitter_count = calculate_jitter_count(_state.dlss.render_resolution, _gui.main_viewport_resolution);
+        _scene.main_sampler = ir::sampler_t::make(*_device, sampler_info);
         const auto render_width = _state.dlss.render_resolution.x;
         const auto render_height = _state.dlss.render_resolution.y;
         const auto output_width = _gui.main_viewport_resolution.x;
@@ -545,6 +728,7 @@ namespace test {
             _gui.is_initialized = true;
             IMGUI_CHECKVERSION();
             _gui.main_pass = ir::render_pass_t::make(*_device, {
+                .name = "gui_main_pass",
                 .attachments = {
                     {
                         .layout = {
@@ -629,40 +813,51 @@ namespace test {
                 ImGui_ImplVulkan_CreateFontsTexture(commands.handle());
             });
             ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+            _gui.main_layout = ir::descriptor_layout_t::make(*_device, {
+                .name = "gui_descriptor_layout",
+                .bindings = std::to_array<ir::descriptor_binding_t>({
+                    {
+                        .set = 0,
+                        .binding = 0,
+                        .count = 1,
+                        .type = ir::descriptor_type_t::e_combined_image_sampler,
+                        .stage = ir::shader_stage_t::e_fragment,
+                    }
+                })
+            });
+            _gui.main_sampler = ir::sampler_t::make(*_device, {
+                .name = "gui_sampler",
+                .filter = { ir::sampler_filter_t::e_nearest },
+                .mip_mode = ir::sampler_mipmap_mode_t::e_nearest,
+                .address_mode = { ir::sampler_address_mode_t::e_repeat },
+                .border_color = ir::sampler_border_color_t::e_float_opaque_black,
+            });
         }
         _gui.main_image = ir::image_t::make_from_attachment(*_device, _gui.main_pass->attachment(0), {
+            .name = "gui_main_attachment",
             .width = _swapchain->width(),
             .height = _swapchain->height(),
             .usage = ir::image_usage_t::e_color_attachment | ir::image_usage_t::e_transfer_src,
             .view = ir::default_image_view_info,
         });
         _gui.main_framebuffer = ir::framebuffer_t::make(*_gui.main_pass, {
+            .name = "gui_main_framebuffer",
             .attachments = { _gui.main_image },
             .width = _swapchain->width(),
             .height = _swapchain->height(),
-        });
-        _gui.main_layout = ir::descriptor_layout_t::make(*_device, std::to_array<ir::descriptor_binding_t>({
-            {
-                .set = 0,
-                .binding = 0,
-                .count = 1,
-                .type = ir::descriptor_type_t::e_combined_image_sampler,
-                .stage = ir::shader_stage_t::e_fragment,
-            }
-        }));
-        _gui.main_sampler = ir::sampler_t::make(*_device, {
-            .filter = { ir::sampler_filter_t::e_nearest },
-            .mip_mode = ir::sampler_mipmap_mode_t::e_nearest,
-            .address_mode = { ir::sampler_address_mode_t::e_repeat },
-            .border_color = ir::sampler_border_color_t::e_float_opaque_black,
         });
     }
 
     auto application_t::_initialize_sync() noexcept -> void {
         IR_PROFILE_SCOPED();
-        _image_available = ir::semaphore_t::make(*_device, frames_in_flight, {});
-        _render_done = ir::semaphore_t::make(*_device, frames_in_flight, {});
-        _frame_fence = ir::fence_t::make(*_device, frames_in_flight);
+        _image_available = ir::semaphore_t::make(*_device, frames_in_flight, {
+            .name = "graphics_image_available"
+        });
+        _render_done = ir::semaphore_t::make(*_device, frames_in_flight, {
+            .name = "graphics_render_done"
+        });
+        _frame_fence = ir::fence_t::make(*_device, frames_in_flight, true, "frame_fence");
     }
 
     auto application_t::_initialize_visbuffer_pass() noexcept -> void {
@@ -670,6 +865,7 @@ namespace test {
         if (!_visbuffer.is_initialized) {
             _visbuffer.is_initialized = true;
             _visbuffer.pass = ir::render_pass_t::make(*_device, {
+                .name = "visbuffer_main_pass",
                 .attachments = {
                     {
                         .layout = {
@@ -683,7 +879,7 @@ namespace test {
                         .layout = {
                             .final = ir::image_layout_t::e_general
                         },
-                        .format = ir::resource_format_t::e_r16g16_sfloat,
+                        .format = ir::resource_format_t::e_r32g32_sfloat,
                         .load_op = ir::attachment_load_op_t::e_clear,
                         .store_op = ir::attachment_store_op_t::e_store,
                     },
@@ -734,6 +930,7 @@ namespace test {
                 }
             });
             _visbuffer.main = ir::pipeline_t::make(*_device, *_visbuffer.pass, {
+                .name = "visbuffer_main_pipeline",
                 .mesh = "../shaders/visbuffer/main.mesh.glsl",
                 .fragment = "../shaders/visbuffer/main.frag.glsl",
                 .blend = {
@@ -751,9 +948,11 @@ namespace test {
                 .cull_mode = ir::cull_mode_t::e_back,
             });
             _visbuffer.resolve = ir::pipeline_t::make(*_device, {
+                .name = "visbuffer_resolve_pipeline",
                 .compute = "../shaders/visbuffer/resolve.comp.glsl",
             });
             _visbuffer.tonemap = ir::pipeline_t::make(*_device, {
+                .name = "visbuffer_tonemap_pipeline",
                 .compute = "../shaders/visbuffer/tonemap.comp.glsl",
             });
         }
@@ -762,14 +961,17 @@ namespace test {
         const auto main_viewport_width = _gui.main_viewport_resolution.x;
         const auto main_viewport_height = _gui.main_viewport_resolution.y;
         _visbuffer.ids = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(0), {
+            .name = "visbuffer_main_id_attachment",
             .width = render_viewport_width,
             .height = render_viewport_height,
             .usage =
                 ir::image_usage_t::e_color_attachment |
+                ir::image_usage_t::e_sampled |
                 ir::image_usage_t::e_storage,
             .view = ir::default_image_view_info,
         });
         _visbuffer.velocity = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(1), {
+            .name = "visbuffer_main_velocity_attachment",
             .width = render_viewport_width,
             .height = render_viewport_height,
             .usage =
@@ -778,6 +980,7 @@ namespace test {
             .view = ir::default_image_view_info,
         });
         _visbuffer.depth = ir::image_t::make_from_attachment(*_device, _visbuffer.pass->attachment(2), {
+            .name = "visbuffer_main_depth_attachment",
             .width = render_viewport_width,
             .height = render_viewport_height,
             .usage =
@@ -786,6 +989,7 @@ namespace test {
             .view = ir::default_image_view_info,
         });
         _visbuffer.color = ir::image_t::make(*_device, {
+            .name = "visbuffer_main_color_attachment",
             .width = render_viewport_width,
             .height = render_viewport_height,
             .usage =
@@ -795,6 +999,7 @@ namespace test {
             .view = ir::default_image_view_info,
         });
         _visbuffer.color_resolve = ir::image_t::make(*_device, {
+            .name = "visbuffer_dlss_resolve_attachment",
             .width = main_viewport_width,
             .height = main_viewport_height,
             .usage =
@@ -805,6 +1010,7 @@ namespace test {
             .view = ir::default_image_view_info,
         });
         _visbuffer.final = ir::image_t::make(*_device, {
+            .name = "visbuffer_tonemapped_attachment",
             .width = main_viewport_width,
             .height = main_viewport_height,
             .usage =
@@ -814,6 +1020,7 @@ namespace test {
             .view = ir::default_image_view_info,
         });
         _visbuffer.framebuffer = ir::framebuffer_t::make(*_visbuffer.pass, {
+            .name = "visbuffer_main_framebuffer",
             .attachments = {
                 _visbuffer.ids,
                 _visbuffer.velocity,
@@ -830,7 +1037,8 @@ namespace test {
         IR_PROFILE_SCOPED();
         if (!_vsm.is_initialized) {
             _vsm.is_initialized = true;
-            _vsm.visible_pages_buffer.device = ir::buffer_t<uint8>::make(*_device, {
+            _vsm.visible_pages_buffer = ir::buffer_t<uint8>::make(*_device, {
+                .name = "vsm_marked_visible_page_buffer",
                 .usage =
                     ir::buffer_usage_t::e_storage_buffer |
                     ir::buffer_usage_t::e_transfer_src |
@@ -838,21 +1046,14 @@ namespace test {
                 .flags = ir::buffer_flag_t::e_resized,
                 .capacity = IRIS_VSM_VIRTUAL_PAGE_COUNT * IRIS_VSM_MAX_CLIPMAPS,
             });
-            _vsm.visible_pages_buffer.host = ir::buffer_t<uint8>::make(*_device, frames_in_flight, {
-                .usage = ir::buffer_usage_t::e_transfer_dst,
-                .memory = { ir::memory_property_t::e_host_cached },
-                .flags =
-                    ir::buffer_flag_t::e_resized |
-                    ir::buffer_flag_t::e_mapped |
-                    ir::buffer_flag_t::e_random_access,
-                .capacity = IRIS_VSM_VIRTUAL_PAGE_COUNT * IRIS_VSM_MAX_CLIPMAPS,
-            });
             _vsm.globals_buffer = ir::buffer_t<vsm_global_data_t>::make(*_device, frames_in_flight, {
+                .name = "vsm_global_data_buffer",
                 .usage = ir::buffer_usage_t::e_storage_buffer,
                 .flags = ir::buffer_flag_t::e_mapped,
                 .capacity = 1,
             });
             _vsm.hzb.image = ir::image_t::make(*_device, {
+                .name = "vsm_main_page_table_hzb",
                 .width = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
                 .height = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
                 .levels = 1 + glm::log2<uint32>(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE),
@@ -867,6 +1068,7 @@ namespace test {
             for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
                 for (auto j = 0_u32; j < _vsm.hzb.image->levels(); ++j) {
                     _vsm.hzb.views.emplace_back(ir::image_view_t::make(*_vsm.hzb.image, {
+                        .name = std::format("vsm_main_page_table_hzb_clipmap_{}_level_{}", i, j),
                         .subresource = {
                             .level = j,
                             .level_count = 1,
@@ -877,7 +1079,34 @@ namespace test {
                 }
             }
             _vsm.mark_visible_pages = ir::pipeline_t::make(*_device, {
+                .name = "vsm_mark_visible_pages_pipeline",
                 .compute = "../shaders/vsm/mark_visible_pages.comp.glsl",
+            });
+            _vsm.make_allocation_requests = ir::pipeline_t::make(*_device, {
+                .name = "vsm_make_allocation_requests_pipeline",
+                .compute = "../shaders/vsm/make_allocation_requests.comp.glsl",
+            });
+            _vsm.allocate_pages = ir::pipeline_t::make(*_device, {
+                .name = "vsm_allocate_pages_pipeline",
+                .compute = "../shaders/vsm/allocate_pages.comp.glsl",
+            });
+            _vsm.allocation_request_buffer = ir::buffer_t<uint32>::make(*_device, {
+                .name = "vsm_page_allocation_request_buffer",
+                .usage = ir::buffer_usage_t::e_transfer_dst,
+                .flags = ir::buffer_flag_t::e_resized,
+                .capacity = IRIS_VSM_VIRTUAL_PAGE_COUNT * IRIS_VSM_MAX_CLIPMAPS + 1,
+            });
+            _vsm.phys_page_table_buffer = ir::buffer_t<uint32>::make(*_device, {
+                .name = "vsm_phys_page_table_buffer",
+                .usage = ir::buffer_usage_t::e_transfer_dst,
+                .flags = ir::buffer_flag_t::e_resized,
+                .capacity = IRIS_VSM_PHYSICAL_PAGE_COUNT / 32,
+            });
+            _vsm.virt_page_table_buffer = ir::buffer_t<uint32>::make(*_device, {
+                .name = "vsm_virt_page_table_buffer",
+                .usage = ir::buffer_usage_t::e_transfer_dst,
+                .flags = ir::buffer_flag_t::e_resized,
+                .capacity = IRIS_VSM_VIRTUAL_PAGE_COUNT * IRIS_VSM_MAX_CLIPMAPS,
             });
 
             _device->graphics_queue().submit([this](ir::command_buffer_t& commands) {
@@ -912,14 +1141,38 @@ namespace test {
             .dest_access = ir::resource_access_t::e_transfer_write,
         });
         command_buffer.buffer_barrier({
-            .buffer = _vsm.visible_pages_buffer.device->slice(),
+            .buffer = _vsm.visible_pages_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_transfer_write,
+        });
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.allocation_request_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_transfer_write,
+        });
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.virt_page_table_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_transfer_write,
+        });
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.phys_page_table_buffer->slice(),
             .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
             .dest_stage = ir::pipeline_stage_t::e_transfer,
             .source_access = ir::resource_access_t::e_none,
             .dest_access = ir::resource_access_t::e_transfer_write,
         });
         command_buffer.fill_buffer(_buffer.atomics->slice(), 0);
-        command_buffer.fill_buffer(_vsm.visible_pages_buffer.device->slice(), 0);
+        command_buffer.fill_buffer(_vsm.visible_pages_buffer->slice(), 0);
+        command_buffer.fill_buffer(_vsm.allocation_request_buffer->slice(), 0);
+        command_buffer.fill_buffer(_vsm.virt_page_table_buffer->slice(), 0);
+        command_buffer.fill_buffer(_vsm.phys_page_table_buffer->slice(), 0);
         command_buffer.buffer_barrier({
             .buffer = _buffer.atomics->slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
@@ -928,7 +1181,28 @@ namespace test {
             .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
         });
         command_buffer.buffer_barrier({
-            .buffer = _vsm.visible_pages_buffer.device->slice(),
+            .buffer = _vsm.visible_pages_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
+        });
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.allocation_request_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
+        });
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.virt_page_table_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
+        });
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.phys_page_table_buffer->slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_transfer_write,
@@ -976,8 +1250,7 @@ namespace test {
                 _buffer.indices->address(),
                 _buffer.primitives->address(),
             });
-            const auto jitter = _jitter_offsets[_device->frame_counter().current() % _jitter_offsets.size()];
-            const auto push_constants = ir::make_byte_bag(addresses, jitter);
+            const auto push_constants = ir::make_byte_bag(addresses);
             command_buffer.push_constants(ir::shader_stage_t::e_mesh, 0, sizeof(push_constants), &push_constants);
         }
         command_buffer.draw_mesh_tasks(_buffer.meshlet_instances->size());
@@ -1007,7 +1280,8 @@ namespace test {
             .bind_sampled_image(0, _visbuffer.depth->view())
             .bind_storage_image(1, _visbuffer.ids->view())
             .bind_storage_image(2, _visbuffer.color->view())
-            .bind_textures(3, _scene.textures)
+            .bind_sampler(3, *_scene.main_sampler)
+            .bind_textures(4, _scene.textures)
             .build();
         const auto resolve_dispatch = dispatch_work_group_size({
             _visbuffer.color->width(),
@@ -1067,7 +1341,7 @@ namespace test {
             frame_fence
         ] = _current_frame_data();
 
-        const auto current_jitter = _jitter_offsets[_device->frame_counter().current() % _jitter_offsets.size()];
+        const auto jitter = sample_jitter(_device->frame_counter().current(), _state.dlss.jitter_count);
 
         command_buffer.begin_debug_marker("visbuffer_dlss_pass");
         command_buffer.image_barrier({
@@ -1089,7 +1363,8 @@ namespace test {
             .depth = std::ref(*_visbuffer.depth),
             .velocity = std::ref(*_visbuffer.velocity),
             .output = std::ref(*_visbuffer.color_resolve),
-            .jitter_offset = current_jitter,
+            .jitter_offset = jitter,
+            .motion_vector_scale = _state.dlss.render_resolution,
             .reset = _state.dlss.reset,
         });
         command_buffer.image_barrier({
@@ -1105,7 +1380,6 @@ namespace test {
             .old_layout = ir::image_layout_t::e_general,
             .new_layout = ir::image_layout_t::e_general,
         });
-
         command_buffer.end_debug_marker();
     }
 
@@ -1170,7 +1444,6 @@ namespace test {
         ] = _current_frame_buffers();
 
         const auto& vsm_globals_buffer = *_vsm.globals_buffer[_frame_index];
-        const auto& vsm_visible_pages_buffer = *_vsm.visible_pages_buffer.host[_frame_index];
 
         const auto mark_page_dispatch = dispatch_work_group_size({
             _visbuffer.color->width(),
@@ -1188,7 +1461,7 @@ namespace test {
         command_buffer.bind_pipeline(*_vsm.mark_visible_pages);
         command_buffer.bind_descriptor_set(*set);
         command_buffer.buffer_barrier({
-            .buffer = _vsm.visible_pages_buffer.device->slice(),
+            .buffer = _vsm.visible_pages_buffer->slice(),
             .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_none,
@@ -1198,13 +1471,13 @@ namespace test {
             const auto push_constants = ir::make_byte_bag(std::to_array({
                 view_buffer.address(),
                 vsm_globals_buffer.address(),
-                _vsm.visible_pages_buffer.device->address(),
+                _vsm.visible_pages_buffer->address(),
             }));
             command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
         }
         command_buffer.dispatch(mark_page_dispatch.x, mark_page_dispatch.y);
         command_buffer.buffer_barrier({
-            .buffer = _vsm.visible_pages_buffer.device->slice(),
+            .buffer = _vsm.visible_pages_buffer->slice(),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
             .dest_stage = ir::pipeline_stage_t::e_transfer,
             .source_access = ir::resource_access_t::e_shader_storage_write,
@@ -1227,7 +1500,7 @@ namespace test {
                 }
             });
             command_buffer.copy_buffer_to_image(
-                _vsm.visible_pages_buffer.device->slice(
+                _vsm.visible_pages_buffer->slice(
                     i * IRIS_VSM_VIRTUAL_PAGE_COUNT,
                     IRIS_VSM_VIRTUAL_PAGE_COUNT
                 ),
@@ -1258,29 +1531,89 @@ namespace test {
             });
         }
         command_buffer.buffer_barrier({
-            .buffer = vsm_visible_pages_buffer.slice(),
-            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
-            .dest_stage = ir::pipeline_stage_t::e_transfer,
-            .source_access = ir::resource_access_t::e_none,
-            .dest_access = ir::resource_access_t::e_transfer_write,
-        });
-        command_buffer.copy_buffer(
-            _vsm.visible_pages_buffer.device->slice(),
-            vsm_visible_pages_buffer.slice(),
-            {});
-        command_buffer.buffer_barrier({
-            .buffer = vsm_visible_pages_buffer.slice(),
-            .source_stage = ir::pipeline_stage_t::e_transfer,
-            .dest_stage = ir::pipeline_stage_t::e_host,
-            .source_access = ir::resource_access_t::e_transfer_write,
-            .dest_access = ir::resource_access_t::e_host_read,
-        });
-        command_buffer.buffer_barrier({
-            .buffer =_vsm.visible_pages_buffer.device->slice(),
+            .buffer = _vsm.visible_pages_buffer->slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_none,
-            .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
+            .dest_access = ir::resource_access_t::e_shader_storage_read,
+        });
+        command_buffer.end_debug_marker();
+    }
+
+    auto application_t::_vsm_request_pages_pass() noexcept -> void {
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        const auto& [
+            view_buffer,
+            transform_buffer
+        ] = _current_frame_buffers();
+
+        const auto request_pages_dispatch = dispatch_work_group_size({
+            IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
+            IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
+        }, {
+            16,
+            16,
+        });
+
+        command_buffer.begin_debug_marker("vsm_make_allocation_requests");
+        command_buffer.bind_pipeline(*_vsm.make_allocation_requests);
+        {
+            const auto addresses = std::to_array({
+                _vsm.visible_pages_buffer->address(),
+                _vsm.virt_page_table_buffer->address(),
+                _vsm.allocation_request_buffer->address(),
+            });
+        }
+        command_buffer.dispatch(
+            request_pages_dispatch.x,
+            request_pages_dispatch.y,
+            IRIS_VSM_CLIPMAP_COUNT
+        );
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.allocation_request_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read,
+        });
+        command_buffer.end_debug_marker();
+    }
+
+    auto application_t::_vsm_allocate_pages_pass() noexcept -> void {
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        const auto& [
+            view_buffer,
+            transform_buffer
+        ] = _current_frame_buffers();
+
+        command_buffer.begin_debug_marker("vsm_allocate_pages");
+        command_buffer.bind_pipeline(*_vsm.allocate_pages);
+        command_buffer.dispatch(); // dispatch a single thread
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.phys_page_table_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read,
+        });
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.virt_page_table_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read,
         });
         command_buffer.end_debug_marker();
     }
@@ -1370,19 +1703,15 @@ namespace test {
                                 switch (i) {
                                     case 0:
                                         _state.dlss.quality = ir::dlss_quality_preset_t::e_performance;
-                                        _state.dlss.scaling_ratio = ir::dlss_preset_performance_scaling_ratio;
                                         break;
                                     case 1:
                                         _state.dlss.quality = ir::dlss_quality_preset_t::e_balanced;
-                                        _state.dlss.scaling_ratio = ir::dlss_preset_balanced_scaling_ratio;
                                         break;
                                     case 2:
                                         _state.dlss.quality = ir::dlss_quality_preset_t::e_quality;
-                                        _state.dlss.scaling_ratio = ir::dlss_preset_quality_scaling_ratio;
                                         break;
                                     case 3:
                                         _state.dlss.quality = ir::dlss_quality_preset_t::e_native;
-                                        _state.dlss.scaling_ratio = ir::dlss_preset_native_scaling_ratio;
                                         break;
                                 }
                                 _state.dlss.is_initialized = false;
@@ -1396,6 +1725,11 @@ namespace test {
                     ImGui::Checkbox("Reset", &_state.dlss.reset);
                 }
                 ImGui::Separator();
+
+                if (ImGui::CollapsingHeader("VSM Settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
+                    ImGui::SliderFloat("Sun Elevation", &_state.vsm.elevation, 0.0f, 360.0f);
+                    ImGui::SliderFloat("Sun Azimuth", &_state.vsm.azimuth, 0.0f, 360.0f);
+                }
             }
             ImGui::End();
 

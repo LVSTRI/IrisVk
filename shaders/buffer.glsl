@@ -1,5 +1,5 @@
-#ifndef IRIS_BINDINGS_HEADER
-#define IRIS_BINDINGS_HEADER
+#ifndef IRIS_BUFFER_HEADER
+#define IRIS_BUFFER_HEADER
 
 #extension GL_EXT_shader_explicit_arithmetic_types : enable
 
@@ -58,5 +58,19 @@ layout (scalar, buffer_reference) restrict buffer b_vsm_page_request_block {
 layout (scalar, buffer_reference) restrict buffer b_vsm_globals_block {
     vsm_global_data_t data;
 };
+
+layout (scalar, buffer_reference) restrict buffer b_vsm_physical_page_table_block {
+    uint[] data;
+};
+
+layout (scalar, buffer_reference) restrict buffer b_vsm_virtual_page_table_block {
+    uint[] data;
+};
+
+layout (scalar, buffer_reference) restrict buffer b_vsm_allocate_request_block {
+    uint count;
+    uint[] data;
+};
+
 
 #endif

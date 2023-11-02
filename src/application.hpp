@@ -60,6 +60,7 @@ namespace test {
         glm::mat4 prev_projection = {};
         glm::mat4 inv_projection = {};
         glm::mat4 inv_prev_projection = {};
+        glm::mat4 jittered_projection = {};
         glm::mat4 view = {};
         glm::mat4 prev_view = {};
         glm::mat4 inv_view = {};
@@ -90,6 +91,7 @@ namespace test {
     struct vsm_global_data_t {
         float32 first_width = 4.0f;
         float32 lod_bias = -2.0f;
+        float32 resolution_lod_bias = 0.0f;
         uint32 clipmap_count = IRIS_VSM_CLIPMAP_COUNT;
     };
 
@@ -136,6 +138,8 @@ namespace test {
         auto _visbuffer_dlss_pass() noexcept -> void;
         auto _visbuffer_tonemap_pass() noexcept -> void;
         auto _vsm_mark_visible_pages_pass() noexcept -> void;
+        auto _vsm_request_pages_pass() noexcept -> void;
+        auto _vsm_allocate_pages_pass() noexcept -> void;
         auto _gui_main_pass() noexcept -> void;
         auto _swapchain_copy_pass(uint32 image_index) noexcept -> void;
 
@@ -171,10 +175,16 @@ namespace test {
         struct {
             bool is_initialized = false;
             ir::arc_ptr<ir::pipeline_t> mark_visible_pages;
+            ir::arc_ptr<ir::pipeline_t> make_allocation_requests;
+            ir::arc_ptr<ir::pipeline_t> allocate_pages;
+
+            ir::arc_ptr<ir::buffer_t<uint8>> visible_pages_buffer;
+            ir::arc_ptr<ir::buffer_t<uint32>> allocation_request_buffer;
+            ir::arc_ptr<ir::buffer_t<uint32>> phys_page_table_buffer;
+            ir::arc_ptr<ir::buffer_t<uint32>> virt_page_table_buffer;
 
             hzb_t hzb;
 
-            readback_t<uint8> visible_pages_buffer;
             std::vector<ir::arc_ptr<ir::buffer_t<vsm_global_data_t>>> globals_buffer;
         } _vsm;
 
@@ -206,6 +216,8 @@ namespace test {
         struct scene_t {
             std::vector<ir::arc_ptr<ir::texture_t>> textures;
             std::vector<material_t> materials;
+
+            ir::arc_ptr<ir::sampler_t> main_sampler;
         } _scene;
 
         struct state_t {
@@ -214,7 +226,8 @@ namespace test {
 
             struct {
                 ir::dlss_quality_preset_t quality = ir::dlss_quality_preset_t::e_native;
-                float32 scaling_ratio = ir::dlss_preset_native_scaling_ratio;
+                float32 lod_bias = 0.0f;
+                uint32 jitter_count = 8;
                 bool reset = false;
 
                 bool is_initialized = false;
@@ -222,11 +235,14 @@ namespace test {
             } dlss;
 
             struct {
+                float32 elevation = 260.0f;
+                float32 azimuth = 30.0f;
+            } vsm;
+
+            struct {
                 std::deque<float32> frame_times = {};
             } performance;
         } _state;
-
-        std::array<glm::vec2, 16> _jitter_offsets;
 
         camera_t _camera;
 

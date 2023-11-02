@@ -11,7 +11,7 @@ layout (set = 0, binding = 0) uniform texture2D u_depth;
 layout (scalar, push_constant) restrict uniform u_push_constant_block {
     restrict b_view_block u_view_ptr;
     restrict b_vsm_globals_block u_vsm_globals_ptr;
-    restrict writeonly b_vsm_page_request_block u_vsm_page_request_ptr;
+    restrict writeonly b_vsm_page_request_block u_page_request_ptr;
 };
 
 void main() {
@@ -37,5 +37,5 @@ void main() {
     );
     const uvec2 virtual_page_position = clamp(virtual_page.position.xy, uvec2(0), uvec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE - 1));
     const uint virtual_page_index = virtual_page_position.x + virtual_page_position.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
-    u_vsm_page_request_ptr.data[virtual_page_index + virtual_page.clipmap_level * IRIS_VSM_VIRTUAL_PAGE_COUNT] = uint8_t(1);
+    u_page_request_ptr.data[virtual_page_index + virtual_page.clipmap_level * IRIS_VSM_VIRTUAL_PAGE_COUNT] = uint8_t(1);
 }

@@ -18,6 +18,7 @@ struct view_t {
     mat4 prev_projection;
     mat4 inv_projection;
     mat4 inv_prev_projection;
+    mat4 jittered_projection;
     mat4 view;
     mat4 prev_view;
     mat4 inv_view;
@@ -81,6 +82,7 @@ struct directional_light_t {
 struct vsm_global_data_t {
     float first_width;
     float lod_bias;
+    float resolution_lod_bias;
     uint clipmap_count;
 };
 

@@ -70,7 +70,8 @@ precise virtual_page_info_t virtual_page_info_from_depth(
     const vec3 world_left = uv_to_world(inv_proj_view, uv_left, depth);
     const vec3 world_right = uv_to_world(inv_proj_view, uv_right, depth);
     const float projection_length = distance(world_left, world_right);
-    const uint unclamped_clipmap_level = uint(max(ceil(log2(projection_length / first_clipmap_texel_width) + vsm_data.lod_bias), 0.0));
+    const float lod_bias = vsm_data.lod_bias + vsm_data.resolution_lod_bias;
+    const uint unclamped_clipmap_level = uint(max(ceil(log2(projection_length / first_clipmap_texel_width) + lod_bias), 0.0));
     const uint clipmap_level = clamp(unclamped_clipmap_level, 0, vsm_data.clipmap_count - 1);
     const mat4 clipmap_proj_view = view_ptr.data[IRIS_SHADOW_VIEW_START_INDEX + clipmap_level].proj_view;
     const mat4 clipmap_stable_proj_view = view_ptr.data[IRIS_SHADOW_VIEW_START_INDEX + clipmap_level].stable_proj_view;

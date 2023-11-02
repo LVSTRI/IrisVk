@@ -20,7 +20,8 @@ layout (set = 0, binding = 0) uniform texture2D u_depth;
 layout (r32ui, set = 0, binding = 1) restrict readonly uniform uimage2D u_visbuffer;
 layout (rgba32f, set = 0, binding = 2) restrict writeonly uniform image2D u_output;
 
-layout (set = 0, binding = 3) uniform sampler2D[] u_textures;
+layout (set = 0, binding = 3) uniform sampler u_sampler;
+layout (set = 0, binding = 4) uniform texture2D[] u_textures;
 
 layout (scalar, push_constant) restrict uniform u_push_constants_block {
     restrict b_view_block u_view_ptr;
@@ -100,7 +101,7 @@ vec3 load_base_color(in material_t material, in gradient_vec2_t uv_grad) {
     vec3 color = material.base_color_factor;
     if (material.base_color_texture != uint(-1)) {
         color *= textureGrad(
-            u_textures[material.base_color_texture],
+            sampler2D(u_textures[material.base_color_texture], u_sampler),
             uv_grad.lambda,
             uv_grad.ddx,
             uv_grad.ddy
@@ -112,7 +113,7 @@ vec3 load_base_color(in material_t material, in gradient_vec2_t uv_grad) {
 vec3 load_normal(in material_t material, in gradient_vec2_t uv_grad, in mat3 tbn, in vec3 normal) {
     if (material.normal_texture != uint(-1)) {
         const vec2 sampled_normal = textureGrad(
-            u_textures[material.normal_texture],
+            sampler2D(u_textures[material.normal_texture], u_sampler),
             uv_grad.lambda,
             uv_grad.ddx,
             uv_grad.ddy
@@ -149,9 +150,11 @@ void main() {
     const uint material_id = u_meshlet_instance_ptr.data[meshlet_instance_id].material_id;
     const meshlet_t meshlet = u_meshlet_ptr.data[meshlet_id];
     const view_t main_view = u_view_ptr.data[IRIS_MAIN_VIEW_INDEX];
+    const mat4 jittered_proj_view = main_view.jittered_projection * main_view.view;
+    const mat4 inv_jittered_proj_view = inverse(jittered_proj_view);
     const mat4 transform = u_transform_ptr.data[instance_id].model;
     const mat3 normal_transform = mat3(transpose(inverse(transform)));
-    const vec2 view_uv = vec2(gl_GlobalInvocationID.xy) / vec2(size);
+    const vec2 view_uv = (vec2(gl_GlobalInvocationID.xy) + 0.5) / vec2(size);
 
     const float v_depth = texelFetch(u_depth, ivec2(gl_GlobalInvocationID.xy), 0).x;
     const uint[] primitive_indices = load_primitive_indices(meshlet.primitive_offset, primitive_id);
@@ -166,15 +169,14 @@ void main() {
         vec3(transform * vec4(vertex_positions[2], 1.0))
     );
     const vec4[] clip_position = vec4[](
-        main_view.proj_view * vec4(world_position[0], 1.0),
-        main_view.proj_view * vec4(world_position[1], 1.0),
-        main_view.proj_view * vec4(world_position[2], 1.0)
+        jittered_proj_view * vec4(world_position[0], 1.0),
+        jittered_proj_view * vec4(world_position[1], 1.0),
+        jittered_proj_view * vec4(world_position[2], 1.0)
     );
-    const vec3 position = uv_to_world(main_view.inv_proj_view, view_uv, v_depth);
+    const vec3 position = uv_to_world(inv_jittered_proj_view, view_uv, v_depth);
     const vec3 view_direction = normalize(main_view.eye_position.xyz - position);
 
     const partial_derivatives_t derivatives = compute_derivatives(clip_position, view_uv * 2.0 - 1.0, vec2(size));
-    const gradient_vec3_t world_grad = make_gradient_vec3(derivatives, world_position);
     const gradient_vec2_t uv_grad = make_gradient_vec2(derivatives, vertex_uvs);
 
     const vec3 base_normal = normalize(interpolate(derivatives, vec3[](
@@ -183,17 +185,17 @@ void main() {
         vertex_normals[2]
     )));
 
-    const vec4 base_tangent = interpolate(derivatives, vec4[](
+    const vec4 base_tangent = normalize(interpolate(derivatives, vec4[](
         vertex_tangents[0],
         vertex_tangents[1],
         vertex_tangents[2]
-    ));
+    )));
 
     const virtual_page_info_t virtual_page = virtual_page_info_from_depth(
         u_view_ptr,
         u_vsm_globals_ptr,
         vec2(size),
-        main_view.inv_proj_view,
+        inv_jittered_proj_view,
         uvec2(gl_GlobalInvocationID.xy),
         v_depth
     );
@@ -216,18 +218,16 @@ void main() {
         const float light_diffuse = saturate(dot(normal, light_dir));
         const float light_specular = pow(saturate(dot(reflect(-light_dir, normal), view_direction)), 64.0);
         color += light_intensity * (light_ambient + light_diffuse + light_specular) * base_color;
-        //color = base_color;
-        //color = vec3(normal * 0.5 + 0.5);
     }
-    /*color *= _debug_clipmap_colors[clipmap_level];
+    color *= _debug_clipmap_colors[clipmap_level];
     const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
     if (
-        virtual_page_uv.x < 0.01 ||
-        virtual_page_uv.y < 0.01 ||
-        virtual_page_uv.x > 0.99 ||
-        virtual_page_uv.y > 0.99
+        virtual_page_uv.x < 0.02 ||
+        virtual_page_uv.y < 0.02 ||
+        virtual_page_uv.x > 0.98 ||
+        virtual_page_uv.y > 0.98
     ) {
         color = vec3(1.0, 0.0125, 0.0125);
-    }*/
+    }
     imageStore(u_output, ivec2(gl_GlobalInvocationID.xy), vec4(color, 1.0));
 }
