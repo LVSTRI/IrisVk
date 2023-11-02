@@ -14,6 +14,7 @@
 #include <optional>
 #include <vector>
 #include <memory>
+#include <string>
 #include <span>
 
 namespace ir {
@@ -43,11 +44,13 @@ namespace ir {
     };
 
     struct compute_pipeline_create_info_t {
+        std::string name = {};
         fs::path compute;
         // TODO
     };
 
     struct graphics_pipeline_create_info_t {
+        std::string name = {};
         fs::path vertex;
         fs::path fragment;
         sample_count_t sample_count = sample_count_t::e_1;
@@ -64,6 +67,7 @@ namespace ir {
     };
 
     struct mesh_shading_pipeline_create_info_t {
+        std::string name = {};
         fs::path task;
         fs::path mesh;
         fs::path fragment;

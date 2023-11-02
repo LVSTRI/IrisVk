@@ -12,11 +12,13 @@
 #include <spdlog/spdlog.h>
 
 #include <vector>
+#include <string>
 #include <memory>
 #include <span>
 
 namespace ir {
     struct swapchain_create_info_t {
+        std::string name = {};
         image_usage_t usage =
             image_usage_t::e_color_attachment |
             image_usage_t::e_transfer_dst;

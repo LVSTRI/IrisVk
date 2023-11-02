@@ -26,8 +26,8 @@ namespace ir {
     };
 
     struct texture_create_info_t {
+        std::string name = {};
         texture_format_t format = {};
-        sampler_create_info_t sampler = {};
     };
 
     class texture_t : public enable_intrusive_refcount_t<texture_t> {
@@ -44,15 +44,13 @@ namespace ir {
         ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto image() const noexcept -> const image_t&;
-        IR_NODISCARD auto sampler() const noexcept -> const sampler_t&;
-        IR_NODISCARD auto sampler_info() const noexcept -> const sampler_create_info_t&;
 
         IR_NODISCARD auto info() const noexcept -> image_info_t;
+        IR_NODISCARD auto info(const ir::sampler_t& sampler) const noexcept -> image_info_t;
         IR_NODISCARD auto device() const noexcept -> const device_t&;
 
     private:
         arc_ptr<const image_t> _image = {};
-        arc_ptr<const sampler_t> _sampler = {};
 
         texture_create_info_t _info = {};
         arc_ptr<device_t> _device;

@@ -39,9 +39,15 @@ namespace ir {
         } else {
             IR_LOG_INFO(render_pass.device().logger(), "imageless framebuffer {} created", fmt::ptr(framebuffer->_handle));
         }
-
         framebuffer->_info = info;
         framebuffer->_render_pass = render_pass.as_intrusive_ptr();
+        if (!info.name.empty()) {
+            render_pass.device().set_debug_name({
+                .type = VK_OBJECT_TYPE_FRAMEBUFFER,
+                .handle = reinterpret_cast<uint64>(framebuffer->_handle),
+                .name = info.name.c_str(),
+            });
+        }
         return framebuffer;
     }
 

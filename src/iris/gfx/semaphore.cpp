@@ -31,14 +31,25 @@ namespace ir {
         semaphore->_counter = info.counter;
         semaphore->_is_timeline = info.timeline;
         semaphore->_device = device.as_intrusive_ptr();
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_SEMAPHORE,
+                .handle = reinterpret_cast<uint64>(semaphore->_handle),
+                .name = info.name.c_str()
+            });
+        }
         return semaphore;
     }
 
     auto semaphore_t::make(const device_t& device, uint32 count, const semaphore_create_info_t& info) noexcept -> std::vector<arc_ptr<self>> {
         IR_PROFILE_SCOPED();
         auto semaphores = std::vector<arc_ptr<self>>(count);
-        for (auto& semaphore : semaphores) {
-           semaphore = make(device, info);
+        for (auto i = 0_u32; i < count; ++i) {
+           semaphores[i] = make(device, {
+                .name = fmt::format("{}_{}", info.name, i),
+                .counter = info.counter,
+                .timeline = info.timeline,
+           });
         }
         return semaphores;
     }

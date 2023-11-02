@@ -45,6 +45,7 @@ namespace ir {
         });
         staging->insert(0, ktx->dataSize, ktx->pData);
         auto image = image_t::make(device, {
+            .name = info.name,
             .width = ktx->baseWidth,
             .height = ktx->baseHeight,
             .levels = ktx->numLevels,
@@ -52,7 +53,6 @@ namespace ir {
             .format = static_cast<resource_format_t>(ktx->vkFormat),
             .view = default_image_view_info,
         });
-        auto sampler = sampler_t::make(device, info.sampler);
         IR_LOG_INFO(device.logger(), "texture metadata: {}x{}x{}, size: {}, format: {}",
             ktx->baseWidth,
             ktx->baseHeight,
@@ -89,16 +89,10 @@ namespace ir {
             });
         });
         texture->_image = std::move(image);
-        texture->_sampler = std::move(sampler);
         texture->_info = info;
         texture->_device = device.as_intrusive_ptr();
         ktxTexture_Destroy(ktxTexture(ktx));
         return texture;
-    }
-
-    auto texture_t::sampler_info() const noexcept -> const sampler_create_info_t& {
-        IR_PROFILE_SCOPED();
-        return _info.sampler;
     }
 
     auto texture_t::image() const noexcept -> const image_t& {
@@ -106,15 +100,19 @@ namespace ir {
         return *_image;
     }
 
-    auto texture_t::sampler() const noexcept -> const sampler_t& {
-        IR_PROFILE_SCOPED();
-        return *_sampler;
-    }
-
     auto texture_t::info() const noexcept -> image_info_t {
         IR_PROFILE_SCOPED();
         return {
-            .sampler = _sampler->handle(),
+            .sampler = {},
+            .view = _image->view().handle(),
+            .layout = image_layout_t::e_shader_read_only_optimal
+        };
+    }
+
+    auto texture_t::info(const ir::sampler_t& sampler) const noexcept -> image_info_t {
+        IR_PROFILE_SCOPED();
+        return {
+            .sampler = sampler.handle(),
             .view = _image->view().handle(),
             .layout = image_layout_t::e_shader_read_only_optimal
         };

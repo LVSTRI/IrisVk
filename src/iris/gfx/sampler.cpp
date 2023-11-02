@@ -44,8 +44,8 @@ namespace ir {
         sampler_info.maxAnisotropy = info.anisotropy;
         sampler_info.compareEnable = info.compare != compare_op_t::e_none;
         sampler_info.compareOp = as_enum_counterpart(info.compare);
-        sampler_info.minLod = 0.0f;
-        sampler_info.maxLod = 16.0f;
+        sampler_info.minLod = -VK_LOD_CLAMP_NONE;
+        sampler_info.maxLod = VK_LOD_CLAMP_NONE;
         sampler_info.borderColor = as_enum_counterpart(info.border_color);
         sampler_info.unnormalizedCoordinates = false;
         IR_VULKAN_CHECK(device.logger(), vkCreateSampler(device.handle(), &sampler_info, nullptr, &sampler->_handle));
@@ -57,6 +57,13 @@ namespace ir {
             as_string(info.mip_mode),
             as_string(info.address_mode.u));
         sampler->_info = info;
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_SAMPLER,
+                .handle = reinterpret_cast<uint64>(sampler->_handle),
+                .name = info.name.c_str()
+            });
+        }
 
         IR_LOG_WARN(device.logger(), "sampler_t ({}): cache miss", fmt::ptr(sampler->handle()));
         return cache.insert(info, std::move(sampler));

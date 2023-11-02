@@ -6,6 +6,7 @@
 #include <iris/core/enums.hpp>
 #include <iris/core/types.hpp>
 
+#include <iris/gfx/command_buffer.hpp>
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/queue.hpp>
 #include <iris/gfx/fence.hpp>
@@ -17,6 +18,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
+#include <string>
 #include <vector>
 #include <array>
 #include <span>
@@ -38,6 +40,7 @@ namespace ir {
     constexpr static auto infer_memory_properties = memory_properties_t();
 
     struct buffer_create_info_t {
+        std::string name = {};
         buffer_usage_t usage = {};
         memory_properties_t memory = infer_memory_properties;
         buffer_flag_t flags = {};
@@ -177,8 +180,14 @@ namespace ir {
     auto buffer_t<T>::make(const device_t& device, uint32 count, const buffer_create_info_t& info) noexcept -> std::vector<arc_ptr<self>> {
         IR_PROFILE_SCOPED();
         auto buffers = std::vector<arc_ptr<self>>(count);
-        for (auto& buffer : buffers) {
-            buffer = make(device, info);
+        for (auto i = 0_u32; i < count; ++i) {
+            buffers[i] = make(device, {
+                .name = fmt::format("{}_{}", info.name, i),
+                .usage = info.usage,
+                .memory = info.memory,
+                .flags = info.flags,
+                .capacity = info.capacity,
+            });
         }
         return buffers;
     }
@@ -532,5 +541,13 @@ namespace ir {
         }
         buffer->_info = info;
         buffer->_device = device.as_intrusive_ptr();
+
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_BUFFER,
+                .handle = reinterpret_cast<uint64>(buffer->_handle),
+                .name = info.name.c_str(),
+            });
+        }
     }
 }

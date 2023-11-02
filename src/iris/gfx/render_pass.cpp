@@ -131,6 +131,14 @@ namespace ir {
 
         render_pass->_info = info;
         render_pass->_device = device.as_intrusive_ptr();
+
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_RENDER_PASS,
+                .handle = reinterpret_cast<uint64>(render_pass->_handle),
+                .name = info.name.c_str()
+            });
+        }
         return render_pass;
     }
 

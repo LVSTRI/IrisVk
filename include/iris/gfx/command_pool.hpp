@@ -12,12 +12,14 @@
 #include <spdlog/spdlog.h>
 
 #include <optional>
+#include <string>
 #include <vector>
 #include <memory>
 #include <span>
 
 namespace ir {
     struct command_pool_create_info_t {
+        std::string name = {};
         queue_type_t queue = {};
         command_pool_flag_t flags = {};
     };

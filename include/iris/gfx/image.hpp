@@ -16,6 +16,7 @@
 
 #include <optional>
 #include <vector>
+#include <string>
 #include <memory>
 
 namespace ir {
@@ -27,6 +28,7 @@ namespace ir {
     };
 
     struct image_view_create_info_t {
+        std::string name = {};
         resource_format_t format = resource_format_t::e_undefined;
         struct {
             component_swizzle_t r = component_swizzle_t::e_identity;
@@ -45,6 +47,7 @@ namespace ir {
     };
 
     struct image_create_info_t {
+        std::string name = {};
         uint32 width = 0;
         uint32 height = 0;
         uint32 levels = 1;

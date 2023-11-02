@@ -84,8 +84,8 @@ set(SHADERC_SKIP_EXAMPLES ON CACHE BOOL "" FORCE)
 add_subdirectory(deps/shaderc)
 # doesn't compile under clang on Windows unless I do this
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(shaderc PRIVATE -Wno-everything -std=c++20)
-    target_compile_options(shaderc_util PRIVATE -Wno-everything -std=c++20)
+    target_compile_options(shaderc PUBLIC -Wno-everything -std=c++20)
+    target_compile_options(shaderc_util PUBLIC -Wno-everything -std=c++20)
 endif()
 
 set(KTX_FEATURE_TESTS OFF CACHE BOOL "" FORCE)
@@ -203,7 +203,7 @@ target_compile_definitions(IrisVk PUBLIC
 if (WIN32)
     target_link_directories(IrisVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/deps/DLSS/lib/Windows_x86_64/x86_64)
 else()
-    target_link_directories(IrisVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/deps/DLSS/lib/Linux_x86_64/x86_64)
+    target_link_directories(IrisVk PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/deps/DLSS/lib/Linux_x86_64)
 endif()
 
 target_link_libraries(IrisVk PUBLIC
@@ -218,10 +218,17 @@ target_link_libraries(IrisVk PUBLIC
     TracyClient
     unordered_dense
     spirv-cross-glsl
-    $<$<AND:$<CONFIG:Debug>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d_dbg>
-    $<$<AND:$<CONFIG:Release>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d>
-    $<$<AND:$<CONFIG:RelWithDebInfo>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d>
 )
+
+if (WIN32)
+    target_link_libraries(IrisVk PUBLIC
+        $<$<AND:$<CONFIG:Debug>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d_dbg>
+        $<$<AND:$<CONFIG:Release>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d>
+        $<$<AND:$<CONFIG:RelWithDebInfo>,$<BOOL:${IRIS_ENABLE_NVIDIA_DLSS}>>:nvsdk_ngx_d>
+    )
+else()
+    target_link_libraries(IrisVk PUBLIC "libnvsdk_ngx.a")
+endif()
 
 target_include_directories(IrisVk PUBLIC
     include

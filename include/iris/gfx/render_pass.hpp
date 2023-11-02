@@ -13,6 +13,7 @@
 
 #include <optional>
 #include <vector>
+#include <string>
 #include <memory>
 #include <span>
 
@@ -49,6 +50,7 @@ namespace ir {
     };
 
     struct render_pass_create_info_t {
+        std::string name = {};
         std::vector<attachment_info_t> attachments;
         std::vector<subpass_info_t> subpasses;
         std::vector<subpass_dependency_info_t> dependencies;

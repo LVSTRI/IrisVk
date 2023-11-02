@@ -13,11 +13,13 @@
 
 #include <optional>
 #include <vector>
+#include <string>
 #include <memory>
 #include <span>
 
 namespace ir {
     struct framebuffer_create_info_t {
+        std::string name = {};
         std::vector<arc_ptr<const image_t>> attachments = {};
         uint32 width = 0;
         uint32 height = 0;

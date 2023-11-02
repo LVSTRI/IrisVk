@@ -157,6 +157,13 @@ namespace ir {
         swapchain->_images = std::move(images);
         swapchain->_info = info;
         swapchain->_device = device.as_intrusive_ptr();
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_SWAPCHAIN_KHR,
+                .handle = reinterpret_cast<uint64>(swapchain->_handle),
+                .name = info.name.c_str()
+            });
+        }
         return swapchain;
     }
 

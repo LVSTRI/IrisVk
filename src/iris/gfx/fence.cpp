@@ -10,7 +10,11 @@ namespace ir {
         IR_LOG_INFO(device().logger(), "fence {} destroyed", fmt::ptr(_handle));
     }
 
-    auto fence_t::make(const device_t& device, bool signaled) noexcept -> arc_ptr<self> {
+    auto fence_t::make(
+        const device_t& device,
+        bool signaled,
+        const std::string& name
+    ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         auto fence = arc_ptr<self>(new self());
         auto fence_info = VkFenceCreateInfo();
@@ -19,16 +23,28 @@ namespace ir {
         fence_info.flags = signaled ? VK_FENCE_CREATE_SIGNALED_BIT : VkFenceCreateFlagBits();
         IR_VULKAN_CHECK(device.logger(), vkCreateFence(device.handle(), &fence_info, nullptr, &fence->_handle));
         IR_LOG_INFO(device.logger(), "fence {} created", fmt::ptr(fence->_handle));
-
         fence->_device = device.as_intrusive_ptr();
+
+        if (!name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_FENCE,
+                .handle = reinterpret_cast<uint64>(fence->_handle),
+                .name = name.c_str(),
+            });
+        }
         return fence;
     }
 
-    auto fence_t::make(const device_t& device, uint32 count, bool signaled) noexcept -> std::vector<arc_ptr<self>> {
+    auto fence_t::make(
+        const device_t& device,
+        uint32 count,
+        bool signaled,
+        const std::string& name
+    ) noexcept -> std::vector<arc_ptr<self>> {
         IR_PROFILE_SCOPED();
         auto fences = std::vector<arc_ptr<self>>(count);
-        for (auto& fence : fences) {
-            fence = make(device, signaled);
+        for (auto i = 0_u32; i < count; ++i) {
+            fences[i] = make(device, signaled, std::format("{}_{}", name, i));
         }
         return fences;
     }

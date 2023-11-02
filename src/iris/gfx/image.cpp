@@ -74,6 +74,14 @@ namespace ir {
         image_view->_aspect = aspect;
         image_view->_info = info;
         image_view->_device = image.device().as_intrusive_ptr();
+
+        if (!info.name.empty()) {
+            image.device().set_debug_name({
+                .type = VK_OBJECT_TYPE_IMAGE_VIEW,
+                .handle = reinterpret_cast<uint64>(image_view->_handle),
+                .name = info.name.c_str(),
+            });
+        }
         return image_view;
     }
 
@@ -208,10 +216,18 @@ namespace ir {
             image->_requirements = memory_requirements;
             image->_sparse_info = image_sparse_req;
         }
-
         image->_info = info;
         image->_device = device.as_intrusive_ptr();
         if (info.view) {
+            auto view_info = *info.view;
+            if (!info.name.empty()) {
+                device.set_debug_name({
+                    .type = VK_OBJECT_TYPE_IMAGE,
+                    .handle = reinterpret_cast<uint64>(image->_handle),
+                    .name = info.name.c_str()
+                });
+                view_info.name = std::format("{}_view", info.name);
+            }
             image->_view = image_view_t::make(*image, *info.view);
         }
         return image;
@@ -248,9 +264,16 @@ namespace ir {
             image->_info = info;
             image->_device = device.as_intrusive_ptr();
             if (info.view) {
-                image->_view = image_view_t::make(
-                    *image,
-                    *info.view);
+                auto view_info = *info.view;
+                if (!info.name.empty()) {
+                    device.set_debug_name({
+                        .type = VK_OBJECT_TYPE_IMAGE,
+                        .handle = reinterpret_cast<uint64>(image->_handle),
+                        .name = std::format("{}_{}", info.name, i).c_str()
+                    });
+                    view_info.name = std::format("{}_{}_view", info.name, i);
+                }
+                image->_view = image_view_t::make(*image, view_info);
             }
             images.emplace_back(std::move(image));
         }
@@ -264,6 +287,7 @@ namespace ir {
     ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         return image_t::make(device, {
+            .name = info.name,
             .width = info.width,
             .height = info.height,
             .levels = info.levels,

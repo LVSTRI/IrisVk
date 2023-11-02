@@ -34,6 +34,13 @@ namespace ir {
             command_pool_info.queueFamilyIndex);
 
         command_pool->_info = info;
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_COMMAND_POOL,
+                .handle = reinterpret_cast<uint64>(command_pool->_handle),
+                .name = info.name.c_str()
+            });
+        }
         return command_pool;
     }
 
@@ -44,8 +51,12 @@ namespace ir {
     ) noexcept -> std::vector<arc_ptr<self>> {
         IR_PROFILE_SCOPED();
         auto command_pools = std::vector<arc_ptr<self>>(count);
-        for (auto& command_pool : command_pools) {
-            command_pool = make(device, info);
+        for (auto i = 0_u32; i < count; i++) {
+            command_pools[i] = make(device, {
+                .name = fmt::format("{}_{}", info.name, i),
+                .queue = info.queue,
+                .flags = info.flags
+            });
         }
         return command_pools;
     }

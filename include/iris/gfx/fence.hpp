@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 
 #include <optional>
+#include <string>
 #include <vector>
 #include <memory>
 #include <span>
@@ -24,8 +25,17 @@ namespace ir {
         fence_t() noexcept;
         ~fence_t() noexcept;
 
-        IR_NODISCARD static auto make(const device_t& device, bool signaled = true) noexcept -> arc_ptr<self>;
-        IR_NODISCARD static auto make(const device_t& device, uint32 count, bool signaled = true) noexcept -> std::vector<arc_ptr<self>>;
+        IR_NODISCARD static auto make(
+            const device_t& device,
+            bool signaled = true,
+            const std::string& name = {}
+        ) noexcept -> arc_ptr<self>;
+        IR_NODISCARD static auto make(
+            const device_t& device,
+            uint32 count,
+            bool signaled = true,
+            const std::string& name = {}
+        ) noexcept -> std::vector<arc_ptr<self>>;
 
         IR_NODISCARD auto handle() const noexcept -> VkFence;
         IR_NODISCARD auto device() const noexcept -> const device_t&;

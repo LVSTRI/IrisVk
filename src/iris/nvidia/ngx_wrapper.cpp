@@ -116,7 +116,6 @@ namespace ir {
     auto ngx_wrapper_t::initialize_dlss(const dlss_main_view_info_t& info) noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto dlss_feature_flags =
-            NVSDK_NGX_DLSS_Feature_Flags_MVLowRes |
             (info.is_hdr ? NVSDK_NGX_DLSS_Feature_Flags_IsHDR : 0) |
             (info.is_reverse_depth ? NVSDK_NGX_DLSS_Feature_Flags_DepthInverted : 0) |
             (info.enable_auto_exposure ? NVSDK_NGX_DLSS_Feature_Flags_AutoExposure : 0);
@@ -127,7 +126,7 @@ namespace ir {
         dlss_create_parameters.Feature.InTargetWidth = info.output_resolution.x;
         dlss_create_parameters.Feature.InTargetHeight = info.output_resolution.y;
         dlss_create_parameters.Feature.InPerfQualityValue = static_cast<NVSDK_NGX_PerfQuality_Value>(info.quality);
-        dlss_create_parameters.InFeatureCreateFlags = dlss_feature_flags;
+        dlss_create_parameters.InFeatureCreateFlags = NVSDK_NGX_DLSS_Feature_Flags_MVLowRes | dlss_feature_flags;
 
         const auto preset = NVSDK_NGX_DLSS_Hint_Render_Preset_Default;
         NVSDK_NGX_Parameter_SetUI(_parameters, NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_DLAA, preset);
@@ -202,5 +201,16 @@ namespace ir {
         ngx_feature_discovery_info.ApplicationDataPath = IRIS_NVIDIA_PROJECT_LOGS;
         ngx_feature_discovery_info.FeatureInfo = &common_info;
         return ngx_feature_discovery_info;
+    }
+
+    auto dlss_scaling_ratio_from_preset(dlss_quality_preset_t preset) noexcept -> float32 {
+        IR_PROFILE_SCOPED();
+        switch (preset) {
+            case dlss_quality_preset_t::e_performance: return dlss_preset_performance_scaling_ratio;
+            case dlss_quality_preset_t::e_balanced: return dlss_preset_balanced_scaling_ratio;
+            case dlss_quality_preset_t::e_quality: return dlss_preset_quality_scaling_ratio;
+            case dlss_quality_preset_t::e_native: return dlss_preset_native_scaling_ratio;
+        }
+        IR_UNREACHABLE();
     }
 }

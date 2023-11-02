@@ -39,6 +39,13 @@ namespace ir {
         queue->_handle = device.fetch_queue(info.family);
         queue->_info = info;
         queue->_logger = std::move(logger);
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_QUEUE,
+                .handle = reinterpret_cast<uint64>(queue->_handle),
+                .name = info.name.c_str()
+            });
+        }
         return queue;
     }
 
@@ -67,6 +74,7 @@ namespace ir {
         if (_transient_pools.empty()) {
             // index = 0 => main thread
             _transient_pools = command_pool_t::make(_device, std::thread::hardware_concurrency() + 1, {
+                .name = "transient_command_pool",
                 .queue = type(),
                 .flags = command_pool_flag_t::e_transient,
             });

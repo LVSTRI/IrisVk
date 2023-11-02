@@ -15,14 +15,11 @@ namespace ir {
         IR_LOG_INFO(device().logger(), "descriptor layout {} freed", fmt::ptr(_handle));
     }
 
-    auto descriptor_layout_t::make(
-        device_t& device,
-        std::span<const descriptor_binding_t> bindings
-    ) noexcept -> arc_ptr<self> {
+    auto descriptor_layout_t::make(device_t& device, const descriptor_layout_create_info_t& info) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         auto layout = arc_ptr<self>(new self(std::ref(device)));
-        auto bindings_info = std::vector<VkDescriptorSetLayoutBinding>(bindings.size());
-        for (const auto& binding : bindings) {
+        auto bindings_info = std::vector<VkDescriptorSetLayoutBinding>(info.bindings.size());
+        for (const auto& binding : info.bindings) {
             bindings_info[binding.binding] = VkDescriptorSetLayoutBinding {
                 .binding = binding.binding,
                 .descriptorType = as_enum_counterpart(binding.type),
@@ -33,9 +30,9 @@ namespace ir {
             };
         }
 
-        auto binding_flags = std::vector<VkDescriptorBindingFlags>(bindings.size());
-        binding_flags.reserve(bindings.size());
-        for (const auto& binding : bindings) {
+        auto binding_flags = std::vector<VkDescriptorBindingFlags>(info.bindings.size());
+        binding_flags.reserve(info.bindings.size());
+        for (const auto& binding : info.bindings) {
             auto flags = VkDescriptorBindingFlagBits();
             if (binding.dynamic) {
                 flags =
@@ -58,14 +55,23 @@ namespace ir {
         descriptor_layout_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
         descriptor_layout_info.bindingCount = bindings_info.size();
         descriptor_layout_info.pBindings = bindings_info.data();
-        IR_VULKAN_CHECK(device.logger(), vkCreateDescriptorSetLayout(
-            device.handle(),
-            &descriptor_layout_info,
-            nullptr,
-            &layout->_handle));
+        IR_VULKAN_CHECK(
+            device.logger(),
+            vkCreateDescriptorSetLayout(
+                device.handle(),
+                &descriptor_layout_info,
+                nullptr,
+                &layout->_handle));
         IR_LOG_INFO(device.logger(), "descriptor layout initialized {}", fmt::ptr(layout->_handle));
+        layout->_bindings = std::vector(info.bindings.begin(), info.bindings.end());
 
-        layout->_bindings = std::vector(bindings.begin(), bindings.end());
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                .handle = reinterpret_cast<uint64>(layout->_handle),
+                .name = info.name.c_str()
+            });
+        }
         return layout;
     }
 

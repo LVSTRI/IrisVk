@@ -13,20 +13,30 @@
 
 #include <array>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace ir {
     class descriptor_pool_t : public enable_intrusive_refcount_t<descriptor_pool_t> {
     public:
         using self = descriptor_pool_t;
+        using descriptor_size_table = akl::fast_hash_map<descriptor_type_t, uint32>;
 
         constexpr static auto max_ttl = 16_u32;
 
         descriptor_pool_t(device_t& device) noexcept;
         ~descriptor_pool_t() noexcept;
 
-        IR_NODISCARD static auto make(device_t& device, uint32 initial_capacity) noexcept -> arc_ptr<self>;
-        IR_NODISCARD static auto make(device_t& device, const akl::fast_hash_map<descriptor_type_t, uint32>& size) noexcept -> arc_ptr<self>;
+        IR_NODISCARD static auto make(
+            device_t& device,
+            uint32 initial_capacity,
+            const std::string& name = {}
+        ) noexcept -> arc_ptr<self>;
+        IR_NODISCARD static auto make(
+            device_t& device,
+            const descriptor_size_table& size,
+            const std::string& name = {}
+        ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkDescriptorPool;
         IR_NODISCARD auto device() const noexcept -> device_t&;

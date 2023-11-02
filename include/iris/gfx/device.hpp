@@ -21,6 +21,7 @@
 
 #include <vector>
 #include <memory>
+#include <string>
 
 namespace ir {
     struct device_features_t {
@@ -35,7 +36,14 @@ namespace ir {
     };
 
     struct device_create_info_t {
+        std::string name = {};
         device_features_t features = {};
+    };
+
+    struct debug_name_info_t {
+        VkObjectType type = {};
+        uint64 handle = 0;
+        const char* name = nullptr;
     };
 
     enum class device_feature_t {
@@ -84,6 +92,8 @@ namespace ir {
 
         IR_NODISCARD auto fetch_queue(const queue_family_t& family) const noexcept -> VkQueue;
         IR_NODISCARD auto memory_type_index(uint32 mask, memory_property_t flags) const noexcept -> uint32;
+
+        auto set_debug_name(const debug_name_info_t& info) const noexcept -> void;
 
         auto wait_idle() const noexcept -> void;
 

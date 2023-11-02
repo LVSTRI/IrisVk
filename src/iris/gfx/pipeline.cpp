@@ -236,7 +236,9 @@ namespace ir {
                 if (cache.contains(bindings)) {
                     descriptor_layout[set] = cache.acquire(bindings);
                 } else {
-                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, bindings));
+                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, {
+                        .bindings = bindings
+                    }));
                 }
             }
         }
@@ -288,6 +290,14 @@ namespace ir {
         pipeline->_type = pipeline_type_t::e_compute;
         pipeline->_info = info;
         pipeline->_device = device.as_intrusive_ptr();
+
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_PIPELINE,
+                .handle = reinterpret_cast<uint64>(pipeline->_handle),
+                .name = info.name.c_str(),
+            });
+        }
         return pipeline;
     }
 
@@ -630,7 +640,9 @@ namespace ir {
                 if (cache.contains(bindings)) {
                     descriptor_layout[set] = cache.acquire(bindings);
                 } else {
-                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, bindings));
+                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, {
+                        .bindings = bindings
+                    }));
                 }
             }
         }
@@ -699,6 +711,14 @@ namespace ir {
         pipeline->_info = info;
         pipeline->_device = device.as_intrusive_ptr();
         pipeline->_render_pass = render_pass.as_intrusive_ptr();
+
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_PIPELINE,
+                .handle = reinterpret_cast<uint64>(pipeline->_handle),
+                .name = info.name.c_str(),
+            });
+        }
         return pipeline;
     }
 
@@ -1070,7 +1090,9 @@ namespace ir {
                 if (cache.contains(bindings)) {
                     descriptor_layout[set] = cache.acquire(bindings);
                 } else {
-                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, bindings));
+                    descriptor_layout[set] = cache.insert(bindings, descriptor_layout_t::make(device, {
+                        .bindings = bindings
+                    }));
                 }
             }
         }
@@ -1139,6 +1161,14 @@ namespace ir {
         pipeline->_info = info;
         pipeline->_device = device.as_intrusive_ptr();
         pipeline->_render_pass = render_pass.as_intrusive_ptr();
+
+        if (!info.name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_PIPELINE,
+                .handle = reinterpret_cast<uint64>(pipeline->_handle),
+                .name = info.name.c_str(),
+            });
+        }
         return pipeline;
     }
 

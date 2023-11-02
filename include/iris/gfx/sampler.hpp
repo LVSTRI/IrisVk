@@ -11,6 +11,7 @@
 #include <vulkan/vulkan.h>
 
 #include <optional>
+#include <string>
 #include <vector>
 #include <span>
 
@@ -31,6 +32,7 @@ namespace ir {
     };
 
     struct sampler_create_info_t {
+        std::string name = {};
         sampler_filter_combo_t filter = {};
         sampler_mipmap_mode_t mip_mode = {};
         sampler_address_mode_combo_t address_mode = {};

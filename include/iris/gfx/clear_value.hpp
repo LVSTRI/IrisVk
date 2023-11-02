@@ -38,7 +38,7 @@ namespace ir {
 
         IR_CONSTEXPR clear_value_t(const self& other) noexcept;
         IR_CONSTEXPR clear_value_t(self&& other) noexcept;
-        IR_CONSTEXPR auto operator=(self other) noexcept -> self&;
+        IR_CONSTEXPR auto operator =(self other) noexcept -> self&;
 
         IR_NODISCARD IR_CONSTEXPR auto type() const noexcept -> clear_value_type_t;
         IR_NODISCARD IR_CONSTEXPR auto color() const noexcept -> const clear_color_t&;

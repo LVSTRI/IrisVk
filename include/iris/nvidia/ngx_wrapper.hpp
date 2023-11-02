@@ -75,6 +75,7 @@ namespace ir {
 
     auto make_ngx_feature_common_info() -> NVSDK_NGX_FeatureCommonInfo;
     auto make_ngx_feature_discovery_info(const NVSDK_NGX_FeatureCommonInfo& common_info) -> NVSDK_NGX_FeatureDiscoveryInfo;
+    auto dlss_scaling_ratio_from_preset(dlss_quality_preset_t preset) noexcept -> float32;
 }
 
 #endif

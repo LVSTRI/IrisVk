@@ -23,7 +23,8 @@ namespace ir {
 
     auto descriptor_set_t::make(
         device_t& device,
-        const descriptor_layout_t& layout
+        const descriptor_layout_t& layout,
+        const std::string& name
     ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         auto set = arc_ptr<self>(new self(device));
@@ -71,9 +72,16 @@ namespace ir {
             IR_VULKAN_CHECK(device.logger(), vkAllocateDescriptorSets(device.handle(), &allocate_info, &set->_handle));
         }
         IR_LOG_INFO(device.logger(), "allocated descriptor set {}", fmt::ptr(set->_handle));
-
         set->_pool = pool->as_intrusive_ptr();
         set->_layout = layout.as_intrusive_ptr();
+
+        if (!name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                .handle = reinterpret_cast<uint64>(set->_handle),
+                .name = name.c_str()
+            });
+        }
         return set;
     }
 
@@ -145,11 +153,27 @@ namespace ir {
         return *this;
     }
 
+    auto descriptor_set_builder_t::bind_sampler(uint32 binding, const sampler_t& sampler) noexcept -> descriptor_set_builder_t::self& {
+        IR_PROFILE_SCOPED();
+        _binding.bindings.emplace_back(descriptor_content_t {
+            .binding = binding,
+            .type = descriptor_type_t::e_sampler,
+            .contents = {
+                image_info_t {
+                    .sampler = sampler.handle(),
+                    .view = {},
+                    .layout = image_layout_t::e_shader_read_only_optimal,
+                },
+            }
+        });
+        return *this;
+    }
+
     auto descriptor_set_builder_t::bind_texture(uint32 binding, const texture_t& texture) noexcept -> self& {
         IR_PROFILE_SCOPED();
         _binding.bindings.emplace_back(descriptor_content_t {
             .binding = binding,
-            .type = descriptor_type_t::e_combined_image_sampler,
+            .type = descriptor_type_t::e_sampled_image,
             .contents = { texture.info() }
         });
         return *this;
@@ -164,7 +188,7 @@ namespace ir {
         }
         _binding.bindings.emplace_back(descriptor_content_t {
             .binding = binding,
-            .type = descriptor_type_t::e_combined_image_sampler,
+            .type = descriptor_type_t::e_sampled_image,
             .contents = { std::move(infos) }
         });
         return *this;

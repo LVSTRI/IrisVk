@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 
 #include <array>
+#include <string>
 #include <span>
 #include <vector>
 
@@ -27,6 +28,11 @@ namespace ir {
         IR_NODISCARD constexpr auto operator ==(const descriptor_binding_t& other) const noexcept -> bool = default;
     };
 
+    struct descriptor_layout_create_info_t {
+        std::string name = {};
+        std::span<const descriptor_binding_t> bindings;
+    };
+
     class descriptor_layout_t : public enable_intrusive_refcount_t<descriptor_layout_t> {
     public:
         using self = descriptor_layout_t;
@@ -39,7 +45,7 @@ namespace ir {
         descriptor_layout_t(device_t& device) noexcept;
         ~descriptor_layout_t() noexcept;
 
-        IR_NODISCARD static auto make(device_t& device, std::span<const descriptor_binding_t> bindings) noexcept -> arc_ptr<self>;
+        IR_NODISCARD static auto make(device_t& device, const descriptor_layout_create_info_t& info) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkDescriptorSetLayout;
         IR_NODISCARD auto device() const noexcept -> device_t&;

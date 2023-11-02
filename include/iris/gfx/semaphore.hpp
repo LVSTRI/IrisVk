@@ -12,12 +12,14 @@
 #include <spdlog/spdlog.h>
 
 #include <optional>
+#include <string>
 #include <vector>
 #include <memory>
 #include <span>
 
 namespace ir {
     struct semaphore_create_info_t {
+        std::string name = {};
         uint64 counter = 0;
         bool timeline = false;
     };

@@ -13,6 +13,7 @@
 
 #include <vector>
 #include <memory>
+#include <string>
 
 namespace ir {
     struct queue_family_t {
@@ -43,6 +44,7 @@ namespace ir {
     };
 
     struct queue_create_info_t {
+        std::string name = {};
         queue_family_t family = {};
         queue_type_t type = {};
     };

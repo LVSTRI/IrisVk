@@ -338,14 +338,26 @@ namespace ir {
             volkLoadDevice(device->_handle);
             IR_LOG_INFO(logger, "device function table initialized");
 
-            device->_graphics = queue_t::make(*device, { *graphics_family, queue_type_t::e_graphics });
+            device->_graphics = queue_t::make(*device, {
+                .name = "main_graphics_queue",
+                .family = *graphics_family,
+                .type = queue_type_t::e_graphics
+            });
             device->_compute = device->_graphics;
             device->_transfer = device->_graphics;
             if (graphics_family != compute_family) {
-                device->_compute = queue_t::make(*device, { *compute_family, queue_type_t::e_compute });
+                device->_compute = queue_t::make(*device, {
+                    .name = "main_compute_queue",
+                    .family = *compute_family,
+                    .type = queue_type_t::e_compute
+                });
             }
             if (transfer_family != graphics_family && transfer_family != compute_family) {
-                device->_transfer = queue_t::make(*device, { *transfer_family, queue_type_t::e_transfer });
+                device->_transfer = queue_t::make(*device, {
+                    .name = "main_transfer_queue",
+                    .family = *transfer_family,
+                    .type = queue_type_t::e_transfer
+                });
             }
 
             device->_properties = properties2;
@@ -397,6 +409,13 @@ namespace ir {
         device->_descriptor_pool = descriptor_pool_t::make(device.as_ref(), 128);
         device->_frame_counter = master_frame_counter_t::make();
 
+        if (!info.name.empty()) {
+            device->set_debug_name(debug_name_info_t {
+                .type = VK_OBJECT_TYPE_DEVICE,
+                .handle = reinterpret_cast<uint64>(device->_handle),
+                .name = info.name.c_str()
+            });
+        }
         return device;
     }
 
@@ -505,6 +524,7 @@ namespace ir {
     }
 
     auto device_t::memory_type_index(uint32 mask, memory_property_t flags) const noexcept -> uint32 {
+        IR_PROFILE_SCOPED();
         const auto& properties = _memory_properties.memoryProperties;
         const auto v_flags = as_enum_counterpart(flags);
         for (uint32 i = 0; i < properties.memoryTypeCount; ++i) {
@@ -513,6 +533,17 @@ namespace ir {
             }
         }
         return -1;
+    }
+
+    auto device_t::set_debug_name(const debug_name_info_t& info) const noexcept -> void {
+        IR_PROFILE_SCOPED();
+        auto name_info = VkDebugUtilsObjectNameInfoEXT();
+        name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+        name_info.pNext = nullptr;
+        name_info.objectType = info.type;
+        name_info.objectHandle = info.handle;
+        name_info.pObjectName = info.name;
+        IR_VULKAN_CHECK(_logger, vkSetDebugUtilsObjectNameEXT(_handle, &name_info));
     }
 
     auto device_t::wait_idle() const noexcept -> void {

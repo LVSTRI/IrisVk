@@ -14,12 +14,14 @@
 #include <spdlog/spdlog.h>
 
 #include <optional>
+#include <string>
 #include <vector>
 #include <memory>
 #include <span>
 
 namespace ir {
     struct command_buffer_create_info_t {
+        std::string name = {};
         bool primary = true;
     };
 

@@ -1,6 +1,7 @@
 #include <iris/gfx/device.hpp>
 #include <iris/gfx/descriptor_pool.hpp>
 
+#include <algorithm>
 #include <numeric>
 
 namespace ir {
@@ -15,7 +16,11 @@ namespace ir {
         IR_LOG_INFO(_device.get().logger(), "descriptor pool {} destroyed", fmt::ptr(_handle));
     }
 
-    auto descriptor_pool_t::make(device_t& device, uint32 initial_capacity) noexcept -> arc_ptr<self> {
+    auto descriptor_pool_t::make(
+        device_t& device,
+        uint32 initial_capacity,
+        const std::string& name
+    ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         return make(device, { {
             std::make_pair(descriptor_type_t::e_sampler, initial_capacity),
@@ -29,10 +34,14 @@ namespace ir {
             std::make_pair(descriptor_type_t::e_uniform_buffer_dynamic, initial_capacity),
             std::make_pair(descriptor_type_t::e_storage_buffer_dynamic, initial_capacity),
             std::make_pair(descriptor_type_t::e_input_attachment, initial_capacity),
-        } });
+        } }, name);
     }
 
-    auto descriptor_pool_t::make(device_t& device, const akl::fast_hash_map<descriptor_type_t, uint32>& size) noexcept -> arc_ptr<self> {
+    auto descriptor_pool_t::make(
+        device_t& device,
+        const descriptor_size_table& size,
+        const std::string& name
+    ) noexcept -> arc_ptr<self> {
         IR_PROFILE_SCOPED();
         auto pool = arc_ptr<self>(new self(device));
         auto pool_sizes = std::vector<VkDescriptorPoolSize>();
@@ -47,7 +56,7 @@ namespace ir {
         pool_create_info.flags =
             VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT |
             VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-        pool_create_info.maxSets = std::ranges::fold_left(pool_sizes, 0_u32, [](auto x, const auto& each) {
+        pool_create_info.maxSets = std::accumulate(pool_sizes.begin(), pool_sizes.end(), 0_u32, [](auto x, const auto& each) {
             return x + each.descriptorCount;
         });
         pool_create_info.poolSizeCount = pool_sizes.size();
@@ -55,6 +64,14 @@ namespace ir {
         IR_VULKAN_CHECK(device.logger(), vkCreateDescriptorPool(device.handle(), &pool_create_info, nullptr, &pool->_handle));
         IR_LOG_INFO(device.logger(), "descriptor pool initialized, current capacity: {}", pool_create_info.maxSets);
         pool->_sizes = std::move(size);
+
+        if (!name.empty()) {
+            device.set_debug_name({
+                .type = VK_OBJECT_TYPE_DESCRIPTOR_POOL,
+                .handle = reinterpret_cast<uint64>(pool->_handle),
+                .name = name.c_str()
+            });
+        }
         return pool;
     }
 

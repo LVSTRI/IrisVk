@@ -15,6 +15,7 @@
 #include <array>
 #include <span>
 #include <vector>
+#include <string>
 #include <variant>
 
 namespace ir {
@@ -68,7 +69,8 @@ namespace ir {
 
         IR_NODISCARD static auto make(
             device_t& device,
-            const descriptor_layout_t& layout
+            const descriptor_layout_t& layout,
+            const std::string& name = {}
         ) noexcept -> arc_ptr<self>;
 
         IR_NODISCARD auto handle() const noexcept -> VkDescriptorSet;
@@ -94,6 +96,7 @@ namespace ir {
         auto bind_uniform_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self&;
         auto bind_storage_buffer(uint32 binding, const buffer_info_t& buffer) noexcept -> self&;
         auto bind_storage_image(uint32 binding, const image_view_t& view) noexcept -> self&;
+        auto bind_sampler(uint32 binding, const sampler_t& sampler) noexcept -> self&;
         auto bind_texture(uint32 binding, const texture_t& texture) noexcept -> self&;
         auto bind_textures(uint32 binding, const std::vector<arc_ptr<texture_t>>& textures) noexcept -> self&;
         auto bind_sampled_image(

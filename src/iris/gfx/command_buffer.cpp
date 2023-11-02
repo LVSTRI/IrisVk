@@ -36,6 +36,14 @@ namespace ir {
 
         command_buffer->_info = info;
         command_buffer->_pool = pool.as_intrusive_ptr();
+
+        if (!info.name.empty()) {
+            pool.device().set_debug_name({
+                VK_OBJECT_TYPE_COMMAND_BUFFER,
+                reinterpret_cast<uint64>(command_buffer->_handle),
+                info.name.c_str()
+            });
+        }
         return command_buffer;
     }
 
@@ -56,7 +64,10 @@ namespace ir {
         command_buffer_info.commandBufferCount = count;
         IR_VULKAN_CHECK(
             pool.device().logger(),
-            vkAllocateCommandBuffers(pool.device().handle(), &command_buffer_info, command_buffer_handles.data()));
+            vkAllocateCommandBuffers(
+                pool.device().handle(),
+                &command_buffer_info,
+                command_buffer_handles.data()));
 
         auto command_buffers = std::vector<arc_ptr<self>>(count);
         for (auto i = 0_u32; i < count; ++i) {
@@ -64,6 +75,14 @@ namespace ir {
             command_buffers[i]->_handle = command_buffer_handles[i];
             command_buffers[i]->_info = info;
             command_buffers[i]->_pool = pool.as_intrusive_ptr();
+            if (!info.name.empty()) {
+                pool.device().set_debug_name({
+                    VK_OBJECT_TYPE_COMMAND_BUFFER,
+                    reinterpret_cast<uint64>(command_buffers[i]->_handle),
+                    std::format("{}_{}", info.name, i).c_str()
+                });
+            }
+
         }
         return command_buffers;
     }
@@ -307,6 +326,7 @@ namespace ir {
     }
 
     auto command_buffer_t::blit_image(const image_t& source, const image_t& dest, const image_blit_t& blit) const noexcept -> void {
+        IR_PROFILE_SCOPED();
         auto blit_region = VkImageBlit();
         blit_region.srcSubresource.aspectMask = as_enum_counterpart(source.view().aspect());
         if (blit.source_subresource.level != level_ignored) {
