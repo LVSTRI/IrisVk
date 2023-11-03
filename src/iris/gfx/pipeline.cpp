@@ -222,6 +222,9 @@ namespace ir {
 
         auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
         descriptor_layout.reserve(desc_bindings.size());
+        if (desc_bindings.empty()) {
+            desc_bindings[0] = {}; // dummy layout
+        }
         {
             auto& cache = device.cache<descriptor_layout_t>();
             for (const auto& [set, layout] : desc_bindings) {
@@ -621,6 +624,9 @@ namespace ir {
 
         auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
         descriptor_layout.reserve(desc_bindings.size());
+        if (desc_bindings.empty()) {
+            desc_bindings[0] = {}; // dummy layout
+        }
         {
             auto& cache = device.cache<descriptor_layout_t>();
             for (const auto& [set, layout] : desc_bindings) {
@@ -1071,6 +1077,9 @@ namespace ir {
 
         auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
         descriptor_layout.reserve(desc_bindings.size());
+        if (desc_bindings.empty()) {
+            desc_bindings[0] = {}; // dummy layout
+        }
         {
             auto& cache = device.cache<descriptor_layout_t>();
             for (const auto& [set, layout] : desc_bindings) {

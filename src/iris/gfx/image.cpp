@@ -44,11 +44,16 @@ namespace ir {
         image_view_info.pNext = nullptr;
         image_view_info.flags = {};
         image_view_info.image = image.handle();
-        image_view_info.viewType = image.layers() == 1 ? VK_IMAGE_VIEW_TYPE_2D : VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        if (info.subresource.layer_count == 1 || image.layers() == 1) {
+            image_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        } else {
+            image_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        }
         image_view_info.format = as_enum_counterpart(
             info.format == resource_format_t::e_undefined ?
                 image.format() :
-                info.format);
+                info.format
+            );
         image_view_info.components.r = as_enum_counterpart(info.swizzle.r);
         image_view_info.components.g = as_enum_counterpart(info.swizzle.g);
         image_view_info.components.b = as_enum_counterpart(info.swizzle.b);
@@ -143,13 +148,9 @@ namespace ir {
         auto image_info = VkImageCreateInfo();
         image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         image_info.pNext = nullptr;
-        image_info.flags = {};
+        image_info.flags = as_enum_counterpart(info.flags);
         if ((info.flags & image_flag_t::e_sparse_binding) == image_flag_t::e_sparse_binding) {
             is_sparse = true;
-            image_info.flags |= VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
-            if ((info.flags & image_flag_t::e_sparse_residency) == image_flag_t::e_sparse_residency) {
-                image_info.flags |= VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
-            }
         }
         // TODO: don't hardcode
         image_info.imageType = VK_IMAGE_TYPE_2D;

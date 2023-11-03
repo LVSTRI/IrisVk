@@ -39,12 +39,7 @@ namespace ir {
         image_subresource_t subresource = {};
     };
 
-    constexpr static auto default_image_view_info = image_view_create_info_t();
-
-    enum class image_flag_t {
-        e_sparse_binding = 1 << 0,
-        e_sparse_residency = 1 << 1,
-    };
+    const static auto default_image_view_info = image_view_create_info_t();
 
     struct image_create_info_t {
         std::string name = {};

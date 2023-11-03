@@ -141,6 +141,7 @@ namespace ir {
             }
 
             auto extensions = std::vector<const char*>();
+            extensions.emplace_back(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
             if (info.features.fragment_shading_rate) {
                 extensions.emplace_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
             }
@@ -406,7 +407,7 @@ namespace ir {
         }
 #endif
 
-        device->_descriptor_pool = descriptor_pool_t::make(device.as_ref(), 128);
+        device->_descriptor_pool = descriptor_pool_t::make(device.as_ref(), 1024, "main_descriptor_pool");
         device->_frame_counter = master_frame_counter_t::make();
 
         if (!info.name.empty()) {

@@ -41,6 +41,7 @@ namespace ir {
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(resource_format_t, VkFormat);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(image_aspect_t, VkImageAspectFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(image_layout_t, VkImageLayout);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(image_flag_t, VkImageCreateFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(descriptor_type_t, VkDescriptorType);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(shader_stage_t, VkShaderStageFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(dynamic_state_t, VkDynamicState);
@@ -66,6 +67,7 @@ namespace ir {
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkFormat);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageAspectFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageLayout);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageCreateFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkDescriptorType);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkShaderStageFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkDynamicState);
@@ -473,6 +475,35 @@ namespace ir {
 #endif
         e_attachment_feedback_loop_optimal = VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT,
         e_shading_rate_optimal_nv = VK_IMAGE_LAYOUT_SHADING_RATE_OPTIMAL_NV,
+    };
+
+    // VkImageCreateFlagBits
+    enum class image_flag_t : uint32 {
+        e_sparse_binding = VK_IMAGE_CREATE_SPARSE_BINDING_BIT,
+        e_sparse_residency = VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT,
+        e_sparse_aliased = VK_IMAGE_CREATE_SPARSE_ALIASED_BIT,
+        e_mutable_format = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
+        e_cube_compatible = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+        e_alias = VK_IMAGE_CREATE_ALIAS_BIT,
+        e_split_instance_bind_regions = VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT,
+        e_2d_array_compatible = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT,
+        e_block_texel_view_compatible = VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT,
+        e_extended_usage = VK_IMAGE_CREATE_EXTENDED_USAGE_BIT,
+        e_protected = VK_IMAGE_CREATE_PROTECTED_BIT,
+        e_disjoint = VK_IMAGE_CREATE_DISJOINT_BIT,
+        e_corner_sampled_nv = VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV,
+        e_sample_locations_compatible_depth_ext = VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT,
+        e_subsampled_ext = VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT,
+        e_descriptor_buffer_capture_replay_ext = VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT,
+        e_multisampled_render_to_single_sampled_ext = VK_IMAGE_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT,
+        e_2d_view_compatible_ext = VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT,
+        e_fragment_density_map_offset_qcom = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM,
+        e_split_instance_bind_regions_khr = VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT_KHR,
+        e_2d_array_compatible_khr = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR,
+        e_block_texel_view_compatible_khr = VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT_KHR,
+        e_extended_usage_khr = VK_IMAGE_CREATE_EXTENDED_USAGE_BIT_KHR,
+        e_disjoint_khr = VK_IMAGE_CREATE_DISJOINT_BIT_KHR,
+        e_alias_khr = VK_IMAGE_CREATE_ALIAS_BIT_KHR,
     };
     
     // VkPipelineStageFlagBits2

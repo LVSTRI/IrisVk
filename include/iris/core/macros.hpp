@@ -109,6 +109,7 @@ namespace ir::det {
             if (__result != VK_SUCCESS) {                                     \
                 ::ir::det::__maybe_dereference(logger)                        \
                     .critical("vulkan error: {}", string_VkResult(__result)); \
+                IR_ASSERT(false, "fatal vulkan error");                       \
             }                                                                 \
         } while (false)
 #else

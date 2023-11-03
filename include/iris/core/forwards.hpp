@@ -30,6 +30,7 @@ namespace ir {
     enum class resource_format_t : uint32;
     enum class image_aspect_t : uint32;
     enum class image_layout_t : uint32;
+    enum class image_flag_t : uint32;
     enum class pipeline_stage_t : uint64;
     enum class resource_access_t : uint64;
     enum class descriptor_type_t : uint32;

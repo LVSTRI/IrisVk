@@ -181,6 +181,9 @@ namespace ir {
 
     auto descriptor_set_builder_t::bind_textures(uint32 binding, const std::vector<arc_ptr<texture_t>>& textures) noexcept -> self& {
         IR_PROFILE_SCOPED();
+        if (textures.empty()) {
+            return *this;
+        }
         auto infos = std::vector<descriptor_data>();
         infos.reserve(textures.size());
         for (const auto& texture : textures) {

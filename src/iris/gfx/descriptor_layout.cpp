@@ -97,11 +97,14 @@ namespace ir {
 
     auto descriptor_layout_t::index() const noexcept -> uint32 {
         IR_PROFILE_SCOPED();
+        if (_bindings.empty()) {
+            return 0;
+        }
         return binding(0).set;
     }
 
     auto descriptor_layout_t::is_dynamic() const noexcept -> bool {
         IR_PROFILE_SCOPED();
-        return _bindings.back().dynamic;
+        return !_bindings.empty() && _bindings.back().dynamic;
     }
 }
