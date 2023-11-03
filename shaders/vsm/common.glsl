@@ -5,10 +5,10 @@
 #define IRIS_VSM_VIRTUAL_PAGE_SIZE 128
 #define IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE (IRIS_VSM_VIRTUAL_BASE_SIZE / IRIS_VSM_VIRTUAL_PAGE_SIZE)
 #define IRIS_VSM_VIRTUAL_PAGE_COUNT (IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE)
-#define IRIS_VSM_PHYSICAL_BASE_SIZE 8192
+#define IRIS_VSM_PHYSICAL_BASE_SIZE 12288
 #define IRIS_VSM_PHYSICAL_PAGE_SIZE 128
 #define IRIS_VSM_PHYSICAL_PAGE_ROW_SIZE (IRIS_VSM_PHYSICAL_BASE_SIZE / IRIS_VSM_PHYSICAL_PAGE_SIZE)
-#define IRIS_VSM_PHYSICAL_PAGE_COUNT (IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE)
+#define IRIS_VSM_PHYSICAL_PAGE_COUNT (IRIS_VSM_PHYSICAL_PAGE_ROW_SIZE * IRIS_VSM_PHYSICAL_PAGE_ROW_SIZE)
 #define IRIS_VSM_MAX_CLIPMAPS 32
 
 #include "buffer.glsl"
@@ -34,7 +34,6 @@ uvec2 decode_physical_page_entry(in uint page) {
     );
 }
 
-// [physical_page]: in range [0; VSM_PHYSICAL_PAGE_COUNT)
 uvec2 calculate_physical_page_texel_corner(in uint physical_page) {
     const uvec2 entry = decode_physical_page_entry(physical_page);
     const uint index = entry.x * 32 + entry.y;
@@ -46,15 +45,10 @@ uvec2 calculate_physical_page_texel_corner(in uint physical_page) {
     );
 }
 
-// [virtual_texel]: in range [0; VSM_VIRTUAL_BASE_SIZE)
-uvec2 virtual_to_physical_texel(in uvec2 virtual_texel) {
-    return virtual_texel % IRIS_VSM_PHYSICAL_PAGE_SIZE;
-}
-
 // From: https://github.com/JuanDiegoMontoya/Frogfood/blob/main/data/shaders/shadows/vsm/VsmCommon.h.glsl#L174C70-L174C73
-precise virtual_page_info_t virtual_page_info_from_depth(
-    in restrict b_view_block view_ptr,
-    in restrict b_vsm_globals_block vsm_globals_ptr,
+virtual_page_info_t virtual_page_info_from_depth(
+    in restrict readonly b_view_block view_ptr,
+    in restrict readonly b_vsm_globals_block vsm_globals_ptr,
     in vec2 resolution,
     in mat4 inv_proj_view,
     in uvec2 texel,
@@ -81,8 +75,7 @@ precise virtual_page_info_t virtual_page_info_from_depth(
     const vec2 stable_virtual_shadow_uv = fract(stable_shadow_position.xy * 0.5 + 0.5);
     const uvec2 virtual_shadow_page = uvec2(virtual_shadow_uv * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
     const uvec2 stable_virtual_shadow_page = uvec2(stable_virtual_shadow_uv * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
-
-    return virtual_page_info_t(
+    precise const virtual_page_info_t page = virtual_page_info_t(
         virtual_shadow_page,
         stable_virtual_shadow_page,
         virtual_shadow_uv,
@@ -90,6 +83,7 @@ precise virtual_page_info_t virtual_page_info_from_depth(
         clipmap_level,
         shadow_position.z
     );
+    return page;
 }
 
 bool is_virtual_page_backed(in uint virtual_page) {

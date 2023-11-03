@@ -46,7 +46,7 @@
 #define IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE (IRIS_VSM_VIRTUAL_BASE_SIZE / IRIS_VSM_VIRTUAL_PAGE_SIZE)
 #define IRIS_VSM_VIRTUAL_PAGE_RESOLUTION (IRIS_VSM_VIRTUAL_PAGE_SIZE * IRIS_VSM_VIRTUAL_PAGE_SIZE)
 #define IRIS_VSM_VIRTUAL_PAGE_COUNT (IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE)
-#define IRIS_VSM_PHYSICAL_BASE_SIZE 8192
+#define IRIS_VSM_PHYSICAL_BASE_SIZE 12288
 #define IRIS_VSM_PHYSICAL_PAGE_SIZE 128
 #define IRIS_VSM_PHYSICAL_PAGE_ROW_SIZE (IRIS_VSM_PHYSICAL_BASE_SIZE / IRIS_VSM_PHYSICAL_PAGE_SIZE)
 #define IRIS_VSM_PHYSICAL_PAGE_RESOLUTION (IRIS_VSM_PHYSICAL_PAGE_SIZE * IRIS_VSM_PHYSICAL_PAGE_SIZE)
@@ -89,7 +89,7 @@ namespace test {
     };
 
     struct vsm_global_data_t {
-        float32 first_width = 4.0f;
+        float32 first_width = 8.0f;
         float32 lod_bias = -2.0f;
         float32 resolution_lod_bias = 0.0f;
         uint32 clipmap_count = IRIS_VSM_CLIPMAP_COUNT;
@@ -139,7 +139,9 @@ namespace test {
         auto _visbuffer_tonemap_pass() noexcept -> void;
         auto _vsm_mark_visible_pages_pass() noexcept -> void;
         auto _vsm_request_pages_pass() noexcept -> void;
+        auto _vsm_free_pages_pass() noexcept -> void;
         auto _vsm_allocate_pages_pass() noexcept -> void;
+        auto _vsm_rasterize_hardware_pass() noexcept -> void;
         auto _gui_main_pass() noexcept -> void;
         auto _swapchain_copy_pass(uint32 image_index) noexcept -> void;
 
@@ -174,9 +176,15 @@ namespace test {
 
         struct {
             bool is_initialized = false;
+            ir::arc_ptr<ir::render_pass_t> main_pass;
+            ir::arc_ptr<ir::framebuffer_t> main_framebuffer;
+            ir::arc_ptr<ir::image_t> phys_memory;
+
             ir::arc_ptr<ir::pipeline_t> mark_visible_pages;
             ir::arc_ptr<ir::pipeline_t> make_allocation_requests;
             ir::arc_ptr<ir::pipeline_t> allocate_pages;
+            ir::arc_ptr<ir::pipeline_t> free_pages;
+            ir::arc_ptr<ir::pipeline_t> rasterize_hardware;
 
             ir::arc_ptr<ir::buffer_t<uint8>> visible_pages_buffer;
             ir::arc_ptr<ir::buffer_t<uint32>> allocation_request_buffer;
@@ -221,7 +229,6 @@ namespace test {
         } _scene;
 
         struct state_t {
-            vsm_global_data_t vsm_global_data = {};
             std::vector<directional_light_t> directional_lights = {};
 
             struct {
@@ -237,6 +244,10 @@ namespace test {
             struct {
                 float32 elevation = 260.0f;
                 float32 azimuth = 30.0f;
+                vsm_global_data_t global_data = {};
+
+                uint32 hzb_vis_layer = 0;
+                uint32 hzb_vis_level = 0;
             } vsm;
 
             struct {

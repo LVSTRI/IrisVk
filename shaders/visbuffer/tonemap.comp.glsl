@@ -1,6 +1,5 @@
 #version 460
 #extension GL_ARB_separate_shader_objects : enable
-#extension GL_KHR_shader_subgroup : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_buffer_reference : enable
 #extension GL_GOOGLE_include_directive : enable
@@ -8,7 +7,7 @@
 
 #define IRIS_TONEMAP_TYPE_REINHARD_LUMINANCE 0
 #define IRIS_TONEMAP_TYPE_PASSTHROUGH 1
-#define IRIS_TONEMAP_TYPE IRIS_TONEMAP_TYPE_PASSTHROUGH
+#define IRIS_TONEMAP_TYPE IRIS_TONEMAP_TYPE_REINHARD_LUMINANCE
 
 #include "utilities.glsl"
 

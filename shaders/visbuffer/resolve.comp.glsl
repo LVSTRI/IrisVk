@@ -1,7 +1,5 @@
 #version 460
 #extension GL_ARB_separate_shader_objects : enable
-#extension GL_ARB_sparse_texture2 : enable
-#extension GL_KHR_shader_subgroup : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_buffer_reference : enable
 #extension GL_EXT_nonuniform_qualifier : enable
@@ -14,17 +12,18 @@
 #include "utilities.glsl"
 #include "buffer.glsl"
 
-layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+layout (local_size_x = 16, local_size_y = 16) in;
 
 layout (set = 0, binding = 0) uniform texture2D u_depth;
-layout (r32ui, set = 0, binding = 1) restrict readonly uniform uimage2D u_visbuffer;
-layout (rgba32f, set = 0, binding = 2) restrict writeonly uniform image2D u_output;
+layout (r32ui, set = 0, binding = 1) restrict readonly uniform uimage2D u_vsm;
+layout (r32ui, set = 0, binding = 2) restrict readonly uniform uimage2D u_visbuffer;
+layout (rgba32f, set = 0, binding = 3) restrict writeonly uniform image2D u_output;
 
-layout (set = 0, binding = 3) uniform sampler u_sampler;
-layout (set = 0, binding = 4) uniform texture2D[] u_textures;
+layout (set = 0, binding = 4) uniform sampler u_sampler;
+layout (set = 0, binding = 5) uniform texture2D[] u_textures;
 
 layout (scalar, push_constant) restrict uniform u_push_constants_block {
-    restrict b_view_block u_view_ptr;
+    restrict readonly b_view_block u_view_ptr;
     restrict readonly b_meshlet_instance_block u_meshlet_instance_ptr;
     restrict readonly b_meshlet_block u_meshlet_ptr;
     restrict readonly b_transform_block u_transform_ptr;
@@ -35,7 +34,8 @@ layout (scalar, push_constant) restrict uniform u_push_constants_block {
     restrict readonly b_material_block u_material_ptr;
     restrict readonly b_directional_light_block u_dir_light_ptr;
 
-    restrict b_vsm_globals_block u_vsm_globals_ptr;
+    restrict readonly b_vsm_globals_block u_vsm_globals_ptr;
+    restrict readonly b_vsm_virtual_page_table_block u_virt_page_table_ptr;
 };
 
 const vec3[] _debug_clipmap_colors = vec3[](
@@ -201,6 +201,20 @@ void main() {
     );
     const uint clipmap_level = virtual_page.clipmap_level;
 
+    float shadow_factor = 1.0;
+    {
+        const uvec2 virtual_page_position = clamp(virtual_page.position.xy, uvec2(0), uvec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE - 1));
+        const uint virtual_page_index = virtual_page_position.x + virtual_page_position.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
+        const uint virtual_page_entry = u_virt_page_table_ptr.data[virtual_page_index +  clipmap_level * IRIS_VSM_VIRTUAL_PAGE_COUNT];
+        const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
+        if (is_virtual_page_backed(virtual_page_entry)) {
+            const uvec2 physical_page_corner = calculate_physical_page_texel_corner(virtual_page_entry);
+            const uvec2 physical_texel = physical_page_corner + uvec2(virtual_page_uv * IRIS_VSM_PHYSICAL_PAGE_SIZE);
+            const float depth = uintBitsToFloat(imageLoad(u_vsm, ivec2(physical_texel)).r);
+            shadow_factor = depth < virtual_page.depth ? 0.0 : 1.0;
+        }
+    }
+
     const float light_ambient = 0.025;
     vec3 color = vec3(0.0);
     {
@@ -217,10 +231,11 @@ void main() {
         const float light_intensity = sun_dir_light.intensity;
         const float light_diffuse = saturate(dot(normal, light_dir));
         const float light_specular = pow(saturate(dot(reflect(-light_dir, normal), view_direction)), 64.0);
-        color += light_intensity * (light_ambient + light_diffuse + light_specular) * base_color;
+        color += light_ambient * base_color;
+        color += light_intensity * (light_diffuse + light_specular) * base_color * shadow_factor;
     }
-    color *= _debug_clipmap_colors[clipmap_level];
-    const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
+    /*color *= _debug_clipmap_colors[clipmap_level];
+    const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
     if (
         virtual_page_uv.x < 0.02 ||
         virtual_page_uv.y < 0.02 ||
@@ -228,6 +243,6 @@ void main() {
         virtual_page_uv.y > 0.98
     ) {
         color = vec3(1.0, 0.0125, 0.0125);
-    }
+    }*/
     imageStore(u_output, ivec2(gl_GlobalInvocationID.xy), vec4(color, 1.0));
 }

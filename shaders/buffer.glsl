@@ -72,5 +72,8 @@ layout (scalar, buffer_reference) restrict buffer b_vsm_allocate_request_block {
     uint[] data;
 };
 
+layout (scalar, buffer_reference) restrict buffer b_vsm_debug_allocation_total_block {
+    uint count;
+};
 
 #endif

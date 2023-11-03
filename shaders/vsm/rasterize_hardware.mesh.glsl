@@ -1,7 +1,6 @@
 #version 460
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_mesh_shader : enable
-#extension GL_KHR_shader_subgroup : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_buffer_reference : enable
 #extension GL_GOOGLE_include_directive : enable
@@ -18,11 +17,7 @@ layout (local_size_x = WORK_GROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 layout (triangles, max_vertices = CLUSTER_MAX_VERTICES, max_primitives = CLUSTER_MAX_PRIMITIVES) out;
 
-layout (location = 0) out o_vertex_data_block {
-    flat uint meshlet_id;
-} o_vertex_data[];
-
-layout (scalar, push_constant) restrict readonly uniform u_push_constants_block {
+layout (scalar, push_constant) restrict uniform u_push_constants_block {
     restrict readonly b_view_block u_view_ptr;
     restrict readonly b_meshlet_instance_block u_meshlet_instance_ptr;
     restrict readonly b_meshlet_block u_meshlet_ptr;
@@ -30,6 +25,8 @@ layout (scalar, push_constant) restrict readonly uniform u_push_constants_block 
     restrict readonly b_vertex_block u_vertex_ptr;
     restrict readonly b_index_block u_index_ptr;
     restrict readonly b_primitive_block u_primitive_ptr;
+    restrict readonly b_vsm_virtual_page_table_block u_virt_page_table_ptr;
+
     uint u_view_index;
 };
 
@@ -67,7 +64,6 @@ void main() {
         const vec3 position = u_vertex_ptr.data[vertex_offset + u_index_ptr.data[index_offset + index]].position;
 
         gl_MeshVerticesEXT[index].gl_Position = pvm * vec4(position, 1.0);
-        o_vertex_data[index].meshlet_id = meshlet_instance_id;
     }
 
     for (uint i = 0; i < MAX_PRIMITIVES_PER_THREAD; i++) {

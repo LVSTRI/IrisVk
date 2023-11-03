@@ -261,7 +261,7 @@ namespace test {
     auto application_t::_load_models() noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto paths = std::to_array<fs::path>({
-            "../models/compressed/bistro/bistro.glb",
+            "../models/compressed/powerplant2/powerplant2.glb",
         });
         auto models = std::vector<meshlet_model_t>();
         for (const auto& path : paths) {
@@ -355,36 +355,45 @@ namespace test {
         });
         _buffer.meshlets = ir::upload_buffer<base_meshlet_t>(*_device, meshlets, {
             .name = "main_meshlet_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
         });
         _buffer.meshlet_instances = ir::upload_buffer<meshlet_instance_t>(*_device, meshlet_instances, {
             .name = "main_meshlet_instance_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
         });
         _buffer.vertices = ir::upload_buffer<meshlet_vertex_format_t>(*_device, vertices, {
             .name = "main_meshlet_vertex_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
         });
         _buffer.indices = ir::upload_buffer<uint32>(*_device, indices, {
             .name = "main_meshlet_index_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
         });
         _buffer.primitives = ir::upload_buffer<uint8>(*_device, primitives, {
             .name = "main_meshlet_primitive_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
         });
         _buffer.transforms = ir::buffer_t<transform_t>::make(*_device, frames_in_flight, {
             .name = "main_transform_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = transforms.size(),
         });
         _buffer.materials = ir::buffer_t<material_t>::make(*_device, frames_in_flight, {
             .name = "main_material_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = 4096,
         });
         _buffer.directional_lights = ir::buffer_t<directional_light_t>::make(*_device, frames_in_flight, {
             .name = "main_directional_light_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = IRIS_MAX_DIRECTIONAL_LIGHTS,
         });
         _buffer.views = ir::buffer_t<view_t>::make(*_device, frames_in_flight, {
             .name = "main_camera_view_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
             .flags = ir::buffer_flag_t::e_mapped,
             .capacity = 128,
         });
@@ -446,11 +455,14 @@ namespace test {
         command_buffer.begin();
         _clear_buffer_pass();
         _visbuffer_pass();
+        _vsm_mark_visible_pages_pass();
+        _vsm_free_pages_pass();
+        _vsm_request_pages_pass();
+        _vsm_allocate_pages_pass();
+        _vsm_rasterize_hardware_pass();
         _visbuffer_resolve_pass();
         _visbuffer_dlss_pass();
         _visbuffer_tonemap_pass();
-        _vsm_mark_visible_pages_pass();
-        _vsm_request_pages_pass();
         _gui_main_pass();
         _swapchain_copy_pass(image_index);
         command_buffer.end();
@@ -524,21 +536,6 @@ namespace test {
         // write directional lights
         _state.directional_lights = std::vector<directional_light_t>(IRIS_MAX_DIRECTIONAL_LIGHTS);
         {
-            if (_wsi->input().is_pressed(ir::keyboard_t::e_up)) {
-                _state.vsm.elevation += 25.0f * _delta_time;
-            }
-            if (_wsi->input().is_pressed(ir::keyboard_t::e_down)) {
-                _state.vsm.elevation -= 25.0f * _delta_time;
-            }
-            if (_wsi->input().is_pressed(ir::keyboard_t::e_left)) {
-                _state.vsm.azimuth -= 25.0f * _delta_time;
-            }
-            if (_wsi->input().is_pressed(ir::keyboard_t::e_right)) {
-                _state.vsm.azimuth += 25.0f * _delta_time;
-            }
-            if (glm::epsilonEqual(_state.vsm.elevation, 360.0f, 0.0001f)) {
-                _state.vsm.elevation += 0.0002f;
-            }
             auto directional_light = directional_light_t();
             directional_light.direction = polar_to_cartesian(_state.vsm.elevation, _state.vsm.azimuth);
             directional_light.intensity = 1.0f;
@@ -582,8 +579,8 @@ namespace test {
         {
             const auto& sun_dir_light = _state.directional_lights[0];
             for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
-                const auto width = _state.vsm_global_data.first_width * (1 << i) / 2.0f;
-                const auto center = glm::trunc(_camera.position());
+                const auto width = _state.vsm.global_data.first_width * (1 << i) / 2.0f;
+                const auto center = _camera.position();
 
                 auto view = view_t();
                 view.projection = glm::ortho(-width, width, -width, width, -2000.0f, 2000.0f);
@@ -617,8 +614,12 @@ namespace test {
 
         // write VSM info
         {
-            _state.vsm_global_data.resolution_lod_bias = calculate_dlss_lod_bias(_state.dlss.render_resolution, _gui.main_viewport_resolution);
-            vsm_globals_buffer.insert(_state.vsm_global_data);
+            _state.vsm.global_data.resolution_lod_bias =
+                1.0f + calculate_dlss_lod_bias(
+                    _state.dlss.render_resolution,
+                    _gui.main_viewport_resolution
+                );
+            vsm_globals_buffer.insert(_state.vsm.global_data);
         }
     }
 
@@ -1078,6 +1079,39 @@ namespace test {
                     }));
                 }
             }
+            _vsm.main_pass = ir::render_pass_t::make(*_device, {
+                .name = "vsm_main_pass",
+                .attachments = {},
+                .subpasses = { ir::subpass_info_t() },
+                .dependencies = {},
+            });
+            _vsm.main_framebuffer = ir::framebuffer_t::make(*_vsm.main_pass, {
+                .name = "vsm_main_framebuffer",
+                .width = IRIS_VSM_VIRTUAL_BASE_SIZE,
+                .height = IRIS_VSM_VIRTUAL_BASE_SIZE,
+                .layers = 1,
+            });
+            _vsm.phys_memory = ir::image_t::make(*_device, {
+                .name = "vsm_phys_memory",
+                .width = IRIS_VSM_PHYSICAL_BASE_SIZE,
+                .height = IRIS_VSM_PHYSICAL_BASE_SIZE,
+                .usage =
+                    ir::image_usage_t::e_storage |
+                    ir::image_usage_t::e_sampled |
+                    ir::image_usage_t::e_transfer_dst,
+                .format = ir::resource_format_t::e_r32_uint,
+                .view = ir::default_image_view_info,
+            });
+            _vsm.rasterize_hardware = ir::pipeline_t::make(*_device, *_vsm.main_pass, {
+                .mesh = "../shaders/vsm/rasterize_hardware.mesh.glsl",
+                .fragment = "../shaders/vsm/rasterize_hardware.frag.glsl",
+                .blend = {},
+                .dynamic_states = {
+                    ir::dynamic_state_t::e_viewport,
+                    ir::dynamic_state_t::e_scissor,
+                },
+                .cull_mode = ir::cull_mode_t::e_front,
+            });
             _vsm.mark_visible_pages = ir::pipeline_t::make(*_device, {
                 .name = "vsm_mark_visible_pages_pipeline",
                 .compute = "../shaders/vsm/mark_visible_pages.comp.glsl",
@@ -1089,6 +1123,10 @@ namespace test {
             _vsm.allocate_pages = ir::pipeline_t::make(*_device, {
                 .name = "vsm_allocate_pages_pipeline",
                 .compute = "../shaders/vsm/allocate_pages.comp.glsl",
+            });
+            _vsm.free_pages = ir::pipeline_t::make(*_device, {
+                .name = "vsm_free_pages_pipeline",
+                .compute = "../shaders/vsm/free_pages.comp.glsl",
             });
             _vsm.allocation_request_buffer = ir::buffer_t<uint32>::make(*_device, {
                 .name = "vsm_page_allocation_request_buffer",
@@ -1118,6 +1156,36 @@ namespace test {
                     .dest_access = ir::resource_access_t::e_shader_storage_read,
                     .old_layout = ir::image_layout_t::e_undefined,
                     .new_layout = ir::image_layout_t::e_general,
+                });
+                commands.buffer_barrier({
+                    .buffer = _vsm.virt_page_table_buffer->slice(),
+                    .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+                    .dest_stage = ir::pipeline_stage_t::e_transfer,
+                    .source_access = ir::resource_access_t::e_none,
+                    .dest_access = ir::resource_access_t::e_transfer_write,
+                });
+                commands.buffer_barrier({
+                    .buffer = _vsm.phys_page_table_buffer->slice(),
+                    .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+                    .dest_stage = ir::pipeline_stage_t::e_transfer,
+                    .source_access = ir::resource_access_t::e_none,
+                    .dest_access = ir::resource_access_t::e_transfer_write,
+                });
+                commands.fill_buffer(_vsm.virt_page_table_buffer->slice(), -1_u32);
+                commands.fill_buffer(_vsm.phys_page_table_buffer->slice(), 0);
+                commands.buffer_barrier({
+                    .buffer = _vsm.virt_page_table_buffer->slice(),
+                    .source_stage = ir::pipeline_stage_t::e_transfer,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .source_access = ir::resource_access_t::e_transfer_write,
+                    .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
+                });
+                commands.buffer_barrier({
+                    .buffer = _vsm.phys_page_table_buffer->slice(),
+                    .source_stage = ir::pipeline_stage_t::e_transfer,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .source_access = ir::resource_access_t::e_transfer_write,
+                    .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
                 });
             });
         }
@@ -1154,25 +1222,9 @@ namespace test {
             .source_access = ir::resource_access_t::e_none,
             .dest_access = ir::resource_access_t::e_transfer_write,
         });
-        command_buffer.buffer_barrier({
-            .buffer = _vsm.virt_page_table_buffer->slice(),
-            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
-            .dest_stage = ir::pipeline_stage_t::e_transfer,
-            .source_access = ir::resource_access_t::e_none,
-            .dest_access = ir::resource_access_t::e_transfer_write,
-        });
-        command_buffer.buffer_barrier({
-            .buffer = _vsm.phys_page_table_buffer->slice(),
-            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
-            .dest_stage = ir::pipeline_stage_t::e_transfer,
-            .source_access = ir::resource_access_t::e_none,
-            .dest_access = ir::resource_access_t::e_transfer_write,
-        });
         command_buffer.fill_buffer(_buffer.atomics->slice(), 0);
         command_buffer.fill_buffer(_vsm.visible_pages_buffer->slice(), 0);
         command_buffer.fill_buffer(_vsm.allocation_request_buffer->slice(), 0);
-        command_buffer.fill_buffer(_vsm.virt_page_table_buffer->slice(), 0);
-        command_buffer.fill_buffer(_vsm.phys_page_table_buffer->slice(), 0);
         command_buffer.buffer_barrier({
             .buffer = _buffer.atomics->slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
@@ -1189,20 +1241,6 @@ namespace test {
         });
         command_buffer.buffer_barrier({
             .buffer = _vsm.allocation_request_buffer->slice(),
-            .source_stage = ir::pipeline_stage_t::e_transfer,
-            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-            .source_access = ir::resource_access_t::e_transfer_write,
-            .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
-        });
-        command_buffer.buffer_barrier({
-            .buffer = _vsm.virt_page_table_buffer->slice(),
-            .source_stage = ir::pipeline_stage_t::e_transfer,
-            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-            .source_access = ir::resource_access_t::e_transfer_write,
-            .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
-        });
-        command_buffer.buffer_barrier({
-            .buffer = _vsm.phys_page_table_buffer->slice(),
             .source_stage = ir::pipeline_stage_t::e_transfer,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_transfer_write,
@@ -1278,10 +1316,11 @@ namespace test {
 
         const auto set = ir::descriptor_set_builder_t(*_visbuffer.resolve, 0)
             .bind_sampled_image(0, _visbuffer.depth->view())
-            .bind_storage_image(1, _visbuffer.ids->view())
-            .bind_storage_image(2, _visbuffer.color->view())
-            .bind_sampler(3, *_scene.main_sampler)
-            .bind_textures(4, _scene.textures)
+            .bind_storage_image(1, _vsm.phys_memory->view())
+            .bind_storage_image(2, _visbuffer.ids->view())
+            .bind_storage_image(3, _visbuffer.color->view())
+            .bind_sampler(4, *_scene.main_sampler)
+            .bind_textures(5, _scene.textures)
             .build();
         const auto resolve_dispatch = dispatch_work_group_size({
             _visbuffer.color->width(),
@@ -1292,8 +1331,6 @@ namespace test {
         });
 
         command_buffer.begin_debug_marker("visbuffer_resolve");
-        command_buffer.bind_pipeline(*_visbuffer.resolve);
-        command_buffer.bind_descriptor_set(*set);
         command_buffer.image_barrier({
             .image = std::cref(*_visbuffer.color),
             .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
@@ -1303,7 +1340,8 @@ namespace test {
             .old_layout = ir::image_layout_t::e_undefined,
             .new_layout = ir::image_layout_t::e_general,
         });
-
+        command_buffer.bind_pipeline(*_visbuffer.resolve);
+        command_buffer.bind_descriptor_set(*set);
         {
             const auto push_constants = ir::make_byte_bag(std::to_array({
                 view_buffer.address(),
@@ -1316,6 +1354,7 @@ namespace test {
                 material_buffer.address(),
                 directional_light_buffer.address(),
                 vsm_globals_buffer.address(),
+                _vsm.virt_page_table_buffer->address()
             }));
             command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
         }
@@ -1517,9 +1556,7 @@ namespace test {
                 .source_stage = ir::pipeline_stage_t::e_transfer,
                 .dest_stage = ir::pipeline_stage_t::e_compute_shader,
                 .source_access = ir::resource_access_t::e_transfer_write,
-                .dest_access =
-                    ir::resource_access_t::e_shader_storage_read |
-                    ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_shader_storage_read,
                 .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
                 .new_layout = ir::image_layout_t::e_general,
                 .subresource = {
@@ -1569,6 +1606,8 @@ namespace test {
                 _vsm.virt_page_table_buffer->address(),
                 _vsm.allocation_request_buffer->address(),
             });
+            const auto push_constants = ir::make_byte_bag(addresses);
+            command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
         }
         command_buffer.dispatch(
             request_pages_dispatch.x,
@@ -1585,7 +1624,8 @@ namespace test {
         command_buffer.end_debug_marker();
     }
 
-    auto application_t::_vsm_allocate_pages_pass() noexcept -> void {
+    auto application_t::_vsm_free_pages_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
         const auto& [
             command_buffer,
             image_available,
@@ -1598,9 +1638,30 @@ namespace test {
             transform_buffer
         ] = _current_frame_buffers();
 
-        command_buffer.begin_debug_marker("vsm_allocate_pages");
-        command_buffer.bind_pipeline(*_vsm.allocate_pages);
-        command_buffer.dispatch(); // dispatch a single thread
+        const auto free_pages_dispatch = dispatch_work_group_size({
+            IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
+            IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
+        }, {
+            16,
+            16,
+        });
+
+        command_buffer.begin_debug_marker("vsm_free_pages");
+        command_buffer.bind_pipeline(*_vsm.free_pages);
+        {
+            const auto addresses = std::to_array({
+                _vsm.visible_pages_buffer->address(),
+                _vsm.phys_page_table_buffer->address(),
+                _vsm.virt_page_table_buffer->address(),
+            });
+            const auto push_constants = ir::make_byte_bag(addresses);
+            command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
+        }
+        command_buffer.dispatch(
+            free_pages_dispatch.x,
+            free_pages_dispatch.y,
+            IRIS_VSM_CLIPMAP_COUNT
+        );
         command_buffer.buffer_barrier({
             .buffer = _vsm.phys_page_table_buffer->slice(),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
@@ -1615,6 +1676,121 @@ namespace test {
             .source_access = ir::resource_access_t::e_shader_storage_write,
             .dest_access = ir::resource_access_t::e_shader_storage_read,
         });
+        command_buffer.end_debug_marker();
+    }
+
+    auto application_t::_vsm_allocate_pages_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        const auto& [
+            view_buffer,
+            transform_buffer
+        ] = _current_frame_buffers();
+
+        command_buffer.begin_debug_marker("vsm_allocate_pages");
+        command_buffer.bind_pipeline(*_vsm.allocate_pages);
+        {
+            const auto addresses = std::to_array({
+                _vsm.allocation_request_buffer->address(),
+                _vsm.phys_page_table_buffer->address(),
+                _vsm.virt_page_table_buffer->address(),
+            });
+            const auto push_constants = ir::make_byte_bag(addresses);
+            command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
+        }
+        command_buffer.dispatch(); // dispatch a single thread
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.phys_page_table_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read | ir::resource_access_t::e_shader_storage_write,
+        });
+        command_buffer.buffer_barrier({
+            .buffer = _vsm.virt_page_table_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read | ir::resource_access_t::e_shader_storage_write,
+        });
+        command_buffer.end_debug_marker();
+    }
+
+    auto application_t::_vsm_rasterize_hardware_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        const auto& [
+            view_buffer,
+            transform_buffer
+        ] = _current_frame_buffers();
+
+        auto raster_set = ir::descriptor_set_builder_t(*_vsm.rasterize_hardware, 0)
+            .bind_storage_image(0, _vsm.phys_memory->view())
+            .build();
+
+        command_buffer.begin_debug_marker("vsm_rasterize_hardware_pass");
+        command_buffer.image_barrier({
+            .image = std::cref(*_vsm.phys_memory),
+            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .dest_stage = ir::pipeline_stage_t::e_transfer,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_transfer_write,
+            .old_layout = ir::image_layout_t::e_undefined,
+            .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
+        });
+        command_buffer.clear_image(*_vsm.phys_memory, ir::make_clear_color({ -1_u32 }), {});
+        command_buffer.image_barrier({
+            .image = std::cref(*_vsm.phys_memory),
+            .source_stage = ir::pipeline_stage_t::e_transfer,
+            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .source_access = ir::resource_access_t::e_transfer_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_write,
+            .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
+            .new_layout = ir::image_layout_t::e_general,
+        });
+        for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
+            command_buffer.begin_debug_marker("vsm_clipmap_rasterize_pass");
+            command_buffer.begin_render_pass(*_vsm.main_framebuffer, {});
+            command_buffer.set_viewport({
+                .width = static_cast<float32>(IRIS_VSM_VIRTUAL_BASE_SIZE),
+                .height = static_cast<float32>(IRIS_VSM_VIRTUAL_BASE_SIZE),
+            });
+            command_buffer.set_scissor({
+                .width = IRIS_VSM_VIRTUAL_BASE_SIZE,
+                .height = IRIS_VSM_VIRTUAL_BASE_SIZE,
+            });
+            command_buffer.bind_pipeline(*_vsm.rasterize_hardware);
+            command_buffer.bind_descriptor_set(*raster_set);
+            {
+                const auto addresses = std::to_array({
+                    view_buffer.address(),
+                    _buffer.meshlet_instances->address(),
+                    _buffer.meshlets->address(),
+                    transform_buffer.address(),
+                    _buffer.vertices->address(),
+                    _buffer.indices->address(),
+                    _buffer.primitives->address(),
+                    _vsm.virt_page_table_buffer->address(),
+                });
+                const auto push_constants = ir::make_byte_bag(addresses, i);
+                command_buffer.push_constants(ir::shader_stage_t::e_mesh | ir::shader_stage_t::e_fragment, 0, sizeof(push_constants), &push_constants);
+            }
+            command_buffer.draw_mesh_tasks(_buffer.meshlet_instances->size());
+            command_buffer.end_render_pass();
+            command_buffer.end_debug_marker();
+        }
         command_buffer.end_debug_marker();
     }
 
@@ -1727,8 +1903,10 @@ namespace test {
                 ImGui::Separator();
 
                 if (ImGui::CollapsingHeader("VSM Settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
-                    ImGui::SliderFloat("Sun Elevation", &_state.vsm.elevation, 0.0f, 360.0f);
-                    ImGui::SliderFloat("Sun Azimuth", &_state.vsm.azimuth, 0.0f, 360.0f);
+                    ImGui::DragFloat("Sun Elevation", &_state.vsm.elevation, 1.0f, 0.0f, 360.0f);
+                    ImGui::DragFloat("Sun Azimuth", &_state.vsm.azimuth, 1.0f, 0.0f, 360.0f);
+                    ImGui::DragFloat("First Clipmap Width", &_state.vsm.global_data.first_width, 1.0f, 1.0f, 100.0f);
+                    ImGui::DragFloat("LOD Bias", &_state.vsm.global_data.lod_bias, 0.1f, -3.0f, 3.0f);
                 }
             }
             ImGui::End();
@@ -1750,6 +1928,7 @@ namespace test {
                 }
             }
             ImGui::End();
+            ImGui::ShowDemoWindow();
         }
         ImGui::Render();
         command_buffer.begin_debug_marker("gui_draw");

@@ -1,7 +1,9 @@
 #version 460
-#extension GL_EXT_samplerless_texture_functions : enable
+#extension GL_ARB_separate_shader_objects : enable
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_buffer_reference : enable
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
+
 #include "vsm/common.glsl"
 #include "buffer.glsl"
 #include "utilities.glsl"
@@ -10,8 +12,8 @@ layout (local_size_x = 16, local_size_y = 16) in;
 
 layout (scalar, push_constant) restrict uniform u_push_constant_block {
     restrict readonly b_vsm_page_request_block u_page_request_ptr;
-    restrict readonly b_vsm_virtual_page_table_block u_virt_page_table_ptr;
-    restrict b_vsm_allocate_request_block u_allocation_request_ptr;
+    restrict b_vsm_physical_page_table_block u_phys_page_table_ptr;
+    restrict b_vsm_virtual_page_table_block u_virt_page_table_ptr;
 };
 
 void main() {
@@ -25,8 +27,10 @@ void main() {
     const uint virtual_page_entry = u_virt_page_table_ptr.data[virtual_clipmap_index];
     const bool is_page_allocated = is_virtual_page_backed(virtual_page_entry);
     const bool is_page_requested = u_page_request_ptr.data[virtual_clipmap_index] == 1;
-    if (is_page_requested && !is_page_allocated) {
-        const uint slot = atomicAdd(u_allocation_request_ptr.count, 1);
-        u_allocation_request_ptr.data[slot] = virtual_clipmap_index;
+
+    if (is_page_allocated && !is_page_requested) {
+        const uvec2 physical_page_entry = decode_physical_page_entry(virtual_page_entry);
+        atomicAnd(u_phys_page_table_ptr.data[physical_page_entry.x], ~(1u << physical_page_entry.y));
+        u_virt_page_table_ptr.data[virtual_clipmap_index] = uint(-1);
     }
 }
