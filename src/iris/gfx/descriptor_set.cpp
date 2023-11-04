@@ -153,7 +153,7 @@ namespace ir {
         return *this;
     }
 
-    auto descriptor_set_builder_t::bind_sampler(uint32 binding, const sampler_t& sampler) noexcept -> descriptor_set_builder_t::self& {
+    auto descriptor_set_builder_t::bind_sampler(uint32 binding, const sampler_t& sampler) noexcept -> self& {
         IR_PROFILE_SCOPED();
         _binding.bindings.emplace_back(descriptor_content_t {
             .binding = binding,
