@@ -47,8 +47,8 @@ uvec2 calculate_physical_page_texel_corner(in uint physical_page) {
 
 // From: https://github.com/JuanDiegoMontoya/Frogfood/blob/main/data/shaders/shadows/vsm/VsmCommon.h.glsl#L174C70-L174C73
 virtual_page_info_t virtual_page_info_from_depth(
-    in restrict readonly b_view_block view_ptr,
-    in restrict readonly b_vsm_globals_block vsm_globals_ptr,
+    in restrict b_view_block view_ptr,
+    in restrict b_vsm_globals_block vsm_globals_ptr,
     in vec2 resolution,
     in mat4 inv_proj_view,
     in uvec2 texel,

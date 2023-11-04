@@ -23,7 +23,7 @@ layout (set = 0, binding = 4) uniform sampler u_sampler;
 layout (set = 0, binding = 5) uniform texture2D[] u_textures;
 
 layout (scalar, push_constant) restrict uniform u_push_constants_block {
-    restrict readonly b_view_block u_view_ptr;
+    restrict /*readonly*/ b_view_block u_view_ptr;
     restrict readonly b_meshlet_instance_block u_meshlet_instance_ptr;
     restrict readonly b_meshlet_block u_meshlet_ptr;
     restrict readonly b_transform_block u_transform_ptr;
@@ -34,7 +34,7 @@ layout (scalar, push_constant) restrict uniform u_push_constants_block {
     restrict readonly b_material_block u_material_ptr;
     restrict readonly b_directional_light_block u_dir_light_ptr;
 
-    restrict readonly b_vsm_globals_block u_vsm_globals_ptr;
+    restrict /*readonly*/ b_vsm_globals_block u_vsm_globals_ptr;
     restrict readonly b_vsm_virtual_page_table_block u_virt_page_table_ptr;
 };
 
@@ -235,12 +235,12 @@ void main() {
         color += light_intensity * (light_diffuse + light_specular) * base_color * shadow_factor;
     }
     /*color *= _debug_clipmap_colors[clipmap_level];
-    const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
+    const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
     if (
-        virtual_page_uv.x < 0.02 ||
-        virtual_page_uv.y < 0.02 ||
-        virtual_page_uv.x > 0.98 ||
-        virtual_page_uv.y > 0.98
+        virtual_page_uv.x < 0.01 ||
+        virtual_page_uv.y < 0.01 ||
+        virtual_page_uv.x > 0.99 ||
+        virtual_page_uv.y > 0.99
     ) {
         color = vec3(1.0, 0.0125, 0.0125);
     }*/

@@ -538,7 +538,7 @@ namespace test {
         {
             auto directional_light = directional_light_t();
             directional_light.direction = polar_to_cartesian(_state.vsm.elevation, _state.vsm.azimuth);
-            directional_light.intensity = 1.0f;
+            directional_light.intensity = _state.vsm.light_intensity;
             _state.directional_lights[0] = directional_light;
         }
         directional_light_buffer.insert(_state.directional_lights);
@@ -828,12 +828,27 @@ namespace test {
                 })
             });
             _gui.main_sampler = ir::sampler_t::make(*_device, {
-                .name = "gui_sampler",
+                .name = "gui_main_sampler",
                 .filter = { ir::sampler_filter_t::e_nearest },
                 .mip_mode = ir::sampler_mipmap_mode_t::e_nearest,
                 .address_mode = { ir::sampler_address_mode_t::e_repeat },
                 .border_color = ir::sampler_border_color_t::e_float_opaque_black,
             });
+            _gui.texture_viewer = ir::pipeline_t::make(*_device, {
+                .name = "gui_texture_viewer_pipeline",
+                .compute = "../shaders/gui/viewer.comp.glsl"
+            });
+            _gui.texture_viewer_image = ir::image_t::make(*_device, {
+            .name = "gui_main_attachment",
+            .width = 512,
+            .height = 512,
+            .usage =
+                ir::image_usage_t::e_storage |
+                ir::image_usage_t::e_sampled |
+                ir::image_usage_t::e_transfer_dst,
+            .format = ir::resource_format_t::e_r8g8b8a8_unorm,
+            .view = ir::default_image_view_info,
+        });
         }
         _gui.main_image = ir::image_t::make_from_attachment(*_device, _gui.main_pass->attachment(0), {
             .name = "gui_main_attachment",
@@ -1093,6 +1108,7 @@ namespace test {
             });
             _vsm.phys_memory = ir::image_t::make(*_device, {
                 .name = "vsm_phys_memory",
+                .flags = ir::image_flag_t::e_mutable_format,
                 .width = IRIS_VSM_PHYSICAL_BASE_SIZE,
                 .height = IRIS_VSM_PHYSICAL_BASE_SIZE,
                 .usage =
@@ -1102,7 +1118,18 @@ namespace test {
                 .format = ir::resource_format_t::e_r32_uint,
                 .view = ir::default_image_view_info,
             });
+            _vsm.phys_memory_view = ir::image_view_t::make(*_vsm.phys_memory, {
+                .name = "vsm_phys_memory_view",
+                .format = ir::resource_format_t::e_r32_sfloat,
+                .subresource = {
+                    .level = 0,
+                    .level_count = 1,
+                    .layer = 0,
+                    .layer_count = 1,
+                }
+            });
             _vsm.rasterize_hardware = ir::pipeline_t::make(*_device, *_vsm.main_pass, {
+                .name = "vsm_rasterize_hardware_pipeline",
                 .mesh = "../shaders/vsm/rasterize_hardware.mesh.glsl",
                 .fragment = "../shaders/vsm/rasterize_hardware.frag.glsl",
                 .blend = {},
@@ -1111,6 +1138,7 @@ namespace test {
                     ir::dynamic_state_t::e_scissor,
                 },
                 .cull_mode = ir::cull_mode_t::e_front,
+                .depth_flags = ir::depth_state_flag_t::e_enable_clamp,
             });
             _vsm.mark_visible_pages = ir::pipeline_t::make(*_device, {
                 .name = "vsm_mark_visible_pages_pipeline",
@@ -1148,15 +1176,6 @@ namespace test {
             });
 
             _device->graphics_queue().submit([this](ir::command_buffer_t& commands) {
-                commands.image_barrier({
-                    .image = std::cref(*_vsm.hzb.image),
-                    .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
-                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-                    .source_access = ir::resource_access_t::e_none,
-                    .dest_access = ir::resource_access_t::e_shader_storage_read,
-                    .old_layout = ir::image_layout_t::e_undefined,
-                    .new_layout = ir::image_layout_t::e_general,
-                });
                 commands.buffer_barrier({
                     .buffer = _vsm.virt_page_table_buffer->slice(),
                     .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
@@ -1532,8 +1551,6 @@ namespace test {
                 .old_layout = ir::image_layout_t::e_undefined,
                 .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
                 .subresource = {
-                    .level = 0,
-                    .level_count = 1,
                     .layer = i,
                     .layer_count = 1,
                 }
@@ -1545,8 +1562,6 @@ namespace test {
                 ),
                 *_vsm.hzb.image,
                 {
-                    .level = 0,
-                    .level_count = 1,
                     .layer = i,
                     .layer_count = 1,
                 }
@@ -1558,10 +1573,8 @@ namespace test {
                 .source_access = ir::resource_access_t::e_transfer_write,
                 .dest_access = ir::resource_access_t::e_shader_storage_read,
                 .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
-                .new_layout = ir::image_layout_t::e_general,
+                .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
                 .subresource = {
-                    .level = 0,
-                    .level_count = 1,
                     .layer = i,
                     .layer_count = 1,
                 }
@@ -1790,7 +1803,25 @@ namespace test {
             command_buffer.draw_mesh_tasks(_buffer.meshlet_instances->size());
             command_buffer.end_render_pass();
             command_buffer.end_debug_marker();
+            command_buffer.image_barrier({
+                .image = std::cref(*_vsm.phys_memory),
+                .source_stage = ir::pipeline_stage_t::e_fragment_shader,
+                .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_shader_storage_write | ir::resource_access_t::e_shader_storage_read,
+                .old_layout = ir::image_layout_t::e_general,
+                .new_layout = ir::image_layout_t::e_general,
+            });
         }
+        command_buffer.image_barrier({
+            .image = std::cref(*_vsm.phys_memory),
+            .source_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read,
+            .old_layout = ir::image_layout_t::e_general,
+            .new_layout = ir::image_layout_t::e_general,
+        });
         command_buffer.end_debug_marker();
     }
 
@@ -1905,9 +1936,109 @@ namespace test {
                 if (ImGui::CollapsingHeader("VSM Settings", ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth)) {
                     ImGui::DragFloat("Sun Elevation", &_state.vsm.elevation, 1.0f, 0.0f, 360.0f);
                     ImGui::DragFloat("Sun Azimuth", &_state.vsm.azimuth, 1.0f, 0.0f, 360.0f);
+                    ImGui::DragFloat("Sun Light Intensity", &_state.vsm.light_intensity, 1.0f, 0.0f, 16.0f);
                     ImGui::DragFloat("First Clipmap Width", &_state.vsm.global_data.first_width, 1.0f, 1.0f, 100.0f);
                     ImGui::DragFloat("LOD Bias", &_state.vsm.global_data.lod_bias, 0.1f, -3.0f, 3.0f);
                 }
+            }
+            ImGui::End();
+
+            if (ImGui::Begin("Viewer")) {
+                constexpr static auto textures = std::to_array({
+                    "None",
+                    "VSM Physical Memory",
+                    "VSM Page Table"
+                });
+                if (!_state.gui.current_texture_viewer) {
+                    _state.gui.current_texture_viewer = textures[0];
+                }
+                if (ImGui::BeginCombo("Texture", _state.gui.current_texture_viewer)) {
+                    for (auto i = 0_u32; i < textures.size(); ++i) {
+                        const auto is_selected = _state.gui.current_texture_viewer == textures[i];
+                        if (ImGui::Selectable(textures[i], is_selected)) {
+                            _state.gui.current_texture_viewer = textures[i];
+                            switch (i) {
+                                case 0:
+                                    _state.gui.current_texture = nullptr;
+                                    break;
+                                case 1:
+                                    _state.gui.current_texture = _vsm.phys_memory_view.get();
+                                    break;
+                                case 2:
+                                    _state.gui.current_texture = &_vsm.hzb.image->view();
+                                    break;
+                            }
+                            _state.gui.texture_viewer_layer = 0;
+                            _state.gui.texture_viewer_level = 0;
+                        }
+                        if (is_selected) {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                if (_state.gui.current_texture) {
+                    auto type = IRIS_TEXTURE_VIEWER_TYPE_2D_UINT;
+                    auto builder = ir::descriptor_set_builder_t(*_gui.texture_viewer, 0)
+                        .bind_storage_image(6, _gui.texture_viewer_image->view());
+                    if (_state.gui.current_texture_viewer == textures[1]) {
+                        type = IRIS_TEXTURE_VIEWER_TYPE_2D_SFLOAT;
+                    } else if (_state.gui.current_texture_viewer == textures[2]) {
+                        type = IRIS_TEXTURE_VIEWER_TYPE_2D_ARRAY_UINT;
+                    }
+                    builder.bind_combined_image_sampler(type, *_state.gui.current_texture, *_gui.main_sampler);
+                    ImGui::SliderInt("Layer", &_state.gui.texture_viewer_layer, 0, _state.gui.current_texture->image().layers() - 1);
+                    ImGui::SliderInt("Level", &_state.gui.texture_viewer_level, 0, _state.gui.current_texture->image().levels() - 1);
+
+                    const auto image_dispatch = dispatch_work_group_size({
+                        _gui.texture_viewer_image->width(),
+                        _gui.texture_viewer_image->height(),
+                    }, {
+                        16,
+                        16,
+                    });
+
+                    command_buffer.begin_debug_marker("gui_texture_viewer");
+                    command_buffer.bind_pipeline(*_gui.texture_viewer);
+                    command_buffer.bind_descriptor_set(*builder.build());
+                    {
+                        const auto push_constants = ir::make_byte_bag(
+                            type,
+                            _state.gui.texture_viewer_layer,
+                            _state.gui.texture_viewer_level);
+                        command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
+                    }
+                    command_buffer.image_barrier({
+                        .image = std::cref(*_gui.texture_viewer_image),
+                        .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+                        .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                        .source_access = ir::resource_access_t::e_none,
+                        .dest_access = ir::resource_access_t::e_shader_storage_write,
+                        .old_layout = ir::image_layout_t::e_undefined,
+                        .new_layout = ir::image_layout_t::e_general,
+                    });
+                    command_buffer.dispatch(image_dispatch.x, image_dispatch.y);
+                    command_buffer.image_barrier({
+                        .image = std::cref(*_gui.texture_viewer_image),
+                        .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                        .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+                        .source_access = ir::resource_access_t::e_shader_storage_write,
+                        .dest_access = ir::resource_access_t::e_shader_sampled_read,
+                        .old_layout = ir::image_layout_t::e_general,
+                        .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                    });
+                    command_buffer.end_debug_marker();
+
+                    const auto image_set = ir::descriptor_set_builder_t(*_gui.main_layout)
+                        .bind_combined_image_sampler(0, _gui.texture_viewer_image->view(), *_gui.main_sampler)
+                        .build();
+                    ImGui::Image(image_set->handle(), {
+                        _gui.texture_viewer_image->width(),
+                        _gui.texture_viewer_image->height()
+                    });
+                }
+
             }
             ImGui::End();
 

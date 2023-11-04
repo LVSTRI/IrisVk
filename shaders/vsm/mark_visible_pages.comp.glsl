@@ -9,8 +9,8 @@ layout (local_size_x = 16, local_size_y = 16) in;
 layout (set = 0, binding = 0) uniform texture2D u_depth;
 
 layout (scalar, push_constant) restrict uniform u_push_constant_block {
-    restrict readonly b_view_block u_view_ptr;
-    restrict readonly b_vsm_globals_block u_vsm_globals_ptr;
+    restrict /*readonly*/ b_view_block u_view_ptr;
+    restrict /*readonly*/ b_vsm_globals_block u_vsm_globals_ptr;
     restrict writeonly b_vsm_page_request_block u_page_request_ptr;
 };
 

@@ -38,6 +38,13 @@
 #define IRIS_MAIN_VIEW_INDEX 0
 #define IRIS_SHADOW_VIEW_START 1
 
+#define IRIS_TEXTURE_VIEWER_TYPE_2D_SFLOAT 0
+#define IRIS_TEXTURE_VIEWER_TYPE_2D_SINT 1
+#define IRIS_TEXTURE_VIEWER_TYPE_2D_UINT 2
+#define IRIS_TEXTURE_VIEWER_TYPE_2D_ARRAY_SFLOAT 3
+#define IRIS_TEXTURE_VIEWER_TYPE_2D_ARRAY_SINT 4
+#define IRIS_TEXTURE_VIEWER_TYPE_2D_ARRAY_UINT 5
+
 #define IRIS_MAX_DIRECTIONAL_LIGHTS 4
 #define IRIS_MAX_SPARSE_BINDING_UPDATES 16384
 #define IRIS_VSM_VIRTUAL_BASE_SIZE 16384
@@ -89,7 +96,7 @@ namespace test {
     };
 
     struct vsm_global_data_t {
-        float32 first_width = 8.0f;
+        float32 first_width = 4.0f;
         float32 lod_bias = -2.0f;
         float32 resolution_lod_bias = 0.0f;
         uint32 clipmap_count = IRIS_VSM_CLIPMAP_COUNT;
@@ -179,6 +186,7 @@ namespace test {
             ir::arc_ptr<ir::render_pass_t> main_pass;
             ir::arc_ptr<ir::framebuffer_t> main_framebuffer;
             ir::arc_ptr<ir::image_t> phys_memory;
+            ir::arc_ptr<ir::image_view_t> phys_memory_view;
 
             ir::arc_ptr<ir::pipeline_t> mark_visible_pages;
             ir::arc_ptr<ir::pipeline_t> make_allocation_requests;
@@ -201,6 +209,10 @@ namespace test {
 
             ir::arc_ptr<ir::render_pass_t> main_pass;
             ir::arc_ptr<ir::framebuffer_t> main_framebuffer;
+
+            ir::arc_ptr<ir::pipeline_t> texture_viewer;
+            ir::arc_ptr<ir::image_t> texture_viewer_image;
+
             ir::arc_ptr<ir::image_t> main_image;
             ir::arc_ptr<ir::descriptor_layout_t> main_layout;
             ir::arc_ptr<ir::sampler_t> main_sampler;
@@ -244,11 +256,19 @@ namespace test {
             struct {
                 float32 elevation = 260.0f;
                 float32 azimuth = 30.0f;
+                float32 light_intensity = 4.0f;
                 vsm_global_data_t global_data = {};
 
                 uint32 hzb_vis_layer = 0;
                 uint32 hzb_vis_level = 0;
             } vsm;
+
+            struct {
+                const char* current_texture_viewer = nullptr;
+                const ir::image_view_t* current_texture = nullptr;
+                int32 texture_viewer_layer = 0;
+                int32 texture_viewer_level = 0;
+            } gui;
 
             struct {
                 std::deque<float32> frame_times = {};

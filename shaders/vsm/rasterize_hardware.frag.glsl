@@ -24,7 +24,7 @@ layout (scalar, push_constant) restrict uniform u_push_constants_block {
 
 void main() {
     const uvec2 position = uvec2(gl_FragCoord.xy);
-    const uint depth = floatBitsToUint(saturate(gl_FragCoord.z));
+    const uint depth = floatBitsToUint(gl_FragCoord.z);
     const uvec2 virtual_page = position / IRIS_VSM_VIRTUAL_PAGE_SIZE;
     const uint virtual_page_index = virtual_page.x + virtual_page.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
     const uint virtual_page_entry = u_virt_page_table_ptr.data[virtual_page_index + u_view_index * IRIS_VSM_VIRTUAL_PAGE_COUNT];
