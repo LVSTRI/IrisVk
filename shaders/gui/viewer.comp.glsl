@@ -1,5 +1,8 @@
 #version 460
 #extension GL_EXT_scalar_block_layout : enable
+
+#include "intrinsics.glsl"
+
 #define IRIS_TEXTURE_TYPE_2D_SFLOAT 0
 #define IRIS_TEXTURE_TYPE_2D_SINT 1
 #define IRIS_TEXTURE_TYPE_2D_UINT 2
@@ -7,14 +10,16 @@
 #define IRIS_TEXTURE_TYPE_2D_ARRAY_SINT 4
 #define IRIS_TEXTURE_TYPE_2D_ARRAY_UINT 5
 
+#define sampler_partially_bound decorate_with_string("update_after_bind|partially_bound")
+
 layout (local_size_x = 16, local_size_y = 16) in;
 
-layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_SFLOAT) uniform sampler2D u_texture_2d_sfloat;
-layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_SINT) uniform isampler2D u_texture_2d_sint;
-layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_UINT) uniform usampler2D u_texture_2d_uint;
-layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_ARRAY_SFLOAT) uniform sampler2DArray u_texture_2d_array_sfloat;
-layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_ARRAY_SINT) uniform isampler2DArray u_texture_2d_array_sint;
-layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_ARRAY_UINT) uniform usampler2DArray u_texture_2d_array_uint;
+layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_SFLOAT) sampler_partially_bound uniform sampler2D u_texture_2d_sfloat;
+layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_SINT) sampler_partially_bound uniform isampler2D u_texture_2d_sint;
+layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_UINT) sampler_partially_bound uniform usampler2D u_texture_2d_uint;
+layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_ARRAY_SFLOAT) sampler_partially_bound uniform sampler2DArray u_texture_2d_array_sfloat;
+layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_ARRAY_SINT) sampler_partially_bound uniform isampler2DArray u_texture_2d_array_sint;
+layout (set = 0, binding = IRIS_TEXTURE_TYPE_2D_ARRAY_UINT) sampler_partially_bound uniform usampler2DArray u_texture_2d_array_uint;
 
 layout (rgba8, set = 0, binding = 6) restrict writeonly uniform image2D u_image;
 

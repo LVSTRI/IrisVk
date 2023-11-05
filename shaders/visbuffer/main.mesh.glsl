@@ -76,12 +76,10 @@ void main() {
         // avoid branching, get pipelined memory loads
         const uint index = min(thread_index + i * WORK_GROUP_SIZE, index_count - 1);
         const vec3 position = u_vertex_ptr.data[vertex_offset + u_index_ptr.data[index_offset + index]].position;
-        const vec4 clip_position = pvm * vec4(position, 1.0);
-        const vec4 prev_clip_position = prev_pvm * vec4(position, 1.0);
 
         o_vertex_data[index].meshlet_id = meshlet_instance_id;
-        o_vertex_data[index].clip_position = clip_position;
-        o_vertex_data[index].prev_clip_position = prev_clip_position;
+        o_vertex_data[index].clip_position = pvm * vec4(position, 1.0);
+        o_vertex_data[index].prev_clip_position = prev_pvm * vec4(position, 1.0);
         gl_MeshVerticesEXT[index].gl_Position = jittered_pvm * vec4(position, 1.0);
     }
 

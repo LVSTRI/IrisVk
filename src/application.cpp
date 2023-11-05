@@ -261,7 +261,7 @@ namespace test {
     auto application_t::_load_models() noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto paths = std::to_array<fs::path>({
-            "../models/compressed/powerplant2/powerplant2.glb",
+            "../models/compressed/bistro/bistro.glb",
         });
         auto models = std::vector<meshlet_model_t>();
         for (const auto& path : paths) {
@@ -463,6 +463,7 @@ namespace test {
         _visbuffer_resolve_pass();
         _visbuffer_dlss_pass();
         _visbuffer_tonemap_pass();
+        _debug_emit_barriers();
         _gui_main_pass();
         _swapchain_copy_pass(image_index);
         command_buffer.end();
@@ -580,7 +581,7 @@ namespace test {
             const auto& sun_dir_light = _state.directional_lights[0];
             for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
                 const auto width = _state.vsm.global_data.first_width * (1 << i) / 2.0f;
-                const auto center = _camera.position();
+                const auto center = glm::trunc(_camera.position());
 
                 auto view = view_t();
                 view.projection = glm::ortho(-width, width, -width, width, -2000.0f, 2000.0f);
@@ -1573,7 +1574,7 @@ namespace test {
                 .source_access = ir::resource_access_t::e_transfer_write,
                 .dest_access = ir::resource_access_t::e_shader_storage_read,
                 .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
-                .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+                .new_layout = ir::image_layout_t::e_general,
                 .subresource = {
                     .layer = i,
                     .layer_count = 1,
@@ -1816,13 +1817,44 @@ namespace test {
         command_buffer.image_barrier({
             .image = std::cref(*_vsm.phys_memory),
             .source_stage = ir::pipeline_stage_t::e_fragment_shader,
-            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage =
+                ir::pipeline_stage_t::e_compute_shader |
+                ir::pipeline_stage_t::e_fragment_shader,
             .source_access = ir::resource_access_t::e_shader_storage_write,
-            .dest_access = ir::resource_access_t::e_shader_storage_read,
+            .dest_access = ir::resource_access_t::e_shader_read,
             .old_layout = ir::image_layout_t::e_general,
             .new_layout = ir::image_layout_t::e_general,
         });
         command_buffer.end_debug_marker();
+    }
+
+    auto application_t::_debug_emit_barriers() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        command_buffer.image_barrier({
+            .image = std::cref(*_vsm.phys_memory),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_shader_sampled_read,
+            .old_layout = ir::image_layout_t::e_general,
+            .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+        });
+        command_buffer.image_barrier({
+            .image = std::cref(*_vsm.hzb.image),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_shader_sampled_read,
+            .old_layout = ir::image_layout_t::e_general,
+            .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
+        });
     }
 
     auto application_t::_gui_main_pass() noexcept -> void {

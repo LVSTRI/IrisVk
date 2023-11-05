@@ -149,6 +149,7 @@ namespace test {
         auto _vsm_free_pages_pass() noexcept -> void;
         auto _vsm_allocate_pages_pass() noexcept -> void;
         auto _vsm_rasterize_hardware_pass() noexcept -> void;
+        auto _debug_emit_barriers() noexcept -> void;
         auto _gui_main_pass() noexcept -> void;
         auto _swapchain_copy_pass(uint32 image_index) noexcept -> void;
 
