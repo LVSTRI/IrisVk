@@ -43,6 +43,7 @@ namespace ir {
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(image_layout_t, VkImageLayout);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(image_flag_t, VkImageCreateFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(descriptor_type_t, VkDescriptorType);
+        IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(descriptor_binding_flag_t, VkDescriptorBindingFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(shader_stage_t, VkShaderStageFlagBits);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(dynamic_state_t, VkDynamicState);
         IR_NATIVE_ENUM_CONTERPART_TYPE_SPECIALIZATION(cull_mode_t, VkCullModeFlagBits);
@@ -69,6 +70,7 @@ namespace ir {
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageLayout);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkImageCreateFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkDescriptorType);
+        IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkDescriptorBindingFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkShaderStageFlagBits);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkDynamicState);
         IR_NATIVE_ENUM_STRING_FUNC_SPECIALIZATION(VkCullModeFlagBits);
@@ -492,11 +494,11 @@ namespace ir {
         e_protected = VK_IMAGE_CREATE_PROTECTED_BIT,
         e_disjoint = VK_IMAGE_CREATE_DISJOINT_BIT,
         e_corner_sampled_nv = VK_IMAGE_CREATE_CORNER_SAMPLED_BIT_NV,
-        e_sample_locations_compatible_depth_ext = VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT,
-        e_subsampled_ext = VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT,
-        e_descriptor_buffer_capture_replay_ext = VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT,
-        e_multisampled_render_to_single_sampled_ext = VK_IMAGE_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT,
-        e_2d_view_compatible_ext = VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT,
+        e_sample_locations_compatible_depth = VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT,
+        e_subsampled = VK_IMAGE_CREATE_SUBSAMPLED_BIT_EXT,
+        e_descriptor_buffer_capture_replay = VK_IMAGE_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT,
+        e_multisampled_render_to_single_sampled = VK_IMAGE_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT,
+        e_2d_view_compatible = VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT,
         e_fragment_density_map_offset_qcom = VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_QCOM,
         e_split_instance_bind_regions_khr = VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT_KHR,
         e_2d_array_compatible_khr = VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR,
@@ -632,6 +634,18 @@ namespace ir {
         e_block_match_image_qcom = VK_DESCRIPTOR_TYPE_BLOCK_MATCH_IMAGE_QCOM,
         e_mutable = VK_DESCRIPTOR_TYPE_MUTABLE_EXT,
         e_mutable_valve = VK_DESCRIPTOR_TYPE_MUTABLE_VALVE,
+    };
+
+    // VkDescriptorBindingFlagBits
+    enum class descriptor_binding_flag_t : uint32 {
+        e_update_after_bind = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
+        e_update_unused_while_pending = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT,
+        e_partially_bound = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+        e_variable_descriptor_count = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT,
+        e_update_after_bind_ext = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT,
+        e_update_unused_while_pending_ext = VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT_EXT,
+        e_partially_bound_ext = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT_EXT,
+        e_variable_descriptor_count_ext = VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT,
     };
     
     // VkShaderStageFlagBits
@@ -777,7 +791,7 @@ namespace ir {
         e_push_descriptors_descriptor_buffer = VK_BUFFER_USAGE_PUSH_DESCRIPTORS_DESCRIPTOR_BUFFER_BIT_EXT,
         e_micromap_build_input_read_only = VK_BUFFER_USAGE_MICROMAP_BUILD_INPUT_READ_ONLY_BIT_EXT,
         e_micromap_storage = VK_BUFFER_USAGE_MICROMAP_STORAGE_BIT_EXT,
-        e_ray_tracing_bit_nv = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
+        e_ray_tracing_nv = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV,
     };
     
     // VkMemoryPropertyFlagBits
@@ -788,9 +802,9 @@ namespace ir {
         e_host_cached = VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
         e_lazily_allocated = VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT,
         e_protected = VK_MEMORY_PROPERTY_PROTECTED_BIT,
-        e_device_coherent_bit_amd = VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD,
-        e_device_uncached_bit_amd = VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD,
-        e_rdma_capable_bit_nv = VK_MEMORY_PROPERTY_RDMA_CAPABLE_BIT_NV,
+        e_device_coherent_amd = VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD,
+        e_device_uncached_amd = VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD,
+        e_rdma_capable_nv = VK_MEMORY_PROPERTY_RDMA_CAPABLE_BIT_NV,
     };
 
     // VkComponentSwizzle

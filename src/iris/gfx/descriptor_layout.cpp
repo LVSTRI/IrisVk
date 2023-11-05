@@ -33,14 +33,7 @@ namespace ir {
         auto binding_flags = std::vector<VkDescriptorBindingFlags>(info.bindings.size());
         binding_flags.reserve(info.bindings.size());
         for (const auto& binding : info.bindings) {
-            auto flags = VkDescriptorBindingFlagBits();
-            if (binding.dynamic) {
-                flags =
-                    VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
-                    VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
-                    VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
-            }
-            binding_flags[binding.binding] = flags;
+            binding_flags[binding.binding] = as_enum_counterpart(binding.flags);
         }
 
         auto binding_flags_info = VkDescriptorSetLayoutBindingFlagsCreateInfo();
@@ -105,6 +98,6 @@ namespace ir {
 
     auto descriptor_layout_t::is_dynamic() const noexcept -> bool {
         IR_PROFILE_SCOPED();
-        return !_bindings.empty() && _bindings.back().dynamic;
+        return !_bindings.empty() && _bindings.back().is_dynamic;
     }
 }

@@ -38,7 +38,7 @@ namespace ir {
         auto allocate_info = VkDescriptorSetAllocateInfo();
         if (layout.is_dynamic()) {
             for (const auto& binding : layout.bindings()) {
-                if (binding.dynamic) {
+                if (binding.is_dynamic) {
                     dynamic_count = binding.count;
                     break;
                 }

@@ -34,6 +34,7 @@ namespace ir {
     enum class pipeline_stage_t : uint64;
     enum class resource_access_t : uint64;
     enum class descriptor_type_t : uint32;
+    enum class descriptor_binding_flag_t : uint32;
     enum class shader_stage_t : uint32;
     enum class dynamic_state_t : uint32;
     enum class cull_mode_t : uint32;

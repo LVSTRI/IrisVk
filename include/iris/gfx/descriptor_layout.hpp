@@ -23,7 +23,8 @@ namespace ir {
         uint32 count = 0;
         descriptor_type_t type = {};
         shader_stage_t stage = {};
-        bool dynamic = false;
+        descriptor_binding_flag_t flags = {};
+        bool is_dynamic = false;
 
         IR_NODISCARD constexpr auto operator ==(const descriptor_binding_t& other) const noexcept -> bool = default;
     };
@@ -79,7 +80,8 @@ IR_MAKE_AVALANCHING_TRANSPARENT_HASH_SPECIALIZATION(ir::descriptor_binding_t, ([
     seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::uint32>()(x.count));
     seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::descriptor_type_t>()(x.type));
     seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::shader_stage_t>()(x.stage));
-    seed = ir::akl::wyhash::mix(seed, ir::akl::hash<bool>()(x.dynamic));
+    seed = ir::akl::wyhash::mix(seed, ir::akl::hash<ir::descriptor_binding_flag_t>()(x.flags));
+    seed = ir::akl::wyhash::mix(seed, ir::akl::hash<bool>()(x.is_dynamic));
     return seed;
 }));
 IR_MAKE_TRANSPARENT_EQUAL_TO_SPECIALIZATION(ir::descriptor_binding_t);

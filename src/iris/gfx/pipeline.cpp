@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <regex>
 #include <numeric>
 #include <fstream>
 
@@ -26,6 +27,29 @@ namespace ir {
     namespace shc = shaderc;
 
     using descriptor_bindings = akl::fast_hash_map<uint32, akl::fast_hash_map<uint32, descriptor_binding_t>>;
+
+    static auto split_decoration_string(const std::string& decoration) -> std::vector<std::string> {
+        const auto regex = std::regex(R"(\|)");
+        const auto iterator = std::sregex_token_iterator(decoration.begin(), decoration.end(), regex, -1);
+        return { iterator, {} };
+    }
+
+    static auto make_descriptor_binding_flag_from_decoration(const std::string& decoration) -> descriptor_binding_flag_t {
+        const auto split = split_decoration_string(decoration);
+        auto result = descriptor_binding_flag_t();
+        for (const auto& each : split) {
+            if (each == "update_after_bind") {
+                result |= ir::descriptor_binding_flag_t::e_update_after_bind;
+            } else if (each == "update_unused_while_pending") {
+                result |= ir::descriptor_binding_flag_t::e_update_unused_while_pending;
+            } else if (each == "partially_bound") {
+                result |= ir::descriptor_binding_flag_t::e_partially_bound;
+            } else if (each == "variable_descriptor_count") {
+                result |= ir::descriptor_binding_flag_t::e_variable_descriptor_count;
+            }
+        }
+        return result;
+    }
 
     template <typename R>
     static auto process_resource(
@@ -36,15 +60,21 @@ namespace ir {
         descriptor_bindings& bindings
     ) noexcept -> void {
         for (const auto& each : resources) {
-            const auto set = compiler.get_decoration(each.id, spv::DecorationDescriptorSet);
-            const auto binding = compiler.get_decoration(each.id, spv::DecorationBinding);
+            const auto& set = compiler.get_decoration(each.id, spv::DecorationDescriptorSet);
+            const auto& binding = compiler.get_decoration(each.id, spv::DecorationBinding);
+            const auto& decoration = compiler.get_decoration_string(each.id, spv::DecorationUserSemantic);
             const auto& type = compiler.get_type(each.type_id);
+            auto binding_flags = make_descriptor_binding_flag_from_decoration(decoration);
             // TODO: multidimensional arrays?
             auto count = type.array.empty() ? 1 : type.array[0];
             const auto is_array = !type.array.empty();
             const auto is_dynamic = is_array && type.array[0] == 0;
             if (is_dynamic) {
                 count = 16384_u32;
+                binding_flags |=
+                    descriptor_binding_flag_t::e_update_after_bind |
+                    descriptor_binding_flag_t::e_partially_bound |
+                    descriptor_binding_flag_t::e_variable_descriptor_count;
             }
             auto& layout = bindings[set];
             if (layout.contains(binding)) {
@@ -56,7 +86,8 @@ namespace ir {
                     .count = count,
                     .type = desc_type,
                     .stage = stage,
-                    .dynamic = is_dynamic,
+                    .flags = binding_flags,
+                    .is_dynamic = is_dynamic,
                 };
             }
         }
@@ -220,8 +251,14 @@ namespace ir {
             });
         }
 
+        const auto max_set = std::max_element(
+            desc_bindings.begin(),
+            desc_bindings.end(),
+            [](const auto& lhs, const auto& rhs) {
+                return lhs.first < rhs.first;
+            })->first;
         auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
-        descriptor_layout.reserve(desc_bindings.size());
+        descriptor_layout.resize(1);
         if (desc_bindings.empty()) {
             desc_bindings[0] = {}; // dummy layout
         }
@@ -229,12 +266,15 @@ namespace ir {
             auto& cache = device.cache<descriptor_layout_t>();
             for (const auto& [set, layout] : desc_bindings) {
                 const auto& pair_bindings = layout.values();
-                auto bindings = std::vector<descriptor_binding_t>(pair_bindings.size());
+                auto bindings = std::vector<descriptor_binding_t>(
+                    std::max_element(
+                        pair_bindings.begin(),
+                        pair_bindings.end(),
+                        [](const auto& lhs, const auto& rhs) {
+                            return lhs.first < rhs.first;
+                        })->first + 1);
                 for (const auto& [binding, desc] : pair_bindings) {
                     bindings[binding] = desc;
-                }
-                if (set >= descriptor_layout.size()) {
-                    descriptor_layout.resize(set + 1);
                 }
                 if (cache.contains(bindings)) {
                     descriptor_layout[set] = cache.acquire(bindings);
