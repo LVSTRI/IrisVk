@@ -251,14 +251,17 @@ namespace ir {
             });
         }
 
-        const auto max_set = std::max_element(
-            desc_bindings.begin(),
-            desc_bindings.end(),
-            [](const auto& lhs, const auto& rhs) {
-                return lhs.first < rhs.first;
-            })->first;
+        auto max_set = 1;
+        if (!desc_bindings.empty()) {
+            max_set = 1 + std::max_element(
+                desc_bindings.begin(),
+                desc_bindings.end(),
+                [](const auto& lhs, const auto& rhs) {
+                    return lhs.first < rhs.first;
+                })->first;
+        }
         auto descriptor_layout = std::vector<arc_ptr<descriptor_layout_t>>();
-        descriptor_layout.resize(1);
+        descriptor_layout.resize(max_set);
         if (desc_bindings.empty()) {
             desc_bindings[0] = {}; // dummy layout
         }
@@ -266,13 +269,16 @@ namespace ir {
             auto& cache = device.cache<descriptor_layout_t>();
             for (const auto& [set, layout] : desc_bindings) {
                 const auto& pair_bindings = layout.values();
-                auto bindings = std::vector<descriptor_binding_t>(
-                    std::max_element(
+                auto max_binding = 1;
+                if (!pair_bindings.empty()) {
+                    max_binding = 1 + std::max_element(
                         pair_bindings.begin(),
                         pair_bindings.end(),
                         [](const auto& lhs, const auto& rhs) {
                             return lhs.first < rhs.first;
-                        })->first + 1);
+                        })->first;
+                }
+                auto bindings = std::vector<descriptor_binding_t>(max_binding);
                 for (const auto& [binding, desc] : pair_bindings) {
                     bindings[binding] = desc;
                 }
