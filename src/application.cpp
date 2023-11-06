@@ -584,7 +584,7 @@ namespace test {
                 const auto width = _state.vsm.global_data.first_width * (1 << i) / 2.0f;
 
                 auto view = view_t();
-                view.projection = glm::ortho(-width, width, -width, width, -2000.0f, 2000.0f);
+                view.projection = glm::ortho(-width, width, -width, width, -500.0f, 500.0f);
                 view.projection[1][1] *= -1.0f;
                 view.inv_projection = glm::inverse(view.projection);
                 view.stable_view = glm::lookAt(sun_dir_light.direction, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -595,12 +595,13 @@ namespace test {
 
                 // TODO:
                 {
-                    const auto clip_world_position = view.projection * view.stable_view * glm::vec4(_camera.position(), 1.0f);
+                    const auto clip_world_position = view.stable_proj_view * glm::vec4(_camera.position(), 1.0f);
                     const auto uv_world_position = (glm::vec2(clip_world_position) / clip_world_position.w) * 0.5f;
                     const auto page_offset = glm::ivec2(uv_world_position * glm::vec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE));
                     const auto ndc_shift = 2.0f * (glm::vec2(page_offset) / glm::vec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE));
-                    const auto shifted_projection = glm::translate(glm::mat4(1.0f), glm::vec3(-ndc_shift, 0.0f)) * view.projection;
-                    const auto shifted_view = glm::inverse(view.projection) * shifted_projection * view.stable_view;
+                    const auto world_page_offset = view.inv_stable_proj_view * glm::vec4(ndc_shift, 0.0f, 1.0f);
+                    const auto world_page_offset_shift = glm::vec3(-world_page_offset);
+                    const auto shifted_view = glm::translate(view.stable_view, world_page_offset_shift);
                     view.view = shifted_view;
 
                     _state.vsm.global_data.clipmap_page_offsets[i] = page_offset;
@@ -850,7 +851,7 @@ namespace test {
                 .compute = "../shaders/gui/viewer.comp.glsl"
             });
             _gui.texture_viewer_image = ir::image_t::make(*_device, {
-            .name = "gui_main_attachment",
+            .name = "gui_texture_viewer_image",
             .width = 512,
             .height = 512,
             .usage =
