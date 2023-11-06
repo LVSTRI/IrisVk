@@ -6,6 +6,8 @@
 #define M_GOLDEN 1.6180339887498948482045868343656
 #define M_GOLDEN_CONJ 0.6180339887498948482045868343656
 
+#define IRIS_LAST_MIP_LEVEL 1024.0
+
 float saturate(in float v) {
     return clamp(v, 0.0, 1.0);
 }

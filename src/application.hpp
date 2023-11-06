@@ -100,6 +100,7 @@ namespace test {
         float32 lod_bias = -2.0f;
         float32 resolution_lod_bias = 0.0f;
         uint32 clipmap_count = IRIS_VSM_CLIPMAP_COUNT;
+        glm::ivec2 clipmap_page_offsets[IRIS_VSM_MAX_CLIPMAPS] = {};
     };
 
     template <typename T>
@@ -109,6 +110,7 @@ namespace test {
     };
 
     struct hzb_t {
+        ir::arc_ptr<ir::sampler_t> sampler;
         ir::arc_ptr<ir::image_t> image;
         std::vector<ir::arc_ptr<ir::image_view_t>> views;
     };
@@ -145,6 +147,7 @@ namespace test {
         auto _visbuffer_dlss_pass() noexcept -> void;
         auto _visbuffer_tonemap_pass() noexcept -> void;
         auto _vsm_mark_visible_pages_pass() noexcept -> void;
+        auto _vsm_reduce_page_table_pass() noexcept -> void;
         auto _vsm_request_pages_pass() noexcept -> void;
         auto _vsm_free_pages_pass() noexcept -> void;
         auto _vsm_allocate_pages_pass() noexcept -> void;
@@ -191,6 +194,8 @@ namespace test {
 
             ir::arc_ptr<ir::pipeline_t> mark_visible_pages;
             ir::arc_ptr<ir::pipeline_t> make_allocation_requests;
+            ir::arc_ptr<ir::pipeline_t> reduce_page_table;
+            ir::arc_ptr<ir::pipeline_t> cull_active_pages;
             ir::arc_ptr<ir::pipeline_t> allocate_pages;
             ir::arc_ptr<ir::pipeline_t> free_pages;
             ir::arc_ptr<ir::pipeline_t> rasterize_hardware;
@@ -199,6 +204,8 @@ namespace test {
             ir::arc_ptr<ir::buffer_t<uint32>> allocation_request_buffer;
             ir::arc_ptr<ir::buffer_t<uint32>> phys_page_table_buffer;
             ir::arc_ptr<ir::buffer_t<uint32>> virt_page_table_buffer;
+            ir::arc_ptr<ir::buffer_t<uint32>> meshlet_survivors_buffer;
+            ir::arc_ptr<ir::buffer_t<ir::draw_mesh_tasks_indirect_command_t>> draw_indirect_buffer;
 
             hzb_t hzb;
 

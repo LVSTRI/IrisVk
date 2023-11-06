@@ -26,6 +26,8 @@ layout (scalar, push_constant) restrict uniform u_push_constants_block {
     restrict readonly b_index_block u_index_ptr;
     restrict readonly b_primitive_block u_primitive_ptr;
     restrict readonly b_vsm_virtual_page_table_block u_virt_page_table_ptr;
+    restrict readonly b_vsm_meshlet_survivors_block u_meshlet_survivors_ptr;
+    restrict readonly b_vsm_globals_block u_vsm_globals_ptr;
 
     uint u_view_index;
 };
@@ -39,7 +41,7 @@ shared mat4 pvm;
 
 void main() {
     const uint thread_index = gl_LocalInvocationID.x;
-    const uint meshlet_instance_id = gl_WorkGroupID.x;
+    const uint meshlet_instance_id = u_meshlet_survivors_ptr.data[gl_WorkGroupID.x];
 
     if (thread_index == 0) {
         const uint meshlet_id = u_meshlet_instance_ptr.data[meshlet_instance_id].meshlet_id;

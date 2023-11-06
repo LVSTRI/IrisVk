@@ -35,7 +35,7 @@ void main() {
         position,
         depth
     );
-    const uvec2 virtual_page_position = clamp(virtual_page.position.xy, uvec2(0), uvec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE - 1));
+    const uvec2 virtual_page_position = clamp(virtual_page.stable_position.xy, uvec2(0), uvec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE - 1));
     const uint virtual_page_index = virtual_page_position.x + virtual_page_position.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
     u_page_request_ptr.data[virtual_page_index + virtual_page.clipmap_level * IRIS_VSM_VIRTUAL_PAGE_COUNT] = uint8_t(1);
 }

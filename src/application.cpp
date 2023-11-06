@@ -456,6 +456,7 @@ namespace test {
         _clear_buffer_pass();
         _visbuffer_pass();
         _vsm_mark_visible_pages_pass();
+        _vsm_reduce_page_table_pass();
         _vsm_free_pages_pass();
         _vsm_request_pages_pass();
         _vsm_allocate_pages_pass();
@@ -581,24 +582,33 @@ namespace test {
             const auto& sun_dir_light = _state.directional_lights[0];
             for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
                 const auto width = _state.vsm.global_data.first_width * (1 << i) / 2.0f;
-                const auto center = glm::trunc(_camera.position());
 
                 auto view = view_t();
                 view.projection = glm::ortho(-width, width, -width, width, -2000.0f, 2000.0f);
                 view.projection[1][1] *= -1.0f;
                 view.inv_projection = glm::inverse(view.projection);
-                view.view = glm::lookAt(
-                    center + sun_dir_light.direction,
-                    center,
-                    glm::vec3(0.0f, 1.0f, 0.0f));
-                view.inv_view = glm::inverse(view.view);
                 view.stable_view = glm::lookAt(sun_dir_light.direction, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
                 view.inv_stable_view = glm::inverse(view.stable_view);
-                view.proj_view = view.projection * view.view;
-                view.inv_proj_view = glm::inverse(view.proj_view);
                 view.stable_proj_view = view.projection * view.stable_view;
                 view.inv_stable_proj_view = glm::inverse(view.stable_proj_view);
                 view.eye_position = {};
+
+                // TODO:
+                {
+                    const auto clip_world_position = view.projection * view.stable_view * glm::vec4(_camera.position(), 1.0f);
+                    const auto uv_world_position = (glm::vec2(clip_world_position) / clip_world_position.w) * 0.5f;
+                    const auto page_offset = glm::ivec2(uv_world_position * glm::vec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE));
+                    const auto ndc_shift = 2.0f * (glm::vec2(page_offset) / glm::vec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE));
+                    const auto shifted_projection = glm::translate(glm::mat4(1.0f), glm::vec3(-ndc_shift, 0.0f)) * view.projection;
+                    const auto shifted_view = glm::inverse(view.projection) * shifted_projection * view.stable_view;
+                    view.view = shifted_view;
+
+                    _state.vsm.global_data.clipmap_page_offsets[i] = page_offset;
+                }
+
+                view.inv_view = glm::inverse(view.view);
+                view.proj_view = view.projection * view.view;
+                view.inv_proj_view = glm::inverse(view.proj_view);
 
                 const auto frustum = make_perspective_frustum(view.proj_view);
                 std::memcpy(view.frustum, frustum.data(), sizeof(view.frustum));
@@ -1069,6 +1079,13 @@ namespace test {
                 .flags = ir::buffer_flag_t::e_mapped,
                 .capacity = 1,
             });
+            _vsm.hzb.sampler = ir::sampler_t::make(*_device, {
+                .name = "vsm_hzb_sampler",
+                .filter = { ir::sampler_filter_t::e_nearest },
+                .mip_mode = ir::sampler_mipmap_mode_t::e_nearest,
+                .address_mode = { ir::sampler_address_mode_t::e_repeat },
+                .border_color = ir::sampler_border_color_t::e_int_opaque_white,
+            });
             _vsm.hzb.image = ir::image_t::make(*_device, {
                 .name = "vsm_main_page_table_hzb",
                 .width = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE,
@@ -1082,18 +1099,14 @@ namespace test {
                 .format = ir::resource_format_t::e_r8_uint,
                 .view = ir::default_image_view_info,
             });
-            for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
-                for (auto j = 0_u32; j < _vsm.hzb.image->levels(); ++j) {
-                    _vsm.hzb.views.emplace_back(ir::image_view_t::make(*_vsm.hzb.image, {
-                        .name = std::format("vsm_main_page_table_hzb_clipmap_{}_level_{}", i, j),
-                        .subresource = {
-                            .level = j,
-                            .level_count = 1,
-                            .layer = i,
-                            .layer_count = 1,
-                        }
-                    }));
-                }
+            for (auto i = 0_u32; i < _vsm.hzb.image->levels(); ++i) {
+                _vsm.hzb.views.emplace_back(ir::image_view_t::make(*_vsm.hzb.image, {
+                    .name = std::format("vsm_main_page_table_hzb_level_{}", i),
+                    .subresource = {
+                        .level = i,
+                        .level_count = 1,
+                    }
+                }));
             }
             _vsm.main_pass = ir::render_pass_t::make(*_device, {
                 .name = "vsm_main_pass",
@@ -1149,6 +1162,14 @@ namespace test {
                 .name = "vsm_make_allocation_requests_pipeline",
                 .compute = "../shaders/vsm/make_allocation_requests.comp.glsl",
             });
+            _vsm.reduce_page_table = ir::pipeline_t::make(*_device, {
+                .name = "vsm_reduce_page_table_pipeline",
+                .compute = "../shaders/vsm/reduce_page_table.comp.glsl",
+            });
+            _vsm.cull_active_pages = ir::pipeline_t::make(*_device, {
+                .name = "vsm_cull_active_pages_pipeline",
+                .compute = "../shaders/vsm/cull_active_pages.comp.glsl",
+            });
             _vsm.allocate_pages = ir::pipeline_t::make(*_device, {
                 .name = "vsm_allocate_pages_pipeline",
                 .compute = "../shaders/vsm/allocate_pages.comp.glsl",
@@ -1174,6 +1195,20 @@ namespace test {
                 .usage = ir::buffer_usage_t::e_transfer_dst,
                 .flags = ir::buffer_flag_t::e_resized,
                 .capacity = IRIS_VSM_VIRTUAL_PAGE_COUNT * IRIS_VSM_MAX_CLIPMAPS,
+            });
+            _vsm.meshlet_survivors_buffer = ir::buffer_t<uint32>::make(*_device, {
+                .name = "vsm_meshlet_survivors_buffer",
+                .usage = ir::buffer_usage_t::e_transfer_dst,
+                .flags = ir::buffer_flag_t::e_resized,
+                .capacity = 1 << 20,
+            });
+            _vsm.draw_indirect_buffer = ir::buffer_t<ir::draw_mesh_tasks_indirect_command_t>::make(*_device, {
+                .name = "vsm_draw_indirect_buffer",
+                .usage =
+                    ir::buffer_usage_t::e_transfer_dst |
+                    ir::buffer_usage_t::e_indirect_buffer,
+                .flags = ir::buffer_flag_t::e_resized,
+                .capacity = 1,
             });
 
             _device->graphics_queue().submit([this](ir::command_buffer_t& commands) {
@@ -1552,6 +1587,8 @@ namespace test {
                 .old_layout = ir::image_layout_t::e_undefined,
                 .new_layout = ir::image_layout_t::e_transfer_dst_optimal,
                 .subresource = {
+                    .level = 0,
+                    .level_count = 1,
                     .layer = i,
                     .layer_count = 1,
                 }
@@ -1563,6 +1600,8 @@ namespace test {
                 ),
                 *_vsm.hzb.image,
                 {
+                    .level = 0,
+                    .level_count = 1,
                     .layer = i,
                     .layer_count = 1,
                 }
@@ -1576,6 +1615,8 @@ namespace test {
                 .old_layout = ir::image_layout_t::e_transfer_dst_optimal,
                 .new_layout = ir::image_layout_t::e_general,
                 .subresource = {
+                    .level = 0,
+                    .level_count = 1,
                     .layer = i,
                     .layer_count = 1,
                 }
@@ -1587,6 +1628,71 @@ namespace test {
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_none,
             .dest_access = ir::resource_access_t::e_shader_storage_read,
+        });
+        command_buffer.end_debug_marker();
+    }
+
+    auto application_t::_vsm_reduce_page_table_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        command_buffer.begin_debug_marker("vsm_reduce_page_table_pass");
+        command_buffer.bind_pipeline(*_vsm.reduce_page_table);
+        for (auto i = 1_u32; i < _vsm.hzb.image->levels(); ++i) {
+            const auto reduce_dispatch = dispatch_work_group_size({
+                std::max(_vsm.hzb.image->width() >> i, 1_u32),
+                std::max(_vsm.hzb.image->height() >> i, 1_u32),
+            }, {
+                16,
+                16,
+            });
+            command_buffer.image_barrier({
+                .image = std::cref(*_vsm.hzb.image),
+                .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_none,
+                .dest_access = ir::resource_access_t::e_shader_storage_write,
+                .old_layout = ir::image_layout_t::e_undefined,
+                .new_layout = ir::image_layout_t::e_general,
+                .subresource = {
+                    .level = i,
+                    .level_count = 1,
+                }
+            });
+            command_buffer.bind_descriptor_set(*ir::descriptor_set_builder_t(*_vsm.reduce_page_table, 0)
+                .bind_storage_image(0, *_vsm.hzb.views[i - 1])
+                .bind_storage_image(1, *_vsm.hzb.views[i])
+                .build());
+            command_buffer.dispatch(reduce_dispatch.x, reduce_dispatch.y, IRIS_VSM_CLIPMAP_COUNT);
+            command_buffer.image_barrier({
+                .image = std::cref(*_vsm.hzb.image),
+                .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_shader_storage_read,
+                .old_layout = ir::image_layout_t::e_general,
+                .new_layout = ir::image_layout_t::e_general,
+                .subresource = {
+                    .level = i,
+                    .level_count = 1,
+                }
+            });
+        }
+        command_buffer.image_barrier({
+            .image = std::cref(*_vsm.hzb.image),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage =
+                ir::pipeline_stage_t::e_compute_shader |
+                ir::pipeline_stage_t::e_fragment_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_read,
+            .old_layout = ir::image_layout_t::e_general,
+            .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
         });
         command_buffer.end_debug_marker();
     }
@@ -1750,6 +1856,7 @@ namespace test {
             transform_buffer
         ] = _current_frame_buffers();
 
+        auto& vsm_globals_buffer = *_vsm.globals_buffer[_frame_index];
         auto raster_set = ir::descriptor_set_builder_t(*_vsm.rasterize_hardware, 0)
             .bind_storage_image(0, _vsm.phys_memory->view())
             .build();
@@ -1775,6 +1882,62 @@ namespace test {
             .new_layout = ir::image_layout_t::e_general,
         });
         for (auto i = 0_u32; i < IRIS_VSM_CLIPMAP_COUNT; ++i) {
+            command_buffer.begin_debug_marker("vsm_cull_active_pages_pass");
+            command_buffer.buffer_barrier({
+                .buffer = _vsm.meshlet_survivors_buffer->slice(),
+                .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_shader_storage_write,
+            });
+            command_buffer.buffer_barrier({
+                .buffer = _vsm.draw_indirect_buffer->slice(),
+                .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                .dest_stage = ir::pipeline_stage_t::e_transfer,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_transfer_write,
+            });
+            command_buffer.fill_buffer(_vsm.draw_indirect_buffer->slice(), 0);
+            command_buffer.buffer_barrier({
+                .buffer = _vsm.draw_indirect_buffer->slice(),
+                .source_stage = ir::pipeline_stage_t::e_transfer,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_transfer_write,
+                .dest_access = ir::resource_access_t::e_shader_storage_read | ir::resource_access_t::e_shader_storage_write,
+            });
+            command_buffer.bind_pipeline(*_vsm.cull_active_pages);
+            command_buffer.bind_descriptor_set(*ir::descriptor_set_builder_t(*_vsm.cull_active_pages, 0)
+                .bind_combined_image_sampler(0, _vsm.hzb.image->view(), *_vsm.hzb.sampler)
+                .build());
+            {
+                const auto addresses = std::to_array({
+                    view_buffer.address(),
+                    _buffer.meshlet_instances->address(),
+                    _buffer.meshlets->address(),
+                    transform_buffer.address(),
+                    _vsm.meshlet_survivors_buffer->address(),
+                    _vsm.draw_indirect_buffer->address(),
+                });
+                const auto push_constants = ir::make_byte_bag(addresses, static_cast<uint32>(_buffer.meshlet_instances->size()), i);
+                command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
+            }
+            command_buffer.dispatch(dispatch_work_group_size(_buffer.meshlet_instances->size(), 256));
+            command_buffer.buffer_barrier({
+                .buffer = _vsm.draw_indirect_buffer->slice(),
+                .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                .dest_stage = ir::pipeline_stage_t::e_draw_indirect,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_indirect_command_read,
+            });
+            command_buffer.buffer_barrier({
+                .buffer = _vsm.meshlet_survivors_buffer->slice(),
+                .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                .dest_stage = ir::pipeline_stage_t::e_mesh_shader,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_shader_storage_read,
+            });
+            command_buffer.end_debug_marker();
+
             command_buffer.begin_debug_marker("vsm_clipmap_rasterize_pass");
             command_buffer.begin_render_pass(*_vsm.main_framebuffer, {});
             command_buffer.set_viewport({
@@ -1797,11 +1960,13 @@ namespace test {
                     _buffer.indices->address(),
                     _buffer.primitives->address(),
                     _vsm.virt_page_table_buffer->address(),
+                    _vsm.meshlet_survivors_buffer->address(),
+                    vsm_globals_buffer.address(),
                 });
                 const auto push_constants = ir::make_byte_bag(addresses, i);
                 command_buffer.push_constants(ir::shader_stage_t::e_mesh | ir::shader_stage_t::e_fragment, 0, sizeof(push_constants), &push_constants);
             }
-            command_buffer.draw_mesh_tasks(_buffer.meshlet_instances->size());
+            command_buffer.draw_mesh_tasks_indirect(_vsm.draw_indirect_buffer->slice(), 1);
             command_buffer.end_render_pass();
             command_buffer.end_debug_marker();
             command_buffer.image_barrier({
@@ -1839,15 +2004,6 @@ namespace test {
 
         command_buffer.image_barrier({
             .image = std::cref(*_vsm.phys_memory),
-            .source_stage = ir::pipeline_stage_t::e_compute_shader,
-            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
-            .source_access = ir::resource_access_t::e_none,
-            .dest_access = ir::resource_access_t::e_shader_sampled_read,
-            .old_layout = ir::image_layout_t::e_general,
-            .new_layout = ir::image_layout_t::e_shader_read_only_optimal,
-        });
-        command_buffer.image_barrier({
-            .image = std::cref(*_vsm.hzb.image),
             .source_stage = ir::pipeline_stage_t::e_compute_shader,
             .dest_stage = ir::pipeline_stage_t::e_compute_shader,
             .source_access = ir::resource_access_t::e_none,

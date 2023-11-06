@@ -203,10 +203,10 @@ void main() {
 
     float shadow_factor = 1.0;
     {
-        const uvec2 virtual_page_position = clamp(virtual_page.position.xy, uvec2(0), uvec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE - 1));
+        const uvec2 virtual_page_position = clamp(virtual_page.stable_position.xy, uvec2(0), uvec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE - 1));
         const uint virtual_page_index = virtual_page_position.x + virtual_page_position.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
         const uint virtual_page_entry = u_virt_page_table_ptr.data[virtual_page_index +  clipmap_level * IRIS_VSM_VIRTUAL_PAGE_COUNT];
-        const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
+        const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
         if (is_virtual_page_backed(virtual_page_entry)) {
             const uvec2 physical_page_corner = calculate_physical_page_texel_corner(virtual_page_entry);
             const uvec2 physical_texel = physical_page_corner + uvec2(virtual_page_uv * IRIS_VSM_PHYSICAL_PAGE_SIZE);
@@ -234,7 +234,7 @@ void main() {
         color += light_ambient * base_color;
         color += light_intensity * (light_diffuse + light_specular) * base_color * shadow_factor;
     }
-    /*color *= _debug_clipmap_colors[clipmap_level];
+    color *= _debug_clipmap_colors[clipmap_level];
     const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
     if (
         virtual_page_uv.x < 0.01 ||
@@ -243,6 +243,6 @@ void main() {
         virtual_page_uv.y > 0.99
     ) {
         color = vec3(1.0, 0.0125, 0.0125);
-    }*/
+    }
     imageStore(u_output, ivec2(gl_GlobalInvocationID.xy), vec4(color, 1.0));
 }

@@ -76,4 +76,8 @@ layout (scalar, buffer_reference) restrict buffer b_vsm_debug_allocation_total_b
     uint count;
 };
 
+layout (scalar, buffer_reference) restrict buffer b_vsm_meshlet_survivors_block {
+    uint[] data;
+};
+
 #endif

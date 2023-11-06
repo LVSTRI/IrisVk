@@ -1,6 +1,8 @@
 #ifndef IRIS_DATA_HEADER
 #define IRIS_DATA_HEADER
 
+#define IRIS_VSM_MAX_CLIPMAPS 32
+
 struct draw_mesh_tasks_indirect_command_t {
     uint x;
     uint y;
@@ -84,6 +86,7 @@ struct vsm_global_data_t {
     float lod_bias;
     float resolution_lod_bias;
     uint clipmap_count;
+    ivec2[IRIS_VSM_MAX_CLIPMAPS] clipmap_page_offsets;
 };
 
 #endif
