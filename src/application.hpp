@@ -47,7 +47,7 @@
 
 #define IRIS_MAX_DIRECTIONAL_LIGHTS 4
 #define IRIS_MAX_SPARSE_BINDING_UPDATES 16384
-#define IRIS_VSM_VIRTUAL_BASE_SIZE 16384
+#define IRIS_VSM_VIRTUAL_BASE_SIZE 8192
 #define IRIS_VSM_VIRTUAL_BASE_RESOLUTION (IRIS_VSM_VIRTUAL_BASE_SIZE * IRIS_VSM_VIRTUAL_BASE_SIZE)
 #define IRIS_VSM_VIRTUAL_PAGE_SIZE 128
 #define IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE (IRIS_VSM_VIRTUAL_BASE_SIZE / IRIS_VSM_VIRTUAL_PAGE_SIZE)
@@ -96,7 +96,7 @@ namespace test {
     };
 
     struct vsm_global_data_t {
-        float32 first_width = 4.0f;
+        float32 first_width = 12.0f;
         float32 lod_bias = -1.5f;
         float32 resolution_lod_bias = 0.0f;
         uint32 clipmap_count = IRIS_VSM_CLIPMAP_COUNT;

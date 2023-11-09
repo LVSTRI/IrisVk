@@ -3,6 +3,7 @@
 #extension GL_EXT_scalar_block_layout : enable
 #extension GL_EXT_buffer_reference : enable
 #extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_debug_printf : enable
 #extension GL_EXT_shader_explicit_arithmetic_types : enable
 
 #include "vsm/common.glsl"
@@ -29,15 +30,17 @@ layout (scalar, push_constant) restrict uniform u_push_constant_block {
 };
 
 vec4 project_screen_aabb(in aabb_t aabb, in mat4 transform, in mat4 proj_view) {
+    const vec3 aabb_min = aabb.min - vec3(1, 1, 0);
+    const vec3 aabb_max = aabb.max + vec3(1, 1, 0);
     const vec3[] corners = vec3[](
-        vec3(aabb.min.x, aabb.min.y, aabb.min.z),
-        vec3(aabb.min.x, aabb.min.y, aabb.max.z),
-        vec3(aabb.min.x, aabb.max.y, aabb.min.z),
-        vec3(aabb.min.x, aabb.max.y, aabb.max.z),
-        vec3(aabb.max.x, aabb.min.y, aabb.min.z),
-        vec3(aabb.max.x, aabb.min.y, aabb.max.z),
-        vec3(aabb.max.x, aabb.max.y, aabb.min.z),
-        vec3(aabb.max.x, aabb.max.y, aabb.max.z)
+        vec3(aabb_min.x, aabb_min.y, aabb_min.z),
+        vec3(aabb_min.x, aabb_min.y, aabb_max.z),
+        vec3(aabb_min.x, aabb_max.y, aabb_min.z),
+        vec3(aabb_min.x, aabb_max.y, aabb_max.z),
+        vec3(aabb_max.x, aabb_min.y, aabb_min.z),
+        vec3(aabb_max.x, aabb_min.y, aabb_max.z),
+        vec3(aabb_max.x, aabb_max.y, aabb_min.z),
+        vec3(aabb_max.x, aabb_max.y, aabb_max.z)
     );
     vec2 min_xy = vec2(1.0);
     vec2 max_xy = vec2(0.0);
@@ -50,7 +53,45 @@ vec4 project_screen_aabb(in aabb_t aabb, in mat4 transform, in mat4 proj_view) {
     return vec4(min_xy, max_xy);
 }
 
-bool is_meshlet_visible(in vec4 box_uvs) {
+bool is_aabb_inside_plane(in vec3 center, in vec3 extent, in vec4 plane) {
+    const vec3 normal = plane.xyz;
+    const float radius = dot(extent, abs(normal));
+    return (dot(normal, center) - plane.w) >= -radius;
+}
+
+bool is_meshlet_visible(in aabb_t aabb, in mat4 transform, in view_t view) {
+    // Frustum
+    /*{
+        const vec3 aabb_min = aabb.min - vec3(1, 1, 0);
+        const vec3 aabb_max = aabb.max + vec3(1, 1, 0);
+        const vec3 aabb_center = (aabb_min + aabb_max) * 0.5;
+        const vec3 aabb_extent = aabb_max - aabb_center;
+        const vec3 world_aabb_center = vec3(transform * vec4(aabb_center, 1.0));
+        const vec3 right = vec3(transform[0]) * aabb_extent.x;
+        const vec3 up = vec3(transform[1]) * aabb_extent.y;
+        const vec3 forward = vec3(-transform[2]) * aabb_extent.z;
+        const vec3 world_aabb_extent = vec3(
+            abs(dot(vec3(1.0, 0.0, 0.0), right)) +
+            abs(dot(vec3(1.0, 0.0, 0.0), up)) +
+            abs(dot(vec3(1.0, 0.0, 0.0), forward)),
+
+            abs(dot(vec3(0.0, 1.0, 0.0), right)) +
+            abs(dot(vec3(0.0, 1.0, 0.0), up)) +
+            abs(dot(vec3(0.0, 1.0, 0.0), forward)),
+
+            abs(dot(vec3(0.0, 0.0, 1.0), right)) +
+            abs(dot(vec3(0.0, 0.0, 1.0), up)) +
+            abs(dot(vec3(0.0, 0.0, 1.0), forward))
+        );
+        for (uint i = 0; i < 6; ++i) {
+            if (!is_aabb_inside_plane(world_aabb_center, world_aabb_extent, view.frustum[i])) {
+                return false;
+            }
+        }
+    }*/
+
+    // HZB
+    const vec4 box_uvs = project_screen_aabb(aabb, transform, view.stable_proj_view);
     const vec2 min_xy = box_uvs.xy;
     const vec2 max_xy = box_uvs.zw;
     const vec2 hzb_size = vec2(textureSize(u_hzb, 0));
@@ -84,10 +125,10 @@ void main() {
     const uint instance_id = u_meshlet_instance_ptr.data[meshlet_instance_id].instance_id;
 
     const aabb_t aabb = u_meshlet_ptr.data[meshlet_id].aabb;
+    const view_t view = u_view_ptr.data[IRIS_SHADOW_VIEW_START_INDEX + u_clipmap_index];
     const mat4 transform = u_transform_ptr.data[instance_id].model;
-    const mat4 proj_view = u_view_ptr.data[IRIS_SHADOW_VIEW_START_INDEX + u_clipmap_index].stable_proj_view;
 
-    if (is_meshlet_visible(project_screen_aabb(aabb, transform, proj_view))) {
+    if (is_meshlet_visible(aabb, transform, view)) {
         const uint slot = atomicAdd(b_vsm_dispatch_command.data.x, 1);
         b_vsm_meshlet_survivors.data[slot] = meshlet_instance_id;
     }

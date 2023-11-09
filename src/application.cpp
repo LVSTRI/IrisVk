@@ -584,7 +584,7 @@ namespace test {
                 const auto width = _state.vsm.global_data.first_width * (1 << i) / 2.0f;
 
                 auto view = view_t();
-                view.projection = glm::ortho(-width, width, -width, width, -500.0f, 500.0f);
+                view.projection = glm::ortho(-width, width, -width, width, -1000.0f, 1000.0f);
                 view.projection[1][1] *= -1.0f;
                 view.inv_projection = glm::inverse(view.projection);
                 view.stable_view = glm::lookAt(sun_dir_light.direction, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

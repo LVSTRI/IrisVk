@@ -132,6 +132,27 @@ mat3 make_tbn(in mat3 transform, in vec3 normal, in vec4 tangent) {
     return mat3(T, B, N);
 }
 
+bool try_sample_vsm_clipmap(in uint level, in vec2 uv, in vec2 world_offset, out float depth) {
+    if (level < 0 || level > u_vsm_globals_ptr.data.clipmap_count) {
+        return false;
+    }
+    const uvec2 clipmap_texels = uvec2(IRIS_VSM_VIRTUAL_PAGE_SIZE * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
+    const float first_clipmap_texel_length = u_vsm_globals_ptr.data.first_width / float(IRIS_VSM_VIRTUAL_BASE_SIZE);
+    const vec2 clipmap_size_world = exp2(level) * first_clipmap_texel_length * clipmap_texels;
+    const vec2 offset_uv = fract(uv + world_offset / clipmap_size_world);
+    const ivec2 texel = ivec2(offset_uv * clipmap_texels);
+    const ivec2 page = texel / IRIS_VSM_VIRTUAL_PAGE_SIZE;
+    const ivec2 page_texel = texel % IRIS_VSM_VIRTUAL_PAGE_SIZE;
+    const uint page_index = page.x + page.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
+    const uint page_entry = u_virt_page_table_ptr.data[page_index + level * IRIS_VSM_VIRTUAL_PAGE_COUNT];
+    if (!is_virtual_page_backed(page_entry)) {
+        return false;
+    }
+    const uvec2 physical_page_corner = calculate_physical_page_texel_corner(page_entry);
+    depth = uintBitsToFloat(imageLoad(u_vsm, ivec2(physical_page_corner + page_texel)).x);
+    return true;
+}
+
 void main() {
     const ivec2 size = imageSize(u_visbuffer);
     if (any(greaterThanEqual(gl_GlobalInvocationID.xy, size))) {
@@ -199,19 +220,30 @@ void main() {
         uvec2(gl_GlobalInvocationID.xy),
         v_depth
     );
-    const uint clipmap_level = virtual_page.clipmap_level;
+    const int clipmap_level = int(virtual_page.clipmap_level);
 
-    float shadow_factor = 1.0;
+    float shadow_factor = 0.0;
     {
-        const uvec2 virtual_page_position = clamp(virtual_page.stable_position.xy, uvec2(0), uvec2(IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE - 1));
-        const uint virtual_page_index = virtual_page_position.x + virtual_page_position.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
-        const uint virtual_page_entry = u_virt_page_table_ptr.data[virtual_page_index +  clipmap_level * IRIS_VSM_VIRTUAL_PAGE_COUNT];
-        const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
-        if (is_virtual_page_backed(virtual_page_entry)) {
-            const uvec2 physical_page_corner = calculate_physical_page_texel_corner(virtual_page_entry);
-            const uvec2 physical_texel = physical_page_corner + uvec2(virtual_page_uv * IRIS_VSM_PHYSICAL_PAGE_SIZE);
-            const float depth = uintBitsToFloat(imageLoad(u_vsm, ivec2(physical_texel)).r);
-            shadow_factor = depth < virtual_page.depth ? 0.0 : 1.0;
+        float depth = 0.0;
+        uint count = 0;
+        for (int i = 0; i < 64; ++i) {
+            const int x = i % 8 - 3;
+            const int y = i / 8 - 3;
+            if (try_sample_vsm_clipmap(clipmap_level, virtual_page.ndc_uv * 0.5 + 0.5, vec2(x, y) / 1024.0, depth)) {
+                shadow_factor += depth < virtual_page.depth ? 0.0 : 1.0;
+                count++;
+            } else if (try_sample_vsm_clipmap(clipmap_level - 1, (2.0 * virtual_page.ndc_uv) * 0.5 + 0.5, vec2(x, y) / 1024.0, depth)) {
+                shadow_factor += depth < virtual_page.depth ? 0.0 : 1.0;
+                count++;
+            } else if (try_sample_vsm_clipmap(clipmap_level + 1, (0.5 * virtual_page.ndc_uv) * 0.5 + 0.5, vec2(x, y) / 1024.0, depth)) {
+                shadow_factor += depth < virtual_page.depth ? 0.0 : 1.0;
+                count++;
+            }
+        }
+        if (count == 0) {
+            shadow_factor = 1.0;
+        } else {
+            shadow_factor /= count;
         }
     }
 
