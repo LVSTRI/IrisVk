@@ -51,33 +51,4 @@ layout (scalar, buffer_reference) restrict buffer b_directional_light_block {
     directional_light_t[] data;
 };
 
-layout (scalar, buffer_reference) restrict buffer b_vsm_page_request_block {
-    uint8_t[] data;
-};
-
-layout (scalar, buffer_reference) restrict buffer b_vsm_globals_block {
-    vsm_global_data_t data;
-};
-
-layout (scalar, buffer_reference) restrict buffer b_vsm_physical_page_table_block {
-    uint[] data;
-};
-
-layout (scalar, buffer_reference) restrict buffer b_vsm_virtual_page_table_block {
-    uint[] data;
-};
-
-layout (scalar, buffer_reference) restrict buffer b_vsm_allocate_request_block {
-    uint count;
-    uint[] data;
-};
-
-layout (scalar, buffer_reference) restrict buffer b_vsm_debug_allocation_total_block {
-    uint count;
-};
-
-layout (scalar, buffer_reference) restrict buffer b_vsm_meshlet_survivors_block {
-    uint[] data;
-};
-
 #endif

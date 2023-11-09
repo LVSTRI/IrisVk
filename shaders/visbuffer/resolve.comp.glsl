@@ -8,22 +8,20 @@
 #extension GL_EXT_shader_explicit_arithmetic_types : enable
 
 #include "visbuffer/common.glsl"
-#include "vsm/common.glsl"
 #include "utilities.glsl"
 #include "buffer.glsl"
 
 layout (local_size_x = 16, local_size_y = 16) in;
 
 layout (set = 0, binding = 0) uniform texture2D u_depth;
-layout (r32ui, set = 0, binding = 1) restrict readonly uniform uimage2D u_vsm;
-layout (r32ui, set = 0, binding = 2) restrict readonly uniform uimage2D u_visbuffer;
-layout (rgba32f, set = 0, binding = 3) restrict writeonly uniform image2D u_output;
+layout (r32ui, set = 0, binding = 1) restrict readonly uniform uimage2D u_visbuffer;
+layout (rgba32f, set = 0, binding = 2) restrict writeonly uniform image2D u_output;
 
-layout (set = 0, binding = 4) uniform sampler u_sampler;
-layout (set = 0, binding = 5) uniform texture2D[] u_textures;
+layout (set = 0, binding = 3) uniform sampler u_sampler;
+layout (set = 0, binding = 4) uniform texture2D[] u_textures;
 
-layout (scalar, push_constant) restrict uniform u_push_constants_block {
-    restrict /*readonly*/ b_view_block u_view_ptr;
+layout (scalar, push_constant) restrict readonly uniform u_push_constants_block {
+    restrict readonly b_view_block u_view_ptr;
     restrict readonly b_meshlet_instance_block u_meshlet_instance_ptr;
     restrict readonly b_meshlet_block u_meshlet_ptr;
     restrict readonly b_transform_block u_transform_ptr;
@@ -33,29 +31,7 @@ layout (scalar, push_constant) restrict uniform u_push_constants_block {
 
     restrict readonly b_material_block u_material_ptr;
     restrict readonly b_directional_light_block u_dir_light_ptr;
-
-    restrict /*readonly*/ b_vsm_globals_block u_vsm_globals_ptr;
-    restrict readonly b_vsm_virtual_page_table_block u_virt_page_table_ptr;
 };
-
-const vec3[] _debug_clipmap_colors = vec3[](
-    vec3(1.0, 0.5, 0.5),
-    vec3(0.5, 1.0, 0.5),
-    vec3(0.5, 0.5, 1.0),
-    vec3(1.0, 1.0, 0.5),
-    vec3(1.0, 0.5, 1.0),
-    vec3(0.5, 1.0, 1.0),
-    vec3(1.0, 0.5, 0.0),
-    vec3(0.5, 1.0, 0.0),
-    vec3(0.0, 0.5, 1.0),
-    vec3(1.0, 0.0, 0.5),
-    vec3(0.0, 1.0, 0.5),
-    vec3(0.5, 0.0, 1.0),
-    vec3(1.0, 0.5, 0.5),
-    vec3(0.5, 1.0, 0.5),
-    vec3(0.5, 0.5, 1.0),
-    vec3(1.0, 1.0, 0.5)
-);
 
 uint[3] load_primitive_indices(in uint offset, in uint index) {
     return uint[3](
@@ -132,27 +108,6 @@ mat3 make_tbn(in mat3 transform, in vec3 normal, in vec4 tangent) {
     return mat3(T, B, N);
 }
 
-bool try_sample_vsm_clipmap(in uint level, in vec2 uv, in vec2 world_offset, out float depth) {
-    if (level < 0 || level > u_vsm_globals_ptr.data.clipmap_count) {
-        return false;
-    }
-    const uvec2 clipmap_texels = uvec2(IRIS_VSM_VIRTUAL_PAGE_SIZE * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
-    const float first_clipmap_texel_length = u_vsm_globals_ptr.data.first_width / float(IRIS_VSM_VIRTUAL_BASE_SIZE);
-    const vec2 clipmap_size_world = exp2(level) * first_clipmap_texel_length * clipmap_texels;
-    const vec2 offset_uv = fract(uv + world_offset / clipmap_size_world);
-    const ivec2 texel = ivec2(offset_uv * clipmap_texels);
-    const ivec2 page = texel / IRIS_VSM_VIRTUAL_PAGE_SIZE;
-    const ivec2 page_texel = texel % IRIS_VSM_VIRTUAL_PAGE_SIZE;
-    const uint page_index = page.x + page.y * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE;
-    const uint page_entry = u_virt_page_table_ptr.data[page_index + level * IRIS_VSM_VIRTUAL_PAGE_COUNT];
-    if (!is_virtual_page_backed(page_entry)) {
-        return false;
-    }
-    const uvec2 physical_page_corner = calculate_physical_page_texel_corner(page_entry);
-    depth = uintBitsToFloat(imageLoad(u_vsm, ivec2(physical_page_corner + page_texel)).x);
-    return true;
-}
-
 void main() {
     const ivec2 size = imageSize(u_visbuffer);
     if (any(greaterThanEqual(gl_GlobalInvocationID.xy, size))) {
@@ -212,41 +167,6 @@ void main() {
         vertex_tangents[2]
     )));
 
-    const virtual_page_info_t virtual_page = virtual_page_info_from_depth(
-        u_view_ptr,
-        u_vsm_globals_ptr,
-        vec2(size),
-        inv_jittered_proj_view,
-        uvec2(gl_GlobalInvocationID.xy),
-        v_depth
-    );
-    const int clipmap_level = int(virtual_page.clipmap_level);
-
-    float shadow_factor = 0.0;
-    {
-        float depth = 0.0;
-        uint count = 0;
-        for (int i = 0; i < 64; ++i) {
-            const int x = i % 8 - 3;
-            const int y = i / 8 - 3;
-            if (try_sample_vsm_clipmap(clipmap_level, virtual_page.ndc_uv * 0.5 + 0.5, vec2(x, y) / 1024.0, depth)) {
-                shadow_factor += depth < virtual_page.depth ? 0.0 : 1.0;
-                count++;
-            } else if (try_sample_vsm_clipmap(clipmap_level - 1, (2.0 * virtual_page.ndc_uv) * 0.5 + 0.5, vec2(x, y) / 1024.0, depth)) {
-                shadow_factor += depth < virtual_page.depth ? 0.0 : 1.0;
-                count++;
-            } else if (try_sample_vsm_clipmap(clipmap_level + 1, (0.5 * virtual_page.ndc_uv) * 0.5 + 0.5, vec2(x, y) / 1024.0, depth)) {
-                shadow_factor += depth < virtual_page.depth ? 0.0 : 1.0;
-                count++;
-            }
-        }
-        if (count == 0) {
-            shadow_factor = 1.0;
-        } else {
-            shadow_factor /= count;
-        }
-    }
-
     const float light_ambient = 0.025;
     vec3 color = vec3(0.0);
     {
@@ -264,17 +184,7 @@ void main() {
         const float light_diffuse = saturate(dot(normal, light_dir));
         const float light_specular = pow(saturate(dot(reflect(-light_dir, normal), view_direction)), 64.0);
         color += light_ambient * base_color;
-        color += light_intensity * (light_diffuse + light_specular) * base_color * shadow_factor;
+        color += light_intensity * (light_diffuse + light_specular) * base_color;
     }
-    /*color *= _debug_clipmap_colors[clipmap_level];
-    const vec2 virtual_page_uv = IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * mod(virtual_page.stable_uv, 1.0 / IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE);
-    if (
-        virtual_page_uv.x < 0.01 ||
-        virtual_page_uv.y < 0.01 ||
-        virtual_page_uv.x > 0.99 ||
-        virtual_page_uv.y > 0.99
-    ) {
-        color = vec3(1.0, 0.0125, 0.0125);
-    }*/
     imageStore(u_output, ivec2(gl_GlobalInvocationID.xy), vec4(color, 1.0));
 }

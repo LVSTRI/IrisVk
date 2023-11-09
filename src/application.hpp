@@ -46,20 +46,6 @@
 #define IRIS_TEXTURE_VIEWER_TYPE_2D_ARRAY_UINT 5
 
 #define IRIS_MAX_DIRECTIONAL_LIGHTS 4
-#define IRIS_MAX_SPARSE_BINDING_UPDATES 16384
-#define IRIS_VSM_VIRTUAL_BASE_SIZE 8192
-#define IRIS_VSM_VIRTUAL_BASE_RESOLUTION (IRIS_VSM_VIRTUAL_BASE_SIZE * IRIS_VSM_VIRTUAL_BASE_SIZE)
-#define IRIS_VSM_VIRTUAL_PAGE_SIZE 128
-#define IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE (IRIS_VSM_VIRTUAL_BASE_SIZE / IRIS_VSM_VIRTUAL_PAGE_SIZE)
-#define IRIS_VSM_VIRTUAL_PAGE_RESOLUTION (IRIS_VSM_VIRTUAL_PAGE_SIZE * IRIS_VSM_VIRTUAL_PAGE_SIZE)
-#define IRIS_VSM_VIRTUAL_PAGE_COUNT (IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE * IRIS_VSM_VIRTUAL_PAGE_ROW_SIZE)
-#define IRIS_VSM_PHYSICAL_BASE_SIZE 8192
-#define IRIS_VSM_PHYSICAL_PAGE_SIZE 128
-#define IRIS_VSM_PHYSICAL_PAGE_ROW_SIZE (IRIS_VSM_PHYSICAL_BASE_SIZE / IRIS_VSM_PHYSICAL_PAGE_SIZE)
-#define IRIS_VSM_PHYSICAL_PAGE_RESOLUTION (IRIS_VSM_PHYSICAL_PAGE_SIZE * IRIS_VSM_PHYSICAL_PAGE_SIZE)
-#define IRIS_VSM_PHYSICAL_PAGE_COUNT (IRIS_VSM_PHYSICAL_PAGE_ROW_SIZE * IRIS_VSM_PHYSICAL_PAGE_ROW_SIZE)
-#define IRIS_VSM_MAX_CLIPMAPS 32
-#define IRIS_VSM_CLIPMAP_COUNT 16
 
 namespace test {
     struct view_t {
@@ -72,14 +58,11 @@ namespace test {
         glm::mat4 prev_view = {};
         glm::mat4 inv_view = {};
         glm::mat4 inv_prev_view = {};
-        glm::mat4 stable_view = {};
         glm::mat4 inv_stable_view = {};
         glm::mat4 proj_view = {};
         glm::mat4 prev_proj_view = {};
         glm::mat4 inv_proj_view = {};
         glm::mat4 inv_prev_proj_view = {};
-        glm::mat4 stable_proj_view = {};
-        glm::mat4 inv_stable_proj_view = {};
         glm::vec4 eye_position = {};
         glm::vec4 frustum[6] = {};
         glm::vec2 resolution = {};
@@ -93,14 +76,6 @@ namespace test {
     struct directional_light_t {
         glm::vec3 direction = {};
         float32 intensity = 0.0f;
-    };
-
-    struct vsm_global_data_t {
-        float32 first_width = 12.0f;
-        float32 lod_bias = -1.5f;
-        float32 resolution_lod_bias = 0.0f;
-        uint32 clipmap_count = IRIS_VSM_CLIPMAP_COUNT;
-        glm::ivec2 clipmap_page_offsets[IRIS_VSM_MAX_CLIPMAPS] = {};
     };
 
     template <typename T>
@@ -139,19 +114,13 @@ namespace test {
         auto _initialize_imgui() noexcept -> void;
         auto _initialize_sync() noexcept -> void;
         auto _initialize_visbuffer_pass() noexcept -> void;
-        auto _initialize_vsm_pass() noexcept -> void;
+        auto _initialize_shadow_pass() noexcept -> void;
 
         auto _clear_buffer_pass() noexcept -> void;
         auto _visbuffer_pass() noexcept -> void;
         auto _visbuffer_resolve_pass() noexcept -> void;
         auto _visbuffer_dlss_pass() noexcept -> void;
         auto _visbuffer_tonemap_pass() noexcept -> void;
-        auto _vsm_mark_visible_pages_pass() noexcept -> void;
-        auto _vsm_reduce_page_table_pass() noexcept -> void;
-        auto _vsm_request_pages_pass() noexcept -> void;
-        auto _vsm_free_pages_pass() noexcept -> void;
-        auto _vsm_allocate_pages_pass() noexcept -> void;
-        auto _vsm_rasterize_hardware_pass() noexcept -> void;
         auto _debug_emit_barriers() noexcept -> void;
         auto _gui_main_pass() noexcept -> void;
         auto _swapchain_copy_pass(uint32 image_index) noexcept -> void;
@@ -187,30 +156,7 @@ namespace test {
 
         struct {
             bool is_initialized = false;
-            ir::arc_ptr<ir::render_pass_t> main_pass;
-            ir::arc_ptr<ir::framebuffer_t> main_framebuffer;
-            ir::arc_ptr<ir::image_t> phys_memory;
-            ir::arc_ptr<ir::image_view_t> phys_memory_view;
-
-            ir::arc_ptr<ir::pipeline_t> mark_visible_pages;
-            ir::arc_ptr<ir::pipeline_t> make_allocation_requests;
-            ir::arc_ptr<ir::pipeline_t> reduce_page_table;
-            ir::arc_ptr<ir::pipeline_t> cull_active_pages;
-            ir::arc_ptr<ir::pipeline_t> allocate_pages;
-            ir::arc_ptr<ir::pipeline_t> free_pages;
-            ir::arc_ptr<ir::pipeline_t> rasterize_hardware;
-
-            ir::arc_ptr<ir::buffer_t<uint8>> visible_pages_buffer;
-            ir::arc_ptr<ir::buffer_t<uint32>> allocation_request_buffer;
-            ir::arc_ptr<ir::buffer_t<uint32>> phys_page_table_buffer;
-            ir::arc_ptr<ir::buffer_t<uint32>> virt_page_table_buffer;
-            ir::arc_ptr<ir::buffer_t<uint32>> meshlet_survivors_buffer;
-            ir::arc_ptr<ir::buffer_t<ir::draw_mesh_tasks_indirect_command_t>> draw_indirect_buffer;
-
-            hzb_t hzb;
-
-            std::vector<ir::arc_ptr<ir::buffer_t<vsm_global_data_t>>> globals_buffer;
-        } _vsm;
+        } _shadow;
 
         struct {
             bool is_initialized = false;
@@ -265,11 +211,7 @@ namespace test {
                 float32 elevation = 260.0f;
                 float32 azimuth = 30.0f;
                 float32 light_intensity = 4.0f;
-                vsm_global_data_t global_data = {};
-
-                uint32 hzb_vis_layer = 0;
-                uint32 hzb_vis_level = 0;
-            } vsm;
+            } shadow;
 
             struct {
                 const char* current_texture_viewer = nullptr;

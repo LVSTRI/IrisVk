@@ -25,14 +25,11 @@ struct view_t {
     mat4 prev_view;
     mat4 inv_view;
     mat4 inv_prev_view;
-    mat4 stable_view;
     mat4 inv_stable_view;
     mat4 proj_view;
     mat4 prev_proj_view;
     mat4 inv_proj_view;
     mat4 inv_prev_proj_view;
-    mat4 stable_proj_view;
-    mat4 inv_stable_proj_view;
     vec4 eye_position;
     vec4[6] frustum;
     vec2 resolution;
@@ -79,14 +76,6 @@ struct material_t {
 struct directional_light_t {
     vec3 direction;
     float intensity;
-};
-
-struct vsm_global_data_t {
-    float first_width;
-    float lod_bias;
-    float resolution_lod_bias;
-    uint clipmap_count;
-    ivec2[IRIS_VSM_MAX_CLIPMAPS] clipmap_page_offsets;
 };
 
 #endif
