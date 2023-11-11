@@ -6,7 +6,6 @@
 
 namespace test {
     struct meshlet_vertex_format_t {
-        glm::vec3 position = {};
         glm::vec3 normal = {};
         glm::vec2 uv = {};
         glm::vec4 tangent = {};
@@ -73,6 +72,7 @@ namespace test {
 
         IR_NODISCARD auto meshlets() const noexcept -> std::span<const meshlet_t>;
         IR_NODISCARD auto meshlet_instances() const noexcept -> std::span<const meshlet_instance_t>;
+        IR_NODISCARD auto positions() const noexcept -> std::span<const glm::vec3>;
         IR_NODISCARD auto vertices() const noexcept -> std::span<const meshlet_vertex_format_t>;
         IR_NODISCARD auto indices() const noexcept -> std::span<const uint32>;
         IR_NODISCARD auto primitives() const noexcept -> std::span<const uint8>;
@@ -83,6 +83,7 @@ namespace test {
     private:
         std::vector<meshlet_t> _meshlets;
         std::vector<meshlet_instance_t> _meshlet_instances;
+        std::vector<glm::vec3> _positions;
         std::vector<meshlet_vertex_format_t> _vertices;
         std::vector<uint32> _indices;
         std::vector<uint8> _primitives;

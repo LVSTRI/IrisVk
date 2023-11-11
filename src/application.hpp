@@ -46,11 +46,13 @@
 #define IRIS_TEXTURE_VIEWER_TYPE_2D_ARRAY_UINT 5
 
 #define IRIS_MAX_DIRECTIONAL_LIGHTS 4
+#define IRIS_SHADOW_CASCADE_COUNT 4
 
 namespace test {
     struct view_t {
         glm::mat4 projection = {};
         glm::mat4 prev_projection = {};
+        glm::mat4 finite_projection = {};
         glm::mat4 inv_projection = {};
         glm::mat4 inv_prev_projection = {};
         glm::mat4 jittered_projection = {};
@@ -66,6 +68,17 @@ namespace test {
         glm::vec4 eye_position = {};
         glm::vec4 frustum[6] = {};
         glm::vec2 resolution = {};
+        glm::vec2 near_far = {};
+    };
+
+    struct shadow_cascade_t {
+        glm::mat4 projection = {};
+        glm::mat4 view = {};
+        glm::mat4 proj_view = {};
+        glm::mat4 global = {};
+        glm::vec4 frustum[6] = {};
+        glm::vec4 scale = {};
+        glm::vec4 offset = {};
     };
 
     struct transform_t {
@@ -121,6 +134,9 @@ namespace test {
         auto _visbuffer_resolve_pass() noexcept -> void;
         auto _visbuffer_dlss_pass() noexcept -> void;
         auto _visbuffer_tonemap_pass() noexcept -> void;
+        auto _shadow_copy_reduce_depth_pass() noexcept -> void;
+        auto _shadow_make_cascade_pass() noexcept -> void;
+        auto _shadow_rasterize_pass() noexcept -> void;
         auto _debug_emit_barriers() noexcept -> void;
         auto _gui_main_pass() noexcept -> void;
         auto _swapchain_copy_pass(uint32 image_index) noexcept -> void;
@@ -156,6 +172,19 @@ namespace test {
 
         struct {
             bool is_initialized = false;
+            ir::arc_ptr<ir::render_pass_t> main_pass;
+            ir::arc_ptr<ir::framebuffer_t> main_framebuffer;
+            ir::arc_ptr<ir::image_t> main_image;
+            std::vector<ir::arc_ptr<ir::image_t>> depth_reduced_images;
+
+            ir::arc_ptr<ir::pipeline_t> copy_depth_pipeline;
+            ir::arc_ptr<ir::pipeline_t> reduce_depth_pipeline;
+            ir::arc_ptr<ir::pipeline_t> make_cascade_pipeline;
+            ir::arc_ptr<ir::pipeline_t> raster_pipeline;
+
+            ir::arc_ptr<ir::sampler_t> main_sampler;
+
+            ir::arc_ptr<ir::buffer_t<shadow_cascade_t>> cascade_buffer;
         } _shadow;
 
         struct {
@@ -181,6 +210,7 @@ namespace test {
             std::vector<ir::arc_ptr<ir::buffer_t<directional_light_t>>> directional_lights;
             ir::arc_ptr<ir::buffer_t<base_meshlet_t>> meshlets;
             ir::arc_ptr<ir::buffer_t<meshlet_instance_t>> meshlet_instances;
+            ir::arc_ptr<ir::buffer_t<glm::vec3>> positions;
             ir::arc_ptr<ir::buffer_t<meshlet_vertex_format_t>> vertices;
             ir::arc_ptr<ir::buffer_t<uint32>> indices;
             ir::arc_ptr<ir::buffer_t<uint8>> primitives;
@@ -189,6 +219,7 @@ namespace test {
 
         struct scene_t {
             std::vector<ir::arc_ptr<ir::texture_t>> textures;
+            ir::arc_ptr<ir::texture_t> blue_noise;
             std::vector<material_t> materials;
 
             ir::arc_ptr<ir::sampler_t> main_sampler;
@@ -204,6 +235,7 @@ namespace test {
                 bool reset = false;
 
                 bool is_initialized = false;
+                bool is_shutdown_requested = false;
                 glm::uvec2 render_resolution = { 1280, 720 };
             } dlss;
 

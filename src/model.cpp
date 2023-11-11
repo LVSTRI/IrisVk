@@ -43,7 +43,7 @@ namespace test {
         };
         auto materials = std::vector<material_t>();
         auto textures = std::vector<texture_info_t>();
-        /*for (auto i = 0_u32; i < gltf->materials_count; ++i) {
+        for (auto i = 0_u32; i < gltf->materials_count; ++i) {
             const auto& material = gltf->materials[i];
             auto c_material = material_t();
             if (is_basisu_texture_valid(material.pbr_metallic_roughness.base_color_texture.texture)) {
@@ -87,7 +87,7 @@ namespace test {
                 material_cache[&material] = materials.size();
                 materials.push_back(c_material);
             }
-        }*/
+        }
 
         auto meshlet_id = 0_u32;
         auto vertex_offset = 0_u32;
@@ -106,6 +106,7 @@ namespace test {
                 const auto* uv_ptr = (glm::vec2*)(nullptr);
                 const auto* tangent_ptr = (glm::vec4*)(nullptr);
 
+                auto positions = std::vector<glm::vec3>();
                 auto vertices = std::vector<meshlet_vertex_format_t>();
                 auto vertex_count = 0_u32;
                 for (auto k = 0_u32; k < primitive.attributes_count; ++k) {
@@ -141,10 +142,11 @@ namespace test {
                 if (!vertex_count) {
                     continue;
                 }
+                positions.resize(vertex_count);
+                std::memcpy(positions.data(), position_ptr, sizeof(glm::vec3) * vertex_count);
                 vertices.resize(vertex_count);
                 for (auto k = 0_u32; k < vertex_count; ++k) {
                     auto& vertex = vertices[k];
-                    std::memcpy(&vertex.position, &position_ptr[k], sizeof(vertex.position));
                     if (normal_ptr) {
                         std::memcpy(&vertex.normal, &normal_ptr[k], sizeof(vertex.normal));
                     }
@@ -185,61 +187,12 @@ namespace test {
                     }
                 }
 
-                // optimization
-                auto& optimized_indices = indices;
-                auto& optimized_vertices = vertices;
-                /*auto optimized_indices = std::vector<uint32>();
-                auto optimized_vertices = std::vector<meshlet_vertex_format_t>();
-                {
-                    const auto index_count = indices.size();
-                    auto index_remap = std::vector<uint32>(index_count);
-                    const auto remap_vertex_count = meshopt_generateVertexRemap(
-                        index_remap.data(),
-                        indices.data(),
-                        indices.size(),
-                        vertices.data(),
-                        vertices.size(),
-                        sizeof(meshlet_vertex_format_t));
-                    optimized_indices.resize(index_count);
-                    optimized_vertices.resize(remap_vertex_count);
-                    meshopt_remapIndexBuffer(
-                        optimized_indices.data(),
-                        indices.data(),
-                        indices.size(),
-                        index_remap.data());
-                    meshopt_remapVertexBuffer(
-                        optimized_vertices.data(),
-                        vertices.data(),
-                        remap_vertex_count,
-                        sizeof(meshlet_vertex_format_t),
-                        index_remap.data());
-                    meshopt_optimizeVertexCache(
-                        optimized_indices.data(),
-                        optimized_indices.data(),
-                        optimized_indices.size(),
-                        optimized_indices.size());
-                    meshopt_optimizeOverdraw(
-                        optimized_indices.data(),
-                        optimized_indices.data(),
-                        optimized_indices.size(),
-                        reinterpret_cast<float32*>(optimized_vertices.data()),
-                        optimized_vertices.size(),
-                        sizeof(meshlet_vertex_format_t),
-                        1.05f);
-                    meshopt_optimizeVertexFetch(
-                        optimized_vertices.data(),
-                        optimized_indices.data(),
-                        optimized_indices.size(),
-                        optimized_vertices.data(),
-                        optimized_vertices.size(),
-                        sizeof(meshlet_vertex_format_t));
-                }*/
                 // meshlet build
                 {
                     constexpr static auto max_indices = 64_u32;
                     constexpr static auto max_primitives = 64_u32;
                     constexpr static auto cone_weight = 0.0f;
-                    const auto max_meshlets = meshopt_buildMeshletsBound(optimized_indices.size(), max_indices, max_primitives);
+                    const auto max_meshlets = meshopt_buildMeshletsBound(indices.size(), max_indices, max_primitives);
                     auto meshlets = std::vector<meshopt_Meshlet>(max_meshlets);
                     auto meshlet_indices = std::vector<uint32>(max_meshlets * max_indices);
                     auto meshlet_primitives = std::vector<uint8>(max_meshlets * max_primitives * 3);
@@ -247,11 +200,11 @@ namespace test {
                         meshlets.data(),
                         meshlet_indices.data(),
                         meshlet_primitives.data(),
-                        optimized_indices.data(),
-                        optimized_indices.size(),
-                        reinterpret_cast<float32*>(optimized_vertices.data()),
-                        optimized_vertices.size(),
-                        sizeof(meshlet_vertex_format_t),
+                        indices.data(),
+                        indices.size(),
+                        reinterpret_cast<float32*>(positions.data()),
+                        positions.size(),
+                        sizeof(glm::vec3),
                         max_indices,
                         max_primitives,
                         cone_weight);
@@ -276,20 +229,21 @@ namespace test {
                             aabb.min = glm::vec3(std::numeric_limits<float32>::max());
                             aabb.max = glm::vec3(std::numeric_limits<float32>::lowest());
                             for (auto w = 0_u32; w < meshlet.primitive_count * 3; ++w) {
-                                const auto& vertex = optimized_vertices[
+                                const auto& vertex = positions[
                                     meshlet_indices[meshlets[k].vertex_offset +
                                         meshlet_primitives[meshlets[k].triangle_offset + w]]];
-                                aabb.min = glm::min(aabb.min, vertex.position);
-                                aabb.max = glm::max(aabb.max, vertex.position);
+                                aabb.min = glm::min(aabb.min, vertex);
+                                aabb.max = glm::max(aabb.max, vertex);
                             }
                             meshlet.aabb = aabb;
                         }
                     }
-                    vertex_offset += optimized_vertices.size();
+                    vertex_offset += positions.size();
                     index_offset += meshlet_indices.size();
                     primitive_offset += meshlet_primitives.size();
 
-                    model._vertices.insert(model._vertices.end(), optimized_vertices.begin(), optimized_vertices.end());
+                    model._positions.insert(model._positions.end(), positions.begin(), positions.end());
+                    model._vertices.insert(model._vertices.end(), vertices.begin(), vertices.end());
                     model._indices.insert(model._indices.end(), meshlet_indices.begin(), meshlet_indices.end());
                     model._primitives.insert(model._primitives.end(), meshlet_primitives.begin(), meshlet_primitives.end());
                     model._meshlets.insert(model._meshlets.end(), meshlet_group.begin(), meshlet_group.end());
@@ -336,6 +290,11 @@ namespace test {
     auto meshlet_model_t::meshlet_instances() const noexcept -> std::span<const meshlet_instance_t> {
         IR_PROFILE_SCOPED();
         return _meshlet_instances;
+    }
+
+    auto meshlet_model_t::positions() const noexcept -> std::span<const glm::vec3> {
+        IR_PROFILE_SCOPED();
+        return _positions;
     }
 
     auto meshlet_model_t::vertices() const noexcept -> std::span<const meshlet_vertex_format_t> {

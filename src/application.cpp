@@ -234,6 +234,7 @@ namespace test {
         _initialize_imgui();
         _initialize_sync();
         _initialize_visbuffer_pass();
+        _initialize_shadow_pass();
 
         _load_models();
     }
@@ -260,7 +261,7 @@ namespace test {
     auto application_t::_load_models() noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto paths = std::to_array<fs::path>({
-            "../models/compressed/bistro/bistro.glb",
+            "../models/compressed/rungholt/rungholt.glb",
         });
         auto models = std::vector<meshlet_model_t>();
         for (const auto& path : paths) {
@@ -269,6 +270,7 @@ namespace test {
 
         auto meshlets = std::vector<base_meshlet_t>();
         auto meshlet_instances = std::vector<meshlet_instance_t>();
+        auto positions = std::vector<glm::vec3>();
         auto vertices = std::vector<meshlet_vertex_format_t>();
         auto indices = std::vector<uint32>();
         auto primitives = std::vector<uint8>();
@@ -295,6 +297,7 @@ namespace test {
             }
             meshlets.reserve(meshlets_count);
             meshlet_instances.reserve(meshlet_instances_count);
+            positions.reserve(vertices_count);
             vertices.reserve(vertices_count);
             indices.reserve(indices_count);
             primitives.reserve(primitives_count);
@@ -333,6 +336,7 @@ namespace test {
                 instance.material_id += materials.size();
                 meshlet_instances.emplace_back(instance);
             }
+            positions.insert(positions.end(), model.positions().begin(), model.positions().end());
             vertices.insert(vertices.end(), model.vertices().begin(), model.vertices().end());
             indices.insert(indices.end(), model.indices().begin(), model.indices().end());
             primitives.insert(primitives.end(), model.primitives().begin(), model.primitives().end());
@@ -344,6 +348,10 @@ namespace test {
             model = {};
         }
         _scene.materials = std::move(materials);
+        /*_scene.blue_noise = ir::texture_t::make(*_device, "../textures/LDR_RGBA_0.png", {
+            .name = "main_blue_noise_1024",
+            .format = ir::texture_format_t::e_ttf_bc7_rgba,
+        });*/
         _scene.main_sampler = ir::sampler_t::make(*_device, {
             .name = "main_texture_sampler",
             .filter = { ir::sampler_filter_t::e_linear },
@@ -358,6 +366,10 @@ namespace test {
         });
         _buffer.meshlet_instances = ir::upload_buffer<meshlet_instance_t>(*_device, meshlet_instances, {
             .name = "main_meshlet_instance_buffer",
+            .usage = ir::buffer_usage_t::e_storage_buffer,
+        });
+        _buffer.positions = ir::upload_buffer<glm::vec3>(*_device, positions, {
+            .name = "main_meshlet_position_buffer",
             .usage = ir::buffer_usage_t::e_storage_buffer,
         });
         _buffer.vertices = ir::upload_buffer<meshlet_vertex_format_t>(*_device, vertices, {
@@ -454,6 +466,9 @@ namespace test {
         command_buffer.begin();
         _clear_buffer_pass();
         _visbuffer_pass();
+        _shadow_copy_reduce_depth_pass();
+        _shadow_make_cascade_pass();
+        _shadow_rasterize_pass();
         _visbuffer_resolve_pass();
         _visbuffer_dlss_pass();
         _visbuffer_tonemap_pass();
@@ -547,6 +562,7 @@ namespace test {
             auto view = view_t();
             view.projection = _camera.projection();
             view.prev_projection = _visbuffer.prev_projection;
+            view.finite_projection = _camera.projection(false, false);
             view.inv_projection = glm::inverse(view.projection);
             view.inv_prev_projection = glm::inverse(view.prev_projection);
             view.jittered_projection = jitter_matrix * view.projection;
@@ -563,6 +579,7 @@ namespace test {
             const auto frustum = make_perspective_frustum(view.proj_view);
             std::memcpy(view.frustum, frustum.data(), sizeof(view.frustum));
             view.resolution = glm::vec2(_state.dlss.render_resolution);
+            view.near_far = { _camera.near(), _camera.far() };
             views[IRIS_MAIN_VIEW_INDEX] = view;
 
             _visbuffer.prev_projection = view.projection;
@@ -594,6 +611,10 @@ namespace test {
             return false;
         }
         _device->wait_idle();
+        if (_state.dlss.is_shutdown_requested) {
+            _state.dlss.is_shutdown_requested = false;
+            _device->ngx().shutdown_dlss();
+        }
         const auto scaling_ratio = ir::dlss_scaling_ratio_from_preset(_state.dlss.quality);
         _state.dlss.render_resolution = {
             _gui.main_viewport_resolution.x * scaling_ratio,
@@ -609,6 +630,7 @@ namespace test {
         _initialize_sync();
         _initialize_dlss();
         _initialize_visbuffer_pass();
+        _initialize_shadow_pass();
         _camera.update_aspect(width, height);
         _state.dlss.is_initialized = true;
         return true;
@@ -651,6 +673,7 @@ namespace test {
 
         _camera = camera_t::make(*_wsi);
         _camera.update(1 / 144.0f);
+        _camera.update_aspect(_wsi->width(), _wsi->height());
 
         _state.performance.frame_times.resize(512);
     }
@@ -1006,6 +1029,129 @@ namespace test {
         IR_PROFILE_SCOPED();
         if (!_shadow.is_initialized) {
             _shadow.is_initialized = true;
+            _shadow.main_pass = ir::render_pass_t::make(*_device, {
+                .name = "shadow_main_pass",
+                .attachments = {
+                    {
+                        .layout = {
+                            .final = ir::image_layout_t::e_shader_read_only_optimal
+                        },
+                        .format = ir::resource_format_t::e_d32_sfloat,
+                        .load_op = ir::attachment_load_op_t::e_clear,
+                        .store_op = ir::attachment_store_op_t::e_store,
+                    }
+                },
+                .subpasses = {
+                    {
+                        .depth_stencil_attachment = 0
+                    }
+                },
+                .dependencies = {
+                    {
+                        .source = ir::external_subpass,
+                        .dest = 0,
+                        .source_stage =
+                            ir::pipeline_stage_t::e_early_fragment_tests |
+                            ir::pipeline_stage_t::e_late_fragment_tests,
+                        .dest_stage =
+                            ir::pipeline_stage_t::e_early_fragment_tests |
+                            ir::pipeline_stage_t::e_late_fragment_tests,
+                        .source_access = ir::resource_access_t::e_none,
+                        .dest_access = ir::resource_access_t::e_depth_stencil_attachment_write,
+                    }, {
+                        .source = 0,
+                        .dest = ir::external_subpass,
+                        .source_stage =
+                            ir::pipeline_stage_t::e_early_fragment_tests |
+                            ir::pipeline_stage_t::e_late_fragment_tests,
+                        .dest_stage =
+                            ir::pipeline_stage_t::e_compute_shader |
+                            ir::pipeline_stage_t::e_fragment_shader,
+                        .source_access = ir::resource_access_t::e_depth_stencil_attachment_write,
+                        .dest_access = ir::resource_access_t::e_shader_read
+                    }
+                }
+            });
+            _shadow.main_image = ir::image_t::make_from_attachment(*_device, _shadow.main_pass->attachment(0), {
+                .name = "shadow_main_attachment",
+                .width = 4096,
+                .height = 4096,
+                .layers = 4,
+                .usage =
+                    ir::image_usage_t::e_depth_stencil_attachment |
+                    ir::image_usage_t::e_sampled,
+                .view = ir::default_image_view_info,
+            });
+            _shadow.main_framebuffer = ir::framebuffer_t::make(*_shadow.main_pass, {
+                .name = "shadow_main_framebuffer",
+                .attachments = { _shadow.main_image },
+                .width = 4096,
+                .height = 4096,
+                .layers = 4,
+            });
+            _shadow.copy_depth_pipeline = ir::pipeline_t::make(*_device, {
+                .name = "shadow_copy_depth_pipeline",
+                .compute = "../shaders/shadow/copy_depth.comp.glsl",
+            });
+            _shadow.reduce_depth_pipeline = ir::pipeline_t::make(*_device, {
+                .name = "shadow_reduce_depth_pipeline",
+                .compute = "../shaders/shadow/reduce_depth.comp.glsl",
+            });
+            _shadow.make_cascade_pipeline = ir::pipeline_t::make(*_device, {
+                .name = "shadow_make_cascade_pipeline",
+                .compute = "../shaders/shadow/make_cascade.comp.glsl",
+            });
+            _shadow.raster_pipeline = ir::pipeline_t::make(*_device, *_shadow.main_pass, {
+                .name = "shadow_raster_pipeline",
+                .mesh = "../shaders/shadow/main.mesh.glsl",
+                .fragment = "../shaders/shadow/main.frag.glsl",
+                .dynamic_states = {
+                    ir::dynamic_state_t::e_viewport,
+                    ir::dynamic_state_t::e_scissor,
+                },
+                .depth_flags =
+                    ir::depth_state_flag_t::e_enable_clamp |
+                    ir::depth_state_flag_t::e_enable_test |
+                    ir::depth_state_flag_t::e_enable_write,
+                .depth_compare_op = ir::compare_op_t::e_less,
+                .cull_mode = ir::cull_mode_t::e_front,
+            });
+            _shadow.main_sampler = ir::sampler_t::make(*_device, {
+                .name = "shadow_main_sampler",
+                .filter = { ir::sampler_filter_t::e_linear },
+                .mip_mode = ir::sampler_mipmap_mode_t::e_linear,
+                .address_mode = { ir::sampler_address_mode_t::e_clamp_to_edge },
+                .border_color = ir::sampler_border_color_t::e_float_opaque_white,
+                .compare = ir::compare_op_t::e_less,
+            });
+            _shadow.cascade_buffer = ir::buffer_t<shadow_cascade_t>::make(*_device, {
+                .name = "shadow_cascade_buffer",
+                .flags = ir::buffer_flag_t::e_resized,
+                .capacity = IRIS_SHADOW_CASCADE_COUNT,
+            });
+            _shadow.depth_reduced_images.reserve(16);
+        }
+        const auto render_viewport_width = _state.dlss.render_resolution.x;
+        const auto render_viewport_height = _state.dlss.render_resolution.y;
+        {
+            constexpr static auto depth_reduce_work_group_size = 16_u32;
+            auto width = render_viewport_width;
+            auto height = render_viewport_height;
+            _shadow.depth_reduced_images.clear();
+            while (true) {
+                _shadow.depth_reduced_images.emplace_back(ir::image_t::make(*_device, {
+                    .width = width,
+                    .height = height,
+                    .usage = ir::image_usage_t::e_storage,
+                    .format = ir::resource_format_t::e_r32g32_sfloat,
+                    .view = ir::default_image_view_info,
+                }));
+                if (width == 1 && height == 1) {
+                    break;
+                }
+                width = std::max((width + depth_reduce_work_group_size - 1) / depth_reduce_work_group_size, 1_u32);
+                height = std::max((height + depth_reduce_work_group_size - 1) / depth_reduce_work_group_size, 1_u32);
+            }
         }
     }
 
@@ -1072,7 +1218,7 @@ namespace test {
                 _buffer.meshlet_instances->address(),
                 _buffer.meshlets->address(),
                 transform_buffer.address(),
-                _buffer.vertices->address(),
+                _buffer.positions->address(),
                 _buffer.indices->address(),
                 _buffer.primitives->address(),
             });
@@ -1105,8 +1251,9 @@ namespace test {
             .bind_sampled_image(0, _visbuffer.depth->view())
             .bind_storage_image(1, _visbuffer.ids->view())
             .bind_storage_image(2, _visbuffer.color->view())
-            .bind_sampler(3, *_scene.main_sampler)
-            .bind_textures(4, _scene.textures)
+            .bind_combined_image_sampler(3, _shadow.main_image->view(), *_shadow.main_sampler)
+            .bind_sampler(4, *_scene.main_sampler)
+            .bind_textures(5, _scene.textures)
             .build();
         const auto resolve_dispatch = dispatch_work_group_size({
             _visbuffer.color->width(),
@@ -1134,11 +1281,13 @@ namespace test {
                 _buffer.meshlet_instances->address(),
                 _buffer.meshlets->address(),
                 transform_buffer.address(),
+                _buffer.positions->address(),
                 _buffer.vertices->address(),
                 _buffer.indices->address(),
                 _buffer.primitives->address(),
                 material_buffer.address(),
                 directional_light_buffer.address(),
+                _shadow.cascade_buffer->address(),
             }));
             command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constants), &push_constants);
         }
@@ -1252,6 +1401,193 @@ namespace test {
         command_buffer.end_debug_marker();
     }
 
+    auto application_t::_shadow_copy_reduce_depth_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        const auto& [
+            view_buffer,
+            transform_buffer
+        ] = _current_frame_buffers();
+
+        // copy depth
+        {
+            const auto set = ir::descriptor_set_builder_t(*_shadow.copy_depth_pipeline, 0)
+                .bind_sampled_image(0, _visbuffer.depth->view())
+                .bind_storage_image(1, _shadow.depth_reduced_images[0]->view())
+                .build();
+            const auto copy_dispatch = dispatch_work_group_size({
+                _visbuffer.depth->width(),
+                _visbuffer.depth->height(),
+            }, {
+                16,
+                16,
+            });
+
+            command_buffer.begin_debug_marker("shadow_copy_depth");
+            command_buffer.bind_pipeline(*_shadow.copy_depth_pipeline);
+            command_buffer.bind_descriptor_set(*set);
+            command_buffer.image_barrier({
+                .image = std::cref(*_shadow.depth_reduced_images[0]),
+                .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_none,
+                .dest_access = ir::resource_access_t::e_shader_storage_write,
+                .old_layout = ir::image_layout_t::e_undefined,
+                .new_layout = ir::image_layout_t::e_general,
+            });
+            command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(uint64), ir::as_const_ptr(view_buffer.address()));
+            command_buffer.dispatch(copy_dispatch.x, copy_dispatch.y);
+            command_buffer.image_barrier({
+                .image = std::cref(*_shadow.depth_reduced_images[0]),
+                .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                .source_access = ir::resource_access_t::e_shader_storage_write,
+                .dest_access = ir::resource_access_t::e_shader_storage_read,
+                .old_layout = ir::image_layout_t::e_general,
+                .new_layout = ir::image_layout_t::e_general,
+            });
+            command_buffer.end_debug_marker();
+        }
+
+        // reduce depth
+        {
+            for (auto i = 1_u32; i < _shadow.depth_reduced_images.size(); ++i) {
+                const auto set = ir::descriptor_set_builder_t(*_shadow.reduce_depth_pipeline, 0)
+                    .bind_storage_image(0, _shadow.depth_reduced_images[i - 1]->view())
+                    .bind_storage_image(1, _shadow.depth_reduced_images[i]->view())
+                    .build();
+                const auto reduce_dispatch = glm::vec2(
+                    _shadow.depth_reduced_images[i]->width(),
+                    _shadow.depth_reduced_images[i]->height()
+                );
+
+                command_buffer.begin_debug_marker("shadow_reduce_depth");
+                command_buffer.bind_pipeline(*_shadow.reduce_depth_pipeline);
+                command_buffer.bind_descriptor_set(*set);
+                command_buffer.image_barrier({
+                    .image = std::cref(*_shadow.depth_reduced_images[i]),
+                    .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .source_access = ir::resource_access_t::e_none,
+                    .dest_access = ir::resource_access_t::e_shader_storage_write,
+                    .old_layout = ir::image_layout_t::e_undefined,
+                    .new_layout = ir::image_layout_t::e_general,
+                });
+                command_buffer.dispatch(reduce_dispatch.x, reduce_dispatch.y);
+                command_buffer.image_barrier({
+                    .image = std::cref(*_shadow.depth_reduced_images[i]),
+                    .source_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+                    .source_access = ir::resource_access_t::e_shader_storage_write,
+                    .dest_access = ir::resource_access_t::e_shader_storage_read,
+                    .old_layout = ir::image_layout_t::e_general,
+                    .new_layout = ir::image_layout_t::e_general,
+                });
+                command_buffer.end_debug_marker();
+            }
+        }
+    }
+
+    auto application_t::_shadow_make_cascade_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        const auto& [
+            view_buffer,
+            transform_buffer
+        ] = _current_frame_buffers();
+        const auto& directional_light_buffer = *_buffer.directional_lights[_frame_index];
+
+        const auto set = ir::descriptor_set_builder_t(*_shadow.make_cascade_pipeline, 0)
+            .bind_storage_image(0, _shadow.depth_reduced_images.back()->view())
+            .build();
+
+        command_buffer.begin_debug_marker("shadow_make_cascade");
+        command_buffer.bind_pipeline(*_shadow.make_cascade_pipeline);
+        command_buffer.bind_descriptor_set(*set);
+        command_buffer.buffer_barrier({
+            .buffer = _shadow.cascade_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_top_of_pipe,
+            .dest_stage = ir::pipeline_stage_t::e_compute_shader,
+            .source_access = ir::resource_access_t::e_none,
+            .dest_access = ir::resource_access_t::e_shader_storage_write,
+        });
+        {
+            const auto push_constant = ir::make_byte_bag(std::to_array({
+                view_buffer.address(),
+                directional_light_buffer.address(),
+                _shadow.cascade_buffer->address()
+            }));
+            command_buffer.push_constants(ir::shader_stage_t::e_compute, 0, sizeof(push_constant), &push_constant);
+        }
+        command_buffer.dispatch();
+        command_buffer.buffer_barrier({
+            .buffer = _shadow.cascade_buffer->slice(),
+            .source_stage = ir::pipeline_stage_t::e_compute_shader,
+            .dest_stage = ir::pipeline_stage_t::e_fragment_shader,
+            .source_access = ir::resource_access_t::e_shader_storage_write,
+            .dest_access = ir::resource_access_t::e_shader_storage_read,
+        });
+        command_buffer.end_debug_marker();
+    }
+
+    auto application_t::_shadow_rasterize_pass() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        const auto& [
+            command_buffer,
+            image_available,
+            render_done,
+            frame_fence
+        ] = _current_frame_data();
+
+        const auto& [
+            view_buffer,
+            transform_buffer
+        ] = _current_frame_buffers();
+
+        command_buffer.begin_debug_marker("shadow_raster_pass");
+        command_buffer.begin_render_pass(*_shadow.main_framebuffer, {
+            ir::make_clear_depth(1.0f, 0),
+        });
+        command_buffer.bind_pipeline(*_shadow.raster_pipeline);
+        command_buffer.set_viewport({
+            .width = static_cast<float32>(_shadow.main_image->width()),
+            .height = static_cast<float32>(_shadow.main_image->height()),
+        });
+        command_buffer.set_scissor({
+            .width = _shadow.main_image->width(),
+            .height = _shadow.main_image->height(),
+        });
+        for (auto layer = 0_u32; layer < IRIS_SHADOW_CASCADE_COUNT; ++layer) {
+            {
+                const auto push_constant = ir::make_byte_bag(std::to_array({
+                    _shadow.cascade_buffer->address(),
+                    _buffer.meshlet_instances->address(),
+                    _buffer.meshlets->address(),
+                    transform_buffer.address(),
+                    _buffer.positions->address(),
+                    _buffer.indices->address(),
+                    _buffer.primitives->address(),
+                }), layer);
+                command_buffer.push_constants(ir::shader_stage_t::e_mesh, 0, sizeof(push_constant), &push_constant);
+            }
+            command_buffer.draw_mesh_tasks(_buffer.meshlet_instances->size());
+        }
+        command_buffer.end_render_pass();
+        command_buffer.end_debug_marker();
+    }
+
     auto application_t::_debug_emit_barriers() noexcept -> void {
         IR_PROFILE_SCOPED();
         const auto& [
@@ -1359,6 +1695,7 @@ namespace test {
                                         break;
                                 }
                                 _state.dlss.is_initialized = false;
+                                _state.dlss.is_shutdown_requested = true;
                             }
                             if (is_selected) {
                                 ImGui::SetItemDefaultFocus();
@@ -1381,6 +1718,7 @@ namespace test {
             if (ImGui::Begin("Viewer")) {
                 constexpr static auto textures = std::to_array({
                     "None",
+                    "Sun Shadow Map",
                 });
                 if (!_state.gui.current_texture_viewer) {
                     _state.gui.current_texture_viewer = textures[0];
@@ -1393,6 +1731,9 @@ namespace test {
                             switch (i) {
                                 case 0:
                                     _state.gui.current_texture = nullptr;
+                                    break;
+                                case 1:
+                                    _state.gui.current_texture = &_shadow.main_image->view();
                                     break;
                             }
                             _state.gui.texture_viewer_layer = 0;
@@ -1410,9 +1751,7 @@ namespace test {
                     auto builder = ir::descriptor_set_builder_t(*_gui.texture_viewer, 0)
                         .bind_storage_image(6, _gui.texture_viewer_image->view());
                     if (_state.gui.current_texture_viewer == textures[1]) {
-                        type = IRIS_TEXTURE_VIEWER_TYPE_2D_SFLOAT;
-                    } else if (_state.gui.current_texture_viewer == textures[2]) {
-                        type = IRIS_TEXTURE_VIEWER_TYPE_2D_ARRAY_UINT;
+                        type = IRIS_TEXTURE_VIEWER_TYPE_2D_ARRAY_SFLOAT;
                     }
                     builder.bind_combined_image_sampler(type, *_state.gui.current_texture, *_gui.main_sampler);
                     ImGui::SliderInt("Layer", &_state.gui.texture_viewer_layer, 0, _state.gui.current_texture->image().layers() - 1);

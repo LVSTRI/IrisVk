@@ -27,6 +27,10 @@ layout (scalar, buffer_reference) restrict buffer b_transform_block {
     transform_t[] data;
 };
 
+layout (scalar, buffer_reference) restrict buffer b_position_block {
+    vec3[] data;
+};
+
 layout (scalar, buffer_reference) restrict buffer b_vertex_block {
     vertex_format_t[] data;
 };
@@ -49,6 +53,10 @@ layout (scalar, buffer_reference) restrict buffer b_material_block {
 
 layout (scalar, buffer_reference) restrict buffer b_directional_light_block {
     directional_light_t[] data;
+};
+
+layout (scalar, buffer_reference) restrict buffer b_shadow_cascade_block {
+    shadow_cascade_t[] data;
 };
 
 #endif

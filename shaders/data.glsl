@@ -18,6 +18,7 @@ struct compute_indirect_command_t {
 struct view_t {
     mat4 projection;
     mat4 prev_projection;
+    mat4 finite_projection;
     mat4 inv_projection;
     mat4 inv_prev_projection;
     mat4 jittered_projection;
@@ -33,6 +34,17 @@ struct view_t {
     vec4 eye_position;
     vec4[6] frustum;
     vec2 resolution;
+    vec2 near_far;
+};
+
+struct shadow_cascade_t {
+    mat4 projection;
+    mat4 view;
+    mat4 proj_view;
+    mat4 global;
+    vec4[6] frustum;
+    vec4 scale;
+    vec4 offset;
 };
 
 struct aabb_t {
@@ -41,7 +53,6 @@ struct aabb_t {
 };
 
 struct vertex_format_t {
-    vec3 position;
     vec3 normal;
     vec2 uv;
     vec4 tangent;
