@@ -63,6 +63,7 @@ namespace ir {
         IR_NODISCARD static auto make(device_t& device) noexcept -> std::unique_ptr<self>;
 
         auto initialize_dlss(const dlss_main_view_info_t& info) noexcept -> void;
+        auto shutdown_dlss() noexcept -> void;
 
         auto evaluate(const dlss_main_view_evaluate_info_t& info) noexcept -> void;
 

@@ -95,6 +95,13 @@ namespace ir {
         return texture;
     }
 
+    auto texture_t::make(device_t& device, const fs::path& file, const texture_create_info_t& info) noexcept -> arc_ptr<self> {
+        IR_PROFILE_SCOPED();
+        auto ec = std::error_code();
+        auto mapped = mio::make_mmap_source(file.string(), ec);
+        return make(device, std::span(reinterpret_cast<const uint8*>(mapped.data()), mapped.size()), info);
+    }
+
     auto texture_t::image() const noexcept -> const image_t& {
         IR_PROFILE_SCOPED();
         return *_image;

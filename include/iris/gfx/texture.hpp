@@ -43,6 +43,12 @@ namespace ir {
             const texture_create_info_t& info
         ) noexcept -> arc_ptr<self>;
 
+        IR_NODISCARD static auto make(
+            device_t& device,
+            const fs::path& file,
+            const texture_create_info_t& info
+        ) noexcept -> arc_ptr<self>;
+
         IR_NODISCARD auto image() const noexcept -> const image_t&;
 
         IR_NODISCARD auto info() const noexcept -> image_info_t;

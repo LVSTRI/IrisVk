@@ -50,6 +50,7 @@ namespace ir {
 
     ngx_wrapper_t::~ngx_wrapper_t() noexcept {
         IR_PROFILE_SCOPED();
+        shutdown_dlss();
         NVSDK_NGX_VULKAN_DestroyParameters(_parameters);
         NVSDK_NGX_VULKAN_Shutdown1(nullptr);
     }
@@ -145,6 +146,11 @@ namespace ir {
                     &dlss_create_parameters)),
                 "NVIDIA NGX: DLSS creation failed");
         });
+    }
+
+    auto ngx_wrapper_t::shutdown_dlss() noexcept -> void {
+        IR_PROFILE_SCOPED();
+        NVSDK_NGX_VULKAN_ReleaseFeature(_dlss);
     }
 
     auto ngx_wrapper_t::evaluate(const dlss_main_view_evaluate_info_t& info) noexcept -> void {
