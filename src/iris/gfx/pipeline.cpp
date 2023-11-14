@@ -105,8 +105,7 @@ namespace ir {
         auto GetInclude(const char* requested, shaderc_include_type, const char*, size_t) noexcept -> shaderc_include_result* override {
             IR_PROFILE_SCOPED();
             auto path = _root / requested;
-            auto ec = std::error_code();
-            auto file = mio::make_mmap_source(path.generic_string(), ec);
+            auto file = mio::make_mmap_source(path.generic_string(), as_mut_ref(std::error_code()));
             auto content = std::string(reinterpret_cast<const char*>(file.data()), file.size());
             return new _include_result_t(std::move(content), path.filename().generic_string());
         }

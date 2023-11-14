@@ -1,3 +1,5 @@
+#if defined(IRIS_NVIDIA_DLSS)
+
 #include <iris/nvidia/ngx_wrapper.hpp>
 
 #include <iris/gfx/descriptor_set.hpp>
@@ -220,3 +222,5 @@ namespace ir {
         IR_UNREACHABLE();
     }
 }
+
+#endif

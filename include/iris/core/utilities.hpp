@@ -30,12 +30,57 @@ namespace ir {
 
     template <typename T>
     IR_NODISCARD constexpr auto as_const_ptr(const T& value) noexcept -> const T* {
-        return static_cast<const T*>(std::addressof(const_cast<T&>(value)));
+        return &value;
     }
 
     template <typename T>
     IR_NODISCARD constexpr auto as_const_ptr(const T(&value)[]) noexcept -> const T* {
-        return static_cast<const T*>(std::addressof(const_cast<T&>(value[0])));
+        return &value[0];
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_const_ptr(const T&& value) noexcept -> const T* {
+        return &value;
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_const_ptr(const T(&&value)[]) noexcept -> const T* {
+        return &value[0];
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_mut_ptr(T&& value) noexcept -> T* {
+        return &value;
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_mut_ptr(T(&&value)[]) noexcept -> T* {
+        return &value[0];
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_const_ref(const T(&value)[]) noexcept -> const T& {
+        return value[0];
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_const_ref(const T&& value) noexcept -> const T& {
+        return value;
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_const_ref(const T(&&value)[]) noexcept -> const T& {
+        return value[0];
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_mut_ref(T&& value) noexcept -> T& {
+        return value;
+    }
+
+    template <typename T>
+    IR_NODISCARD constexpr auto as_mut_ref(T(&&value)[]) noexcept -> T& {
+        return value[0];
     }
 
     template <typename T>

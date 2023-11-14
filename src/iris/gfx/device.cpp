@@ -21,7 +21,9 @@ namespace ir {
 
     device_t::~device_t() noexcept {
         IR_PROFILE_SCOPED();
+#if defined(IRIS_NVIDIA_DLSS)
         _ngx.reset();
+#endif
         _samplers.clear();
         _descriptor_layouts.clear();
         _descriptor_sets.clear();
